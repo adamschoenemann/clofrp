@@ -1,0 +1,60 @@
+# This YAML file describes your package. Stack will automatically generate a
+# Cabal file when you run `stack build`. See the hpack website for help with
+# this file: <https://github.com/sol/hpack>.
+benchmarks:
+  clott-benchmarks:
+    dependencies:
+    - base
+    - clott
+    - criterion
+    ghc-options:
+    - -rtsopts
+    - -threaded
+    - -with-rtsopts=-N
+    main: Main.hs
+    source-dirs: benchmark
+category: Other
+description: clott is a new Haskeleton package.
+executables:
+  clott:
+    dependencies:
+    - base
+    - clott
+    ghc-options:
+    - -rtsopts
+    - -threaded
+    - -with-rtsopts=-N
+    main: Main.hs
+    source-dirs: executable
+extra-source-files:
+- CHANGELOG.md
+- LICENSE.md
+- package.yaml
+- README.md
+- stack.yaml
+ghc-options: -Wall
+github: githubuser/clott
+library:
+  dependencies:
+  - base
+  - parsec
+  source-dirs: library
+license: MIT
+maintainer: Author name here
+name: clott
+synopsis: A new Haskeleton package.
+tests:
+  clott-test-suite:
+    dependencies:
+    - base
+    - clott
+    - tasty
+    - tasty-hspec
+    - parsec
+    ghc-options:
+    - -rtsopts
+    - -threaded
+    - -with-rtsopts=-N
+    main: Main.hs
+    source-dirs: test-suite
+version: '0.0.0'
