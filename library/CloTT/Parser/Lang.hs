@@ -11,6 +11,8 @@ module CloTT.Parser.Lang (
   , buildExpressionParser
 ) where
 
+import qualified CloTT.Annotated as A
+
 import Text.Parsec.String
 import Text.Parsec
 import Text.Parsec.Expr
@@ -91,3 +93,6 @@ natural    = Tok.natural    lexer
 ws         = Tok.whiteSpace lexer -- parses whitespace
 comma      = Tok.comma lexer
 symbol     = Tok.symbol lexer
+
+ann :: Parser (f SourcePos -> A.Annotated SourcePos (f SourcePos))
+ann = A.A <$> getPosition

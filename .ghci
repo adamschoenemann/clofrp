@@ -1,0 +1,2 @@
+:set prompt "clott> "
+:def rr (\a -> return $ unlines [":r", a])

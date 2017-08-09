@@ -8,23 +8,10 @@ import qualified CloTT.Annotated  as A
 import qualified CloTT.AST.Parsed as E
 import qualified CloTT.AST.Prim   as P
 import           CloTT.Parser.Lang
--- import           FRP.Parser.Construct (ParsedTerm)
--- import qualified FRP.Parser.Construct as C
--- import           FRP.Parser.Lang
--- import           FRP.Parser.Type
--- import           Text.Parsec
--- import           Text.Parsec.Pos
-
--- test :: Parser (Term SourcePos)
--- test = (TmVar <$> getPosition) <*> identifier
---   -- p <- getPosition
---   -- return (TmVar p)
+import qualified CloTT.Parser.Type as T
+import           CloTT.AST.Name
 
 type Expr = E.Expr SourcePos
-
-ann :: Parser (E.Expr' SourcePos -> Expr)
-ann = A.A <$> getPosition
-
 
 nat :: Parser Expr
 nat = ann <*> (E.Prim . P.Nat <$> natural)
@@ -37,10 +24,22 @@ bool = ann <*> (E.Prim . P.Bool <$> b) where
 tuple :: Parser Expr
 tuple = ann <*> parens (E.Tuple <$> expr <* comma <*> expr)
 
+lam :: Parser Expr
+lam = do
+  nm <- UName <$> (symbol "\\" *> identifier)
+  ty <- optionMaybe $ symbol ":" *> T.typep
+  bd <- reservedOp "->" *> expr
+  ann <*> pure (E.Lam nm ty bd)
+
+var :: Parser Expr
+var = ann <*> (E.Var . UName <$> identifier)
+
 expr :: Parser Expr
 expr =   nat
      <|> bool
      <|> tuple
+     <|> lam
+     <|> var
 
 -- term = tmlam
 --    <|> tmfix
