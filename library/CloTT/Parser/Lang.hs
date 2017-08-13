@@ -58,8 +58,6 @@ languageDef = Tok.LanguageDef
                           , "of"
                           , "out"
                           , "into"
-                          , "Nat"
-                          , "Bool"
                           , "S"
                           , "alloc"
                           , "fix"
@@ -94,5 +92,5 @@ ws         = Tok.whiteSpace lexer -- parses whitespace
 comma      = Tok.comma lexer
 symbol     = Tok.symbol lexer
 
-ann :: Parser (f SourcePos -> A.Annotated SourcePos (f SourcePos))
+ann :: Parser (t -> A.Annotated SourcePos t)
 ann = A.A <$> getPosition

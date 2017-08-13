@@ -26,20 +26,38 @@ tuple = ann <*> parens (E.Tuple <$> expr <* comma <*> expr)
 
 lam :: Parser Expr
 lam = do
-  nm <- UName <$> (symbol "\\" *> identifier)
-  ty <- optionMaybe $ symbol ":" *> T.typep
+  (nm, ty) <- symbol "\\" *> param
   bd <- reservedOp "->" *> expr
-  ann <*> pure (E.Lam nm ty bd)
+  e <- ann <*> pure (E.Lam nm ty bd)
+  m <- optionMaybe $ reservedOp ":" *> T.typep
+  case m of
+    Nothing -> return e
+    Just t  -> ann <*> pure (E.Ann e t)
+  where
+    param =  (\x -> (UName x, Nothing)) <$> identifier
+         <|> parens ((,) <$> (UName <$> identifier) <*> (optionMaybe $ reservedOp ":" *> T.typep))
 
 var :: Parser Expr
 var = ann <*> (E.Var . UName <$> identifier)
 
-expr :: Parser Expr
-expr =   nat
+atom :: Parser Expr
+atom =   nat
      <|> bool
-     <|> tuple
-     <|> lam
+     <|> try tuple
      <|> var
+     <|> parens expr
+
+expr :: Parser Expr
+expr = lam <|> buildExpressionParser table atom where
+  table = 
+    [ [Infix spacef AssocLeft]
+    ]
+  spacef :: Parser (Expr -> Expr -> Expr)
+  spacef =
+    ws *> notFollowedBy (choice . map reservedOp $ opNames) *> app
+       <?> "space application"
+  app :: Parser (Expr -> Expr -> Expr)
+  app = (\p e1 e2 -> A.A p $ E.App e1 e2) <$> getPosition
 
 -- term = tmlam
 --    <|> tmfix

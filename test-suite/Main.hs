@@ -48,12 +48,30 @@ spec = do
     do let Right e = E.unann <$> parse P.expr "" "truefalse"
        e `shouldBe` "truefalse"
   it "parses lambdas" $ do
-    do let Right e = E.unann <$> parse P.lam "" "\\x -> x"
+    do let Right e = E.unann <$> parse P.expr "" "\\x -> x"
        e `shouldBe` "x" @-> "x"
-    do let Right e = E.unann <$> parse P.lam "" "\\x -> (x, True)"
+    do let Right e = E.unann <$> parse P.expr "" "\\x -> (x, True)"
        e `shouldBe` "x" @-> "x" @* E.true
-    do let Right e = E.unann <$> parse P.lam "" "\\x -> \\y -> x"
+    do let Right e = E.unann <$> parse P.expr "" "\\x -> \\y -> x"
        e `shouldBe` "x" @-> "y" @-> "x"
+    case E.unann <$> parse P.expr "" "\\(x:Bool) -> \\(y:Int) -> x" of
+      Left e -> fail $ show e 
+      Right e -> e `shouldBe` ("x", "Bool") @:-> ("y", "Int") @:-> "x"
+  it "parses application" $ do
+    do let Right e = E.unann <$> parse P.expr "" "e1 e2"
+       e `shouldBe` "e1" @@ "e2"
+    do let Right e = E.unann <$> parse P.expr "" "e1 e2 e3"
+       e `shouldBe` "e1" @@ "e2" @@ "e3"
+  it "parses annotations" $ do
+    case E.unann <$> parse P.expr "" "\\x -> 10 : Bool -> Int" of
+      Left e -> fail $ show e
+      Right e -> e `shouldBe` ("x" @-> E.nat 10) @:: ("Bool" E.@->: "Int")
+    case E.unann <$> parse P.expr "" "(\\x -> \\y -> 10) : Bool -> Int -> Int" of
+      Left e -> fail $ show e
+      Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" E.@->: "Int" E.@->: "Int")
+  it "parses compound expressions" $ 
+    do let Right e = E.unann <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
+       e `shouldBe` "x" @-> ("y" @-> "x" @@ "y") @* "y" @@ (E.true @* "x")
   it "parses simple types" $ do
     do let Right e = E.unannT <$> parse P.typep "" "x"
        e `shouldBe` "x"

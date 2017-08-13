@@ -33,6 +33,7 @@ type Expr a = Annotated a (Expr' a)
 
 data Expr' a
   = Var Name
+  | Ann (Expr a) (Type a)
   | Lam Name (Maybe (Type a)) (Expr a)
   | App (Expr a) (Expr a)
   | Tuple (Expr a) (Expr a)
@@ -51,23 +52,26 @@ false = A () . Prim . P.Bool $ False
 
 infixr 2 @->
 infixr 2 @:->
-infixl 9 <|
+infixl 9 @@
 infixl 8 @*
+infixl 3 @::
 
 class IsString a => LamCalc a b | a -> b where
   (@->) :: String -> a -> a
-  (@:->) :: (String, Type b) -> a -> a
-  (<|) :: a -> a -> a
+  (@:->) :: (String, b) -> a -> a
+  (@@) :: a -> a -> a
   (@*) :: a -> a -> a
+  (@::) :: a -> b -> a
 
 instance IsString (Expr ()) where
   fromString = A () . Var . UName
 
-instance LamCalc (Expr ()) () where
+instance LamCalc (Expr ()) (Type ()) where
   nm @-> e = A () $ Lam (UName nm) Nothing e
   (nm, t) @:-> e = A () $ Lam (UName nm) (Just t) e
-  e1 <| e2 = A () $ App e1 e2
+  e1 @@ e2 = A () $ App e1 e2
   e1 @* e2 = A () $ Tuple e1 e2
+  e @:: t = A () $ Ann e t
 
 unannT :: Type a -> Type ()
 unannT (A _ ty) = A () (go ty) where
@@ -79,6 +83,7 @@ unann :: Expr a -> Expr ()
 unann (A _ expr) = A () (unannE expr) where
   unannE = \case
     Var nm -> Var nm
+    Ann e t -> Ann (unann e) (unannT t)
     Lam nm mty e -> Lam nm (unannT <$> mty) (unann e)
     App e1 e2 -> App (unann e1) (unann e2)
     Tuple e1 e2 -> Tuple (unann e1) (unann e2)
