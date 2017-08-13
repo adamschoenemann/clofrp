@@ -28,11 +28,7 @@ lam :: Parser Expr
 lam = do
   (nm, ty) <- symbol "\\" *> param
   bd <- reservedOp "->" *> expr
-  e <- ann <*> pure (E.Lam nm ty bd)
-  m <- optionMaybe $ reservedOp ":" *> T.typep
-  case m of
-    Nothing -> return e
-    Just t  -> ann <*> pure (E.Ann e t)
+  ann <*> pure (E.Lam nm ty bd)
   where
     param =  (\x -> (UName x, Nothing)) <$> identifier
          <|> parens ((,) <$> (UName <$> identifier) <*> (optionMaybe $ reservedOp ":" *> T.typep))
@@ -40,12 +36,17 @@ lam = do
 var :: Parser Expr
 var = ann <*> (E.Var . UName <$> identifier)
 
+anno :: Parser Expr
+anno = ann <*> (flip E.Ann <$> (reserved "the" *> parens T.typep) <*> parens expr)
+
 atom :: Parser Expr
 atom =   nat
      <|> bool
      <|> try tuple
      <|> var
+     <|> anno
      <|> parens expr
+
 
 expr :: Parser Expr
 expr = lam <|> buildExpressionParser table atom where

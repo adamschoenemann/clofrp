@@ -63,10 +63,10 @@ spec = do
     do let Right e = E.unann <$> parse P.expr "" "e1 e2 e3"
        e `shouldBe` "e1" @@ "e2" @@ "e3"
   it "parses annotations" $ do
-    case E.unann <$> parse P.expr "" "\\x -> 10 : Bool -> Int" of
+    case E.unann <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
       Left e -> fail $ show e
       Right e -> e `shouldBe` ("x" @-> E.nat 10) @:: ("Bool" E.@->: "Int")
-    case E.unann <$> parse P.expr "" "(\\x -> \\y -> 10) : Bool -> Int -> Int" of
+    case E.unann <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
       Left e -> fail $ show e
       Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" E.@->: "Int" E.@->: "Int")
   it "parses compound expressions" $ 

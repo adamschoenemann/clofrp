@@ -65,6 +65,7 @@ languageDef = Tok.LanguageDef
                           , "()"
                           , "undefined"
                           , "import"
+                          , "the"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True
