@@ -38,6 +38,7 @@ library:
   dependencies:
   - base
   - parsec
+  - template-haskell
   source-dirs: library
 license: MIT
 maintainer: Author name here

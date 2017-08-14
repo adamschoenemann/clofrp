@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 -- Tasty makes it easy to test your code. It is a test framework that can
 -- combine many different types of tests into one suite. See its website for
@@ -17,15 +18,17 @@ import qualified CloTT.AST.Parsed  as E
 import           CloTT.AST.Parsed (LamCalc(..))
 import qualified CloTT.Annotated   as A
 
+import CloTT.QuasiQuoter
+
 main :: IO ()
 main = do
-  test <- testSpec "clott" spec
-  Test.Tasty.defaultMain test
+  test <- testSpec "parsing" spec
+  quasi <- testSpec "quasi" quasiSpec
+  let group = Test.Tasty.testGroup "tests" [test, quasi]
+  Test.Tasty.defaultMain group
 
 spec :: Spec
 spec = do
-  it "is trivially true" $ do
-    True `shouldBe` True
   it "parses natural numbers" $ do
     do let Right e = parse P.expr "" "10"
        E.unann e `shouldBe` E.nat 10
@@ -61,7 +64,7 @@ spec = do
     do let Right e = E.unann <$> parse P.expr "" "e1 e2"
        e `shouldBe` "e1" @@ "e2"
     do let Right e = E.unann <$> parse P.expr "" "e1 e2 e3"
-       e `shouldBe` "e1" @@ "e2" @@ "e3"
+       e `shouldBe` ("e1" @@ "e2" @@ "e3" :: E.Expr ())
   it "parses annotations" $ do
     case E.unann <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
       Left e -> fail $ show e
@@ -86,3 +89,11 @@ spec = do
        e `shouldBe` ("a" E.@->: "b") E.@->: "c"
 
 
+quasiSpec :: Spec
+quasiSpec = do
+  it "expression Q Exp quoter works" $ do
+    E.unann expr01 `shouldBe` "x" @-> "y" @-> E.the "Nat" ("x" @@ "y" @@ E.true)
+    
+
+expr01 :: P.Expr
+expr01 = [unsafeExpr|\x -> \y -> the (Nat) (x y True)|]

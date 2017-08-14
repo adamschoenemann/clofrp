@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module CloTT.AST.Parsed ( 
   module CloTT.AST.Parsed,
@@ -13,6 +14,7 @@ module CloTT.AST.Parsed (
 import CloTT.Annotated
 import CloTT.AST.Name
 import Data.String (IsString(..))
+import Data.Data
 import qualified CloTT.AST.Prim as P
 
 type Type a = Annotated a (Type' a)
@@ -20,7 +22,7 @@ type Type a = Annotated a (Type' a)
 data Type' a
   = TVar Name
   | Type a :->: Type a
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
   
 instance IsString (Type ()) where
   fromString = A () . TVar . UName
@@ -29,26 +31,35 @@ infixr 2 @->:
 (@->:) :: Type () -> Type () -> Type ()
 a @->: b = A () $ a :->: b
 
-type Expr a = Annotated a (Expr' a)
+type CExpr a = Annotated a (CExpr' a)
+type IExpr a = Annotated a (IExpr' a)
+type Expr a  = CExpr a
 
-data Expr' a
+data IExpr' a
   = Var Name
-  | Ann (Expr a) (Type a)
-  | Lam Name (Maybe (Type a)) (Expr a)
-  | App (Expr a) (Expr a)
-  | Tuple (Expr a) (Expr a)
+  | Ann (CExpr a) (Type a)
+  | App (IExpr a) (CExpr a)
+  | Tuple (CExpr a) (CExpr a)
   | Prim P.Prim
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
+
+data CExpr' a
+  = Inf (IExpr' a)                     -- since it is just an inclusion we do not need an extra annotation
+  | Lam Name (Maybe (Type a)) (CExpr a)
+  deriving (Show, Eq, Data, Typeable)
 
 -- Here are some combinators for creating un-annotated expressions easily
 nat :: Integer -> Expr ()
-nat = A () . Prim . P.Nat
+nat = A () . Inf . Prim . P.Nat
 
 true :: Expr ()
-true = A () . Prim . P.Bool $ True
+true = A () . Inf . Prim . P.Bool $ True
 
 false :: Expr ()
-false = A () . Prim . P.Bool $ False
+false = A () . Inf . Prim . P.Bool $ False
+
+the :: Type () -> Expr () -> Expr ()
+the t e = A () $ Inf $ Ann e t
 
 infixr 2 @->
 infixr 2 @:->
@@ -56,22 +67,25 @@ infixl 9 @@
 infixl 8 @*
 infixl 3 @::
 
-class IsString a => LamCalc a b | a -> b where
+class IsString a => LamCalc a t | a -> t where
   (@->) :: String -> a -> a
-  (@:->) :: (String, b) -> a -> a
+  (@:->) :: (String, t) -> a -> a
   (@@) :: a -> a -> a
   (@*) :: a -> a -> a
-  (@::) :: a -> b -> a
+  (@::) :: a -> t -> a
 
-instance IsString (Expr ()) where
-  fromString = A () . Var . UName
+instance IsString (CExpr ()) where
+  fromString = A () . Inf . Var . UName
 
-instance LamCalc (Expr ()) (Type ()) where
+instance LamCalc (CExpr ()) (Type ()) where
   nm @-> e = A () $ Lam (UName nm) Nothing e
   (nm, t) @:-> e = A () $ Lam (UName nm) (Just t) e
-  e1 @@ e2 = A () $ App e1 e2
-  e1 @* e2 = A () $ Tuple e1 e2
-  e @:: t = A () $ Ann e t
+
+  (A a (Inf e1)) @@ e2 = A () $ Inf $ App (A a e1) e2
+  e1 @@ e2 = error (show e1 ++ " is not inferrable in application")
+
+  e1 @* e2 = A () $ Inf $ Tuple e1 e2
+  e @:: t = A () $ Inf $ Ann e t
 
 unannT :: Type a -> Type ()
 unannT (A _ ty) = A () (go ty) where
@@ -79,15 +93,25 @@ unannT (A _ ty) = A () (go ty) where
     TVar x -> TVar x
     t1 :->: t2 -> unannT t1 :->: unannT t2
 
-unann :: Expr a -> Expr ()
-unann (A _ expr) = A () (unannE expr) where
-  unannE = \case
+unannC :: CExpr a -> CExpr ()
+unannC (A _ expr) = A () (unannC' expr) where
+  unannC' = \case
+    Inf ie -> Inf $ unannI' ie
+    Lam nm mty e -> Lam nm (unannT <$> mty) (unannC e)
+
+  unannI :: IExpr a -> IExpr ()
+  unannI (A _ expr0) = A () (unannI' expr0)
+
+  unannI' = \case
     Var nm -> Var nm
-    Ann e t -> Ann (unann e) (unannT t)
-    Lam nm mty e -> Lam nm (unannT <$> mty) (unann e)
-    App e1 e2 -> App (unann e1) (unann e2)
-    Tuple e1 e2 -> Tuple (unann e1) (unann e2)
+    Ann e t -> Ann (unannC e) (unannT t)
+    App e1 e2 -> App (unannI e1) (unannC e2)
+    Tuple e1 e2 -> Tuple (unannC e1) (unannC e2)
     Prim p -> Prim p
+    
+
+unann :: CExpr a -> CExpr ()
+unann = unannC
 
 infix 9 ~=~
 (~=~) :: Expr a -> Expr b -> Bool
