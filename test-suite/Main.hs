@@ -15,6 +15,7 @@ import Data.Either (isLeft)
 import qualified CloTT.Parser.Expr as P
 import qualified CloTT.Parser.Type as P
 import qualified CloTT.AST.Parsed  as E
+import           CloTT.AST.Parsed ((@->:))
 import           CloTT.AST.Parsed (LamCalc(..))
 import qualified CloTT.Annotated   as A
 
@@ -24,7 +25,8 @@ main :: IO ()
 main = do
   test <- testSpec "parsing" spec
   quasi <- testSpec "quasi" quasiSpec
-  let group = Test.Tasty.testGroup "tests" [test, quasi]
+  tc <- testSpec "type checking" tcSpec
+  let group = Test.Tasty.testGroup "tests" [test, quasi, tc]
   Test.Tasty.defaultMain group
 
 spec :: Spec
@@ -64,7 +66,7 @@ spec = do
     do let Right e = E.unann <$> parse P.expr "" "e1 e2"
        e `shouldBe` "e1" @@ "e2"
     do let Right e = E.unann <$> parse P.expr "" "e1 e2 e3"
-       e `shouldBe` ("e1" @@ "e2" @@ "e3" :: E.Expr ())
+       e `shouldBe` ("e1" @@ "e2" @@ "e3")
   it "parses annotations" $ do
     case E.unann <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
       Left e -> fail $ show e
@@ -82,11 +84,11 @@ spec = do
        e `shouldBe` "typez"
   it "parses arrow types" $ do
     do let Right e = E.unannT <$> parse P.typep "" "a -> b"
-       e `shouldBe` "a" E.@->: "b"
+       e `shouldBe` "a" @->: "b"
     do let Right e = E.unannT <$> parse P.typep "" "a -> b -> c"
-       e `shouldBe` "a" E.@->: "b" E.@->: "c"
+       e `shouldBe` "a" @->: "b" @->: "c"
     do let Right e = E.unannT <$> parse P.typep "" "(a -> b) -> c"
-       e `shouldBe` ("a" E.@->: "b") E.@->: "c"
+       e `shouldBe` ("a" @->: "b") @->: "c"
 
 
 quasiSpec :: Spec
@@ -97,3 +99,22 @@ quasiSpec = do
 
 expr01 :: P.Expr
 expr01 = [unsafeExpr|\x -> \y -> the (Nat) (x y True)|]
+
+tcSpec :: Spec
+tcSpec = do
+  it "checks primitives" $ do
+    E.checkC0 (E.nat 10) "Nat" `shouldBe` Right ()
+    E.checkC0 (E.true) "Bool" `shouldBe` Right ()
+    E.checkC0 (E.unit) "Unit" `shouldBe` Right ()
+    E.checkC0 (E.unit) "Bool" `shouldSatisfy` isLeft
+
+  it "checks variables" $ do
+    E.checkC (E.ctx [("x", "Nat")]) (E.var "x") "Nat" `shouldBe` Right ()
+    E.checkC (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f") ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.checkC (E.ctx [("x", "Nat")]) (E.var "x") "Bool" `shouldSatisfy` isLeft
+  
+  it "checks applications" $ do
+    E.checkC (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.nat 10) "Nat" `shouldBe` Right ()
+    E.checkC (E.ctx [("f" , ("Nat" @->: "Bool") @->: "Unit")]) (E.var "f" @@ ("x" @-> E.true)) "Unit" `shouldBe` Right ()
+    E.checkC0 (E.the ("Nat" @->: "Nat") ("x" @-> "x") @@ E.nat 10) "Nat" `shouldBe` Right ()
+    E.checkC (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.true)   "Nat" `shouldSatisfy` isLeft

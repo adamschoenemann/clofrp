@@ -5,17 +5,21 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GADTs #-}
 
 module CloTT.AST.Parsed ( 
   module CloTT.AST.Parsed,
+  module CloTT.AST.Name,
   P.Prim(..)
 ) where
 
-import CloTT.Annotated
+import CloTT.Annotated hiding (unann)
+import qualified CloTT.Annotated as A
 import CloTT.AST.Name
 import Data.String (IsString(..))
 import Data.Data
 import qualified CloTT.AST.Prim as P
+import qualified Data.Map.Strict as M
 
 type Type a = Annotated a (Type' a)
 
@@ -49,6 +53,13 @@ data CExpr' a
   deriving (Show, Eq, Data, Typeable)
 
 -- Here are some combinators for creating un-annotated expressions easily
+
+var :: String -> Expr ()
+var = A () . Inf . Var . UName
+
+unit :: Expr ()
+unit = A () . Inf . Prim $ P.Unit
+
 nat :: Integer -> Expr ()
 nat = A () . Inf . Prim . P.Nat
 
@@ -82,7 +93,7 @@ instance LamCalc (CExpr ()) (Type ()) where
   (nm, t) @:-> e = A () $ Lam (UName nm) (Just t) e
 
   (A a (Inf e1)) @@ e2 = A () $ Inf $ App (A a e1) e2
-  e1 @@ e2 = error (show e1 ++ " is not inferrable in application")
+  e1             @@ _  = error (show e1 ++ " is not inferrable in application")
 
   e1 @* e2 = A () $ Inf $ Tuple e1 e2
   e @:: t = A () $ Inf $ Ann e t
@@ -116,3 +127,63 @@ unann = unannC
 infix 9 ~=~
 (~=~) :: Expr a -> Expr b -> Bool
 e1 ~=~ e2 = unann e1 == unann e2
+
+-- Type checking 
+
+type Ctx = M.Map Name (Type ())
+
+empty :: Ctx
+empty = M.empty
+
+ctx :: [(Name, Type ())] -> Ctx
+ctx = M.fromList
+
+type TyErr = String
+type Result t = Either TyErr t
+
+tyErr :: String -> Result a
+tyErr = Left
+
+checkC0 :: CExpr a -> Type () -> Result ()
+checkC0 = checkC empty
+
+checkC :: Ctx -> CExpr a -> Type () -> Result ()
+checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
+  checkC' :: CExpr' a -> Type' () -> Result ()
+  checkC' (Inf iexpr)            typ         = inferI' ctx iexpr =@= (A () typ)
+  checkC' (Lam nm Nothing bd)    (ta :->: tb) = checkC (M.insert nm ta ctx) bd tb
+  checkC' (Lam nm (Just ta') bd) (ta :->: tb) 
+    | unannT ta' == ta = checkC (M.insert nm ta ctx) bd tb
+    | otherwise       = tyErr $ "parameter annotated with " ++ show (unannT ta') ++ " does not match expected " ++ show ta
+
+  checkC' (Lam _ _ _) typ = tyErr $ show (unannC annce) ++ " cannot check against " ++ show typ
+
+  (=@=) :: Result (Type ()) -> Type () -> Result ()
+  t1c =@= t2 = do
+    t1 <- t1c
+    if t1 == t2 then
+      pure ()
+      else tyErr (show t1 ++ " cannot check against " ++ show t2)
+
+inferI' :: Ctx -> IExpr' a -> Result (Type ())
+inferI' ctx = \case
+  Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
+  Ann ace aty   -> 
+    let ty = unannT aty
+    in  checkC ctx ace ty *> pure ty
+
+  App (A _ ie) ace   -> do
+    A _ r <- inferI' ctx ie
+    case r of
+      t1 :->: t2 -> checkC ctx ace t1 >> pure t2
+      t         -> tyErr $ show t ++ " was expected to be an arrow type"
+
+  Tuple ce1 ce2 -> undefined
+  Prim p        -> inferPrim p
+
+inferPrim :: P.Prim -> Result (Type ())
+inferPrim = \case
+  P.Unit   -> pure "Unit"
+  P.Bool _ -> pure "Bool"
+  P.Nat _  -> pure "Nat"
+

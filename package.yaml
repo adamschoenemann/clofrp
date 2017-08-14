@@ -39,6 +39,7 @@ library:
   - base
   - parsec
   - template-haskell
+  - containers
   source-dirs: library
 license: MIT
 maintainer: Author name here
