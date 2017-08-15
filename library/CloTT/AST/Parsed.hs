@@ -104,15 +104,26 @@ instance LamCalc (CExpr ()) (Type ()) where
   e @:: t = A () $ Inf $ Ann e t
 
 -- helper
-conv :: (a -> Type' a -> b) -> Type a -> b
+conv :: (a -> t -> b) -> Annotated a t -> b
 conv fn (A a e) = fn a e
 
+conv' :: (a -> c) -> (t a -> t c) -> Annotated a (t a) -> Annotated c (t c)
+conv' an fn (A a e) = A (an a) (fn e)
+
 unannT :: Type a -> Type ()
-unannT (A _ ty) = A () (go ty) where
+unannT = help go where
+  help = conv' (const ())
   go = \case
     TFree x -> TFree x
-    t1 `TApp` t2 -> unannT t1 `TApp` unannT t2
-    t1 :->: t2 -> unannT t1 :->: unannT t2
+    t1 `TApp` t2 -> help go t1 `TApp` help go t2
+    t1 :->: t2 -> help go t1 :->: help go t2
+
+-- unannT :: Type a -> Type ()
+-- unannT (A _ ty) = A () (go ty) where
+--   go = \case
+--     TFree x -> TFree x
+--     t1 `TApp` t2 -> unannT t1 `TApp` unannT t2
+--     t1 :->: t2 -> unannT t1 :->: unannT t2
 
 unannC :: CExpr a -> CExpr ()
 unannC (A _ expr) = A () (unannC' expr) where
