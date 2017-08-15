@@ -41,8 +41,6 @@ languageDef = Tok.LanguageDef
   , Tok.reservedNames   = [ "if"
                           , "then"
                           , "else"
-                          , "True"
-                          , "False"
                           , "cons"
                           , "let"
                           , "in"
@@ -66,6 +64,7 @@ languageDef = Tok.LanguageDef
                           , "undefined"
                           , "import"
                           , "the"
+                          , "data"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True

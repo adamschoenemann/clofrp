@@ -37,7 +37,7 @@ var :: Parser Expr
 var = ann <*> (E.Inf . E.Var . UName <$> identifier)
 
 anno :: Parser Expr
-anno = ann <*> ((\t e -> E.Inf $ E.Ann e t) <$> (reserved "the" *> T.typep) <*> expr)
+anno = ann <*> ((\t e -> E.Inf $ E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)
 
 atom :: Parser Expr
 atom =   nat

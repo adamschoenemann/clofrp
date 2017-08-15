@@ -14,6 +14,7 @@ import Data.Either (isLeft)
 
 import qualified CloTT.Parser.Expr as P
 import qualified CloTT.Parser.Type as P
+import qualified CloTT.Parser.Decl as P
 import qualified CloTT.AST.Parsed  as E
 import           CloTT.AST.Parsed ((@->:), (@@:))
 import           CloTT.AST.Parsed (LamCalc(..))
@@ -26,7 +27,8 @@ main = do
   test <- testSpec "parsing" spec
   quasi <- testSpec "quasi" quasiSpec
   tc <- testSpec "type checking" tcSpec
-  let group = Test.Tasty.testGroup "tests" [test, quasi, tc]
+  decl <- testSpec "declarations" declSpec
+  let group = Test.Tasty.testGroup "tests" [test, quasi, tc, decl]
   Test.Tasty.defaultMain group
 
 spec :: Spec
@@ -36,22 +38,27 @@ spec = do
        E.unann e `shouldBe` E.nat 10
     do let r = parse P.expr "" "-1"
        r `shouldSatisfy` isLeft
+  
   it "parses booleans (true)" $ do
     let Right e = E.unann <$> parse P.expr "" "True"
     e `shouldBe` E.true
+  
   it "parses booleans (false)" $ do
     let Right e = E.unann <$> parse P.expr "" "False"
     e `shouldBe` E.false
+  
   it "parses tuples" $ do
     do let Right e = E.unann <$> parse P.expr "" "(10, False)"
        e `shouldBe` E.nat 10 @* E.false
     do let Right e = E.unann <$> parse P.expr "" "(True, 5)"
        e `shouldBe` E.true @* E.nat 5
+  
   it "parses vars" $ do
     do let Right e = E.unann <$> parse P.expr "" "x"
        e `shouldBe` "x"
     do let Right e = E.unann <$> parse P.expr "" "truefalse"
        e `shouldBe` "truefalse"
+  
   it "parses lambdas" $ do
     do let Right e = E.unann <$> parse P.expr "" "\\x -> x"
        e `shouldBe` "x" @-> "x"
@@ -62,11 +69,13 @@ spec = do
     case E.unann <$> parse P.expr "" "\\(x:Bool) -> \\(y:Int) -> x" of
       Left e -> fail $ show e 
       Right e -> e `shouldBe` ("x", "Bool") @:-> ("y", "Int") @:-> "x"
+  
   it "parses application" $ do
     do let Right e = E.unann <$> parse P.expr "" "e1 e2"
        e `shouldBe` "e1" @@ "e2"
     do let Right e = E.unann <$> parse P.expr "" "e1 e2 e3"
        e `shouldBe` ("e1" @@ "e2" @@ "e3")
+  
   it "parses annotations" $ do
     case E.unann <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
       Left e -> fail $ show e
@@ -74,14 +83,17 @@ spec = do
     case E.unann <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
       Left e -> fail $ show e
       Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" E.@->: "Int" E.@->: "Int")
+  
   it "parses compound expressions" $ 
     do let Right e = E.unann <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
        e `shouldBe` "x" @-> ("y" @-> "x" @@ "y") @* "y" @@ (E.true @* "x")
+  
   it "parses simple types" $ do
     do let Right e = E.unannT <$> parse P.typep "" "x"
        e `shouldBe` "x"
     do let Right e = E.unannT <$> parse P.typep "" "typez"
        e `shouldBe` "typez"
+  
   it "parses arrow types" $ do
     do let Right e = E.unannT <$> parse P.typep "" "a -> b"
        e `shouldBe` "a" @->: "b"
@@ -99,6 +111,25 @@ quasiSpec = do
 
 expr01 :: P.Expr
 expr01 = [unsafeExpr|\x -> \y -> the (Nat) (x y True)|]
+
+declSpec :: Spec
+declSpec = do
+  it "parses data type decls" $ do
+    do let Right decl = E.unannD <$> parse P.datadecl "" "data Foo = ."
+       decl `shouldBe` E.datadecl "Foo" E.Star []
+    do let Right decl = E.unannD <$> parse P.datadecl "" "data Foo a = ."
+       decl `shouldBe` E.datadecl "Foo" (E.Star E.:->*: E.Star) []
+    do let Right decl = E.unannD <$> parse P.datadecl "" "data Foo a b = ."
+       decl `shouldBe` E.datadecl "Foo" (E.Star E.:->*: E.Star E.:->*: E.Star) []
+    do let Right decl = E.unannD <$> parse P.datadecl "" "data Unit = MkUnit."
+       decl `shouldBe` E.datadecl "Unit" E.Star [E.constr "MkUnit" []]
+    do let Right decl = E.unannD <$> parse P.datadecl "" "data Bool = True | False."
+       decl `shouldBe` E.datadecl "Bool" E.Star [E.constr "True" [], E.constr "False" []]
+    do let Right decl = E.unannD <$> parse P.datadecl "" "data Maybe a = Nothing | Just a."
+       decl `shouldBe` E.datadecl "Maybe" (E.Star E.:->*: E.Star) [E.constr "Nothing" [], E.constr "Just" ["a"]]
+    do let Right decl = E.unannD <$> parse P.datadecl "" "data List a = Nil | Cons (List a)."
+       decl `shouldBe` E.datadecl "List" (E.Star E.:->*: E.Star) [E.constr "Nil" [], E.constr "Cons" ["List" @@: "a"]]
+
 
 tcSpec :: Spec
 tcSpec = do

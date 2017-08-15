@@ -17,7 +17,7 @@ import CloTT.Annotated hiding (unann)
 import qualified CloTT.Annotated as A
 import CloTT.AST.Name
 import Data.String (IsString(..))
-import Data.Data
+import Data.Data (Data, Typeable)
 import qualified CloTT.AST.Prim as P
 import qualified Data.Map.Strict as M
 
@@ -57,6 +57,24 @@ data CExpr' a
   | Lam Name (Maybe (Type a)) (CExpr a)
   deriving (Show, Eq, Data, Typeable)
 
+infixr 2 :->*:
+
+data Kind
+  = Star
+  | Kind :->*: Kind
+  deriving (Show, Eq, Data, Typeable)
+
+type Decl a = Annotated a (Decl' a)
+data Decl' a
+  = FunDef Name (CExpr a) (Type a)
+  | DataDecl Name Kind [Constr a]
+  deriving (Show, Eq, Data, Typeable)
+
+type Constr a = Annotated a (Constr' a)
+data Constr' a
+  = Constr Name [Type a]
+  deriving (Show, Eq, Data, Typeable)
+
 -- Here are some combinators for creating un-annotated expressions easily
 
 var :: String -> Expr ()
@@ -76,6 +94,12 @@ false = A () . Inf . Prim . P.Bool $ False
 
 the :: Type () -> Expr () -> Expr ()
 the t e = A () $ Inf $ Ann e t
+
+constr :: Name -> [Type ()] -> Constr ()
+constr nm ts = A () $ Constr nm ts
+
+datadecl :: Name -> Kind -> [Constr ()] -> Decl ()
+datadecl nm k cs = A () $ DataDecl nm k cs
 
 infixr 2 @->
 infixr 2 @:->
@@ -118,12 +142,17 @@ unannT = help go where
     t1 `TApp` t2 -> help go t1 `TApp` help go t2
     t1 :->: t2 -> help go t1 :->: help go t2
 
--- unannT :: Type a -> Type ()
--- unannT (A _ ty) = A () (go ty) where
---   go = \case
---     TFree x -> TFree x
---     t1 `TApp` t2 -> unannT t1 `TApp` unannT t2
---     t1 :->: t2 -> unannT t1 :->: unannT t2
+unannD :: Decl a -> Decl ()
+unannD = help go where
+  help = conv' (const ())
+  go = \case 
+    FunDef nm c t -> FunDef nm (unannC c) (unannT t)
+    DataDecl nm k cstrs -> DataDecl nm k (map unannConstr cstrs)
+
+unannConstr :: Constr a -> Constr ()
+unannConstr (A _ c) =
+  case c of
+    Constr nm ts -> A () $ Constr nm (map unannT ts)
 
 unannC :: CExpr a -> CExpr ()
 unannC (A _ expr) = A () (unannC' expr) where
