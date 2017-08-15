@@ -15,7 +15,7 @@ import Data.Either (isLeft)
 import qualified CloTT.Parser.Expr as P
 import qualified CloTT.Parser.Type as P
 import qualified CloTT.AST.Parsed  as E
-import           CloTT.AST.Parsed ((@->:))
+import           CloTT.AST.Parsed ((@->:), (@@:))
 import           CloTT.AST.Parsed (LamCalc(..))
 import qualified CloTT.Annotated   as A
 
@@ -103,10 +103,10 @@ expr01 = [unsafeExpr|\x -> \y -> the (Nat) (x y True)|]
 tcSpec :: Spec
 tcSpec = do
   it "checks primitives" $ do
-    E.checkC0 (E.nat 10) "Nat" `shouldBe` Right ()
-    E.checkC0 (E.true) "Bool" `shouldBe` Right ()
-    E.checkC0 (E.unit) "Unit" `shouldBe` Right ()
-    E.checkC0 (E.unit) "Bool" `shouldSatisfy` isLeft
+    E.checkC0 (E.nat 10) "Nat"  `shouldBe` Right ()
+    E.checkC0 E.true     "Bool" `shouldBe` Right ()
+    E.checkC0 E.unit     "Unit" `shouldBe` Right ()
+    E.checkC0 E.unit     "Bool" `shouldSatisfy` isLeft
 
   it "checks variables" $ do
     E.checkC (E.ctx [("x", "Nat")]) (E.var "x") "Nat" `shouldBe` Right ()
@@ -118,3 +118,10 @@ tcSpec = do
     E.checkC (E.ctx [("f" , ("Nat" @->: "Bool") @->: "Unit")]) (E.var "f" @@ ("x" @-> E.true)) "Unit" `shouldBe` Right ()
     E.checkC0 (E.the ("Nat" @->: "Nat") ("x" @-> "x") @@ E.nat 10) "Nat" `shouldBe` Right ()
     E.checkC (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.true)   "Nat" `shouldSatisfy` isLeft
+  
+  it "checks tuples" $ do
+    E.checkC0 [unsafeExpr|(10,20)|] ("Tuple" @@: "Nat" @@: "Nat") `shouldBe` Right ()
+    E.checkC (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) [unsafeExpr|(x, f x)|] ("Tuple" @@: "Nat" @@: "Bool")
+        `shouldBe` Right ()
+    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: "Bool")
+        `shouldSatisfy` isLeft

@@ -11,7 +11,7 @@ import           CloTT.AST.Name
 type Type = E.Type SourcePos
 
 var :: Parser Type
-var = ann <*> (E.TVar . UName <$> identifier)
+var = ann <*> (E.TFree . UName <$> identifier)
 
 arr :: Parser (Type -> Type -> Type)
 arr = pure (\p a b -> A.A p $ a E.:->: b) <*> getPosition

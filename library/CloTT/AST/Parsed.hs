@@ -24,12 +24,17 @@ import qualified Data.Map.Strict as M
 type Type a = Annotated a (Type' a)
 
 data Type' a
-  = TVar Name
+  = TFree Name
+  | TApp (Type a) (Type a)
   | Type a :->: Type a
   deriving (Show, Eq, Data, Typeable)
   
 instance IsString (Type ()) where
-  fromString = A () . TVar . UName
+  fromString = A () . TFree . UName
+
+infixl 9 @@:
+(@@:) :: Type () -> Type () -> Type ()
+a @@: b = A () $ a `TApp` b
 
 infixr 2 @->:
 (@->:) :: Type () -> Type () -> Type ()
@@ -98,10 +103,15 @@ instance LamCalc (CExpr ()) (Type ()) where
   e1 @* e2 = A () $ Inf $ Tuple e1 e2
   e @:: t = A () $ Inf $ Ann e t
 
+-- helper
+conv :: (a -> Type' a -> b) -> Type a -> b
+conv fn (A a e) = fn a e
+
 unannT :: Type a -> Type ()
 unannT (A _ ty) = A () (go ty) where
   go = \case
-    TVar x -> TVar x
+    TFree x -> TFree x
+    t1 `TApp` t2 -> unannT t1 `TApp` unannT t2
     t1 :->: t2 -> unannT t1 :->: unannT t2
 
 unannC :: CExpr a -> CExpr ()
@@ -165,6 +175,9 @@ checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
       pure ()
       else tyErr (show t1 ++ " cannot check against " ++ show t2)
 
+-- inferI :: Ctx -> IExpr a -> Result (Type ())
+-- inferI ctx (Ann _ expr) = inferI' ctx expr
+
 inferI' :: Ctx -> IExpr' a -> Result (Type ())
 inferI' ctx = \case
   Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
@@ -178,7 +191,14 @@ inferI' ctx = \case
       t1 :->: t2 -> checkC ctx ace t1 >> pure t2
       t         -> tyErr $ show t ++ " was expected to be an arrow type"
 
-  Tuple ce1 ce2 -> undefined
+  Tuple (A _ (Inf e1)) (A _ (Inf e2)) -> do
+    t1 <- inferI' ctx e1
+    t2 <- inferI' ctx e2
+    let tuple = A () $ TFree "Tuple"
+    pure $ tuple @@: t1 @@: t2
+  
+  Tuple ace1 ace2 -> tyErr $ "Tuples must have inferrable elements"
+
   Prim p        -> inferPrim p
 
 inferPrim :: P.Prim -> Result (Type ())
