@@ -108,6 +108,9 @@ fund nm e =  A () $ FunD nm e
 sigd :: Name -> Type () -> Decl ()
 sigd nm t =  A () $ SigD nm t
 
+prog :: [Decl ()] -> Prog ()
+prog = Prog
+
 infixr 2 @->
 infixr 2 @:->
 infixl 9 @@
@@ -153,11 +156,14 @@ unannD = help go where
   help = conv' (const ())
   go = \case 
     FunD nm c -> FunD nm (unann c) 
-    DataD nm k cstrs -> DataD nm k (map unannonstr cstrs)
+    DataD nm k cstrs -> DataD nm k (map unannConstr cstrs)
     SigD nm t  -> SigD nm (unannT t)
 
-unannonstr :: Constr a -> Constr ()
-unannonstr (A _ c) =
+unannP :: Prog a -> Prog ()
+unannP (Prog ds) = Prog (map unannD ds)
+
+unannConstr :: Constr a -> Constr ()
+unannConstr (A _ c) =
   case c of
     Constr nm ts -> A () $ Constr nm (map unannT ts)
 
@@ -260,8 +266,6 @@ infer' ctx = \case
     t2 <- infer' ctx e2
     let tuple = A () $ TFree "Tuple"
     pure $ tuple @@: t1 @@: t2
-  
-  Tuple ace1 ace2 -> tyErr $ "Tuples must have inferrable elements"
 
   Prim p        -> inferPrim p
 

@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeApplications #-}
+
 
 -- Tasty makes it easy to test your code. It is a test framework that can
 -- combine many different types of tests into one suite. See its website for
@@ -15,6 +17,7 @@ import Data.Either (isLeft)
 import qualified CloTT.Parser.Expr as P
 import qualified CloTT.Parser.Type as P
 import qualified CloTT.Parser.Decl as P
+import qualified CloTT.Parser.Prog as P
 import qualified CloTT.AST.Parsed  as E
 import           CloTT.AST.Parsed ((@->:), (@@:))
 import           CloTT.AST.Parsed (LamCalc(..))
@@ -79,10 +82,10 @@ spec = do
   it "parses annotations" $ do
     case E.unann <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
       Left e -> fail $ show e
-      Right e -> e `shouldBe` ("x" @-> E.nat 10) @:: ("Bool" E.@->: "Int")
+      Right e -> e `shouldBe` ("x" @-> E.nat 10) @:: ("Bool" @->: "Int")
     case E.unann <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
       Left e -> fail $ show e
-      Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" E.@->: "Int" E.@->: "Int")
+      Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" @->: "Int" @->: "Int")
   
   it "parses compound expressions" $ 
     do let Right e = E.unann <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
@@ -113,15 +116,48 @@ quasiSpec = do
                       [ E.constr "Leaf" []
                       , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
                       ]
+  it "program quoter works" $ do
+    E.unannP prog01 `shouldBe`
+      E.prog [
+        E.sigd "id" ("a" @->: "a")
+      , E.fund "id" ("x" @-> "x")
+      , E.sigd "twice" ("Nat" @->: "Tuple" @@: "Nat" @@: "Nat")
+      , E.fund "twice" ("x" @-> ("x" @* "x"))
+      , E.datad "Maybe" 
+          (E.Star E.:->*: E.Star)
+          [ E.constr "Nothing" []
+          , E.constr "Just" ["a"]
+          ]
+      , E.datad "List" 
+          (E.Star E.:->*: E.Star)
+          [ E.constr "Nil" []
+          , E.constr "Cons" ["List" @@: "a"]
+          ]
+      , E.sigd "head" ("List" @@: "a" @->: "Maybe" @@: "a")
+      , E.fund "head" ("xs" @-> "xs")
+      ]
     
 
 expr01 :: P.Expr
 expr01 = [unsafeExpr|\x -> \y -> the (Nat) (x y True)|]
 
-decl01, decl02, decl03 :: P.Decl
+decl01 :: P.Decl
 decl01 = [unsafeDecl|data Tree a = Leaf | Branch a (Tree a) (Tree a).|]
-decl02 = undefined
-decl03 = undefined
+
+prog01 :: P.Prog
+prog01 = [unsafeProg|
+  id : a -> a.
+  id = \x -> x.
+
+  twice : Nat -> Tuple Nat Nat.
+  twice = \x -> (x, x).
+
+  data Maybe a = Nothing | Just a.
+  data List a = Nil | Cons (List a).
+
+  head : List a -> Maybe a.
+  head = \xs -> xs.
+|]
 
 declSpec :: Spec
 declSpec = do
@@ -178,11 +214,11 @@ tcSpec = do
   
   it "checks tuples" $ do
     E.check0 [unsafeExpr|(10,20)|] ("Tuple" @@: "Nat" @@: "Nat") `shouldBe` Right ()
-    E.check (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) [unsafeExpr|(x, f x)|] ("Tuple" @@: "Nat" @@: "Bool")
+    E.check @() (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) ("x" @* "f" @@ "x") ("Tuple" @@: "Nat" @@: "Bool")
         `shouldBe` Right ()
-    E.check (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Nat"))
+    E.check @() (E.ctx [("x", "Nat")]) ("x" @* ("y" @-> "x")) ("Tuple" @@: "Nat" @@: ("Bool" @->: "Nat"))
         `shouldBe` Right ()
-    E.check (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
+    E.check @() (E.ctx [("x", "Nat")]) ("x" @* ("y" @-> "x")) ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
         `shouldSatisfy` isLeft
   
   it "checks lambdas" $ do

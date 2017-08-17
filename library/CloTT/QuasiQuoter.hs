@@ -37,3 +37,14 @@ unsafeDecl = QuasiQuoter
     unsafeQuoteDecl s = do
       ast <- liftParse P.decl s
       liftData ast
+
+unsafeProg :: QuasiQuoter
+unsafeProg = QuasiQuoter 
+  { quoteExp  = unsafeQuoteProg
+  , quotePat  = undefined
+  , quoteDec  = undefined
+  , quoteType = undefined
+  } where
+    unsafeQuoteProg s = do
+      ast <- liftParse P.prog s
+      liftData ast
