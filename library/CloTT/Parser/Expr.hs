@@ -59,7 +59,7 @@ expr = lam <|> buildExpressionParser table atom where
        <?> "space application"
   app :: Parser (Expr -> Expr -> Expr)
   app = fn <$> getPosition where
-    fn p (A.A p1 e1) e2 = A.A p . E.Inf $ E.App (A.A p1 e1) e2
+    fn p (A.A p1 e1) e2 = A.A p $ E.App (A.A p1 e1) e2
     fn p _ e2          = error "Cannot parse application with non-inferrable term"
 
 parseExpr :: String -> Either ParseError Expr

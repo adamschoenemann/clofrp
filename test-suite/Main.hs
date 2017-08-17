@@ -178,5 +178,14 @@ tcSpec = do
     E.checkC0 [unsafeExpr|(10,20)|] ("Tuple" @@: "Nat" @@: "Nat") `shouldBe` Right ()
     E.checkC (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) [unsafeExpr|(x, f x)|] ("Tuple" @@: "Nat" @@: "Bool")
         `shouldBe` Right ()
-    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: "Bool")
+    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Nat"))
+        `shouldBe` Right ()
+    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
         `shouldSatisfy` isLeft
+  
+  it "checks lambdas" $ do
+    E.checkC0 [unsafeExpr|\x -> x|] ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.checkC0 [unsafeExpr|\x -> 10|] ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.checkC0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Bool") `shouldBe` Right ()
+    E.checkC0 [unsafeExpr|\x -> \y -> x|] ("Nat" @->: "Bool" @->: "Nat")  `shouldBe` Right ()
+    E.checkC0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Nat")  `shouldSatisfy` isLeft

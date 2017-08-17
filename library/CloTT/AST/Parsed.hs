@@ -6,12 +6,15 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module CloTT.AST.Parsed ( 
   module CloTT.AST.Parsed,
   module CloTT.AST.Name,
   P.Prim(..)
 ) where
+
+import Debug.Trace
 
 import CloTT.Annotated hiding (unann)
 import qualified CloTT.Annotated as A
@@ -73,10 +76,10 @@ data Constr' a
 -- Here are some combinators for creating un-annotated expressions easily
 
 var :: String -> Expr ()
-var = A () . Inf . Var . UName
+var = A () . Var . UName
 
 unit :: Expr ()
-unit = A () . Inf . Prim $ P.Unit
+unit = A () . Prim $ P.Unit
 
 nat :: Integer -> Expr ()
 nat = A () . Prim . P.Nat
@@ -122,8 +125,7 @@ instance LamCalc (Expr ()) (Type ()) where
   nm @-> e = A () $ Lam (UName nm) Nothing e
   (nm, t) @:-> e = A () $ Lam (UName nm) (Just t) e
 
-  (A a e1) @@ e2 = A () $ (A a e1) e2
-  e1             @@ _  = error (show e1 ++ " is not inferrable in application")
+  e1 @@ e2 = A () $ App e1 e2
 
   e1 @* e2 = A () $ Tuple e1 e2
   e @:: t = A () $ Ann e t
@@ -147,24 +149,26 @@ unannD :: Decl a -> Decl ()
 unannD = help go where
   help = conv' (const ())
   go = \case 
-    FunD nm c -> FunD nm (unannC c) 
-    DataD nm k cstrs -> DataD nm k (map unannConstr cstrs)
+    FunD nm c -> FunD nm (unann c) 
+    DataD nm k cstrs -> DataD nm k (map unannonstr cstrs)
     SigD nm t  -> SigD nm (unannT t)
 
-unannConstr :: Constr a -> Constr ()
-unannConstr (A _ c) =
+unannonstr :: Constr a -> Constr ()
+unannonstr (A _ c) =
   case c of
     Constr nm ts -> A () $ Constr nm (map unannT ts)
 
 unannI :: Expr a -> Expr ()
-unannI (A _ expr0) = A () (unannI' expr0) where
-  unannI' = \case
-    Var nm -> Var nm
-    Ann e t -> Ann (unannC e) (unannT t)
-    App e1 e2 -> App (unannI e1) (unannC e2)
-    Lam nm mty e -> Lam nm (unannT <$> mty) (unannI e)
-    Tuple e1 e2 -> Tuple (unannC e1) (unannC e2)
-    Prim p -> Prim p
+unannI (A _ expr0) = A () (unannI' expr0)
+
+unannI' :: Expr' a -> Expr' ()
+unannI' = \case
+  Var nm -> Var nm
+  Ann e t -> Ann (unann e) (unannT t)
+  App e1 e2 -> App (unannI e1) (unann e2)
+  Lam nm mty e -> Lam nm (unannT <$> mty) (unannI e)
+  Tuple e1 e2 -> Tuple (unann e1) (unann e2)
+  Prim p -> Prim p
     
 
 unann :: Expr a -> Expr ()
@@ -193,16 +197,22 @@ tyErr = Left
 checkC0 :: Expr a -> Type () -> Result ()
 checkC0 = checkC empty
 
+viewTupleT :: Type' a -> Maybe (Type' a, Type' a)
+viewTupleT (A _ (A _ (TFree "Tuple") `TApp` A _ e1) `TApp` A _ e2) = Just (e1, e2)
+viewTupleT _ = Nothing
+
 checkC :: Ctx -> Expr a -> Type () -> Result ()
 checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
   checkC' :: Expr' a -> Type' () -> Result ()
-  checkC' iexpr            typ               = inferI' ctx iexpr =@= (A () typ)
   checkC' (Lam nm Nothing bd)    (ta :->: tb) = checkC (M.insert nm ta ctx) bd tb
   checkC' (Lam nm (Just ta') bd) (ta :->: tb) 
     | unannT ta' == ta = checkC (M.insert nm ta ctx) bd tb
     | otherwise       = tyErr $ "parameter annotated with " ++ show (unannT ta') ++ " does not match expected " ++ show ta
+  checkC' (Lam _ _ _) typ = tyErr $ show (unann annce) ++ " cannot check against " ++ show typ
 
-  checkC' (Lam _ _ _) typ = tyErr $ show (unannC annce) ++ " cannot check against " ++ show typ
+  checkC' (Tuple (A _ e1) (A _ e2))  (viewTupleT -> Just (t1, t2)) = checkC' e1 t1 *> checkC' e2 t2 *> pure ()
+
+  checkC' iexpr            typ               = inferI' ctx iexpr =@= (A () typ)
 
   (=@=) :: Result (Type ()) -> Type () -> Result ()
   t1c =@= t2 = do
@@ -214,6 +224,11 @@ checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
 -- inferI :: Ctx -> Expr a -> Result (Type ())
 -- inferI ctx (Ann _ expr) = inferI' ctx expr
 
+decorate :: TyErr -> Result a -> Result a
+decorate err res = case res of
+  Right r -> Right r
+  Left err' -> Left $ err' ++ "\n" ++ err
+  
 inferI' :: Ctx -> Expr' a -> Result (Type ())
 inferI' ctx = \case
   Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
@@ -227,7 +242,17 @@ inferI' ctx = \case
       t1 :->: t2 -> checkC ctx ace t1 >> pure t2
       t         -> tyErr $ show t ++ " was expected to be an arrow type"
 
-  Tuple (A _ (Inf e1)) (A _ (Inf e2)) -> do
+  Lam nm (Just t1) (A _ bd) -> do
+    t2 <- inferI' (M.insert nm (unannT t1) ctx) bd
+    pure $ unannT t1 @->: t2
+
+  -- until we have polymorphism we cannot infer a type of a -> tau 
+  Lam nm Nothing (A _ bd) -> 
+    tyErr $ "Cannot infer type of un-annotated lambda"
+  --   tryit <- decorate ("Try annotating " ++ show nm) $ inferI' ctx bd
+  --   pure 
+
+  Tuple (A _ e1) (A _ e2) -> do
     t1 <- inferI' ctx e1
     t2 <- inferI' ctx e2
     let tuple = A () $ TFree "Tuple"
