@@ -154,38 +154,40 @@ declSpec = do
   it "parses type signatures" $ do
     do let Right decl = E.unannD <$> parse P.decl "" "id : a -> a."
        decl `shouldBe` E.sigd "id" ("a" @->: "a")
+    do let Right decl = E.unannD <$> parse P.decl "" "map : (a -> b) -> f a -> f b."
+       decl `shouldBe` E.sigd "map" (("a" @->: "b") @->: "f" @@: "a" @->: "f" @@: "b")
 
 tcSpec :: Spec
 tcSpec = do
   it "checks primitives" $ do
-    E.checkC0 (E.nat 10) "Nat"  `shouldBe` Right ()
-    E.checkC0 E.true     "Bool" `shouldBe` Right ()
-    E.checkC0 E.unit     "Unit" `shouldBe` Right ()
-    E.checkC0 E.unit     "Bool" `shouldSatisfy` isLeft
+    E.check0 (E.nat 10) "Nat"  `shouldBe` Right ()
+    E.check0 E.true     "Bool" `shouldBe` Right ()
+    E.check0 E.unit     "Unit" `shouldBe` Right ()
+    E.check0 E.unit     "Bool" `shouldSatisfy` isLeft
 
   it "checks variables" $ do
-    E.checkC (E.ctx [("x", "Nat")]) (E.var "x") "Nat" `shouldBe` Right ()
-    E.checkC (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f") ("Nat" @->: "Nat") `shouldBe` Right ()
-    E.checkC (E.ctx [("x", "Nat")]) (E.var "x") "Bool" `shouldSatisfy` isLeft
+    E.check (E.ctx [("x", "Nat")]) (E.var "x") "Nat" `shouldBe` Right ()
+    E.check (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f") ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.check (E.ctx [("x", "Nat")]) (E.var "x") "Bool" `shouldSatisfy` isLeft
   
   it "checks applications" $ do
-    E.checkC (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.nat 10) "Nat" `shouldBe` Right ()
-    E.checkC (E.ctx [("f" , ("Nat" @->: "Bool") @->: "Unit")]) (E.var "f" @@ ("x" @-> E.true)) "Unit" `shouldBe` Right ()
-    E.checkC0 (E.the ("Nat" @->: "Nat") ("x" @-> "x") @@ E.nat 10) "Nat" `shouldBe` Right ()
-    E.checkC (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.true)   "Nat" `shouldSatisfy` isLeft
+    E.check (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.nat 10) "Nat" `shouldBe` Right ()
+    E.check (E.ctx [("f" , ("Nat" @->: "Bool") @->: "Unit")]) (E.var "f" @@ ("x" @-> E.true)) "Unit" `shouldBe` Right ()
+    E.check0 (E.the ("Nat" @->: "Nat") ("x" @-> "x") @@ E.nat 10) "Nat" `shouldBe` Right ()
+    E.check (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.true)   "Nat" `shouldSatisfy` isLeft
   
   it "checks tuples" $ do
-    E.checkC0 [unsafeExpr|(10,20)|] ("Tuple" @@: "Nat" @@: "Nat") `shouldBe` Right ()
-    E.checkC (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) [unsafeExpr|(x, f x)|] ("Tuple" @@: "Nat" @@: "Bool")
+    E.check0 [unsafeExpr|(10,20)|] ("Tuple" @@: "Nat" @@: "Nat") `shouldBe` Right ()
+    E.check (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) [unsafeExpr|(x, f x)|] ("Tuple" @@: "Nat" @@: "Bool")
         `shouldBe` Right ()
-    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Nat"))
+    E.check (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Nat"))
         `shouldBe` Right ()
-    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
+    E.check (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
         `shouldSatisfy` isLeft
   
   it "checks lambdas" $ do
-    E.checkC0 [unsafeExpr|\x -> x|] ("Nat" @->: "Nat") `shouldBe` Right ()
-    E.checkC0 [unsafeExpr|\x -> 10|] ("Nat" @->: "Nat") `shouldBe` Right ()
-    E.checkC0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Bool") `shouldBe` Right ()
-    E.checkC0 [unsafeExpr|\x -> \y -> x|] ("Nat" @->: "Bool" @->: "Nat")  `shouldBe` Right ()
-    E.checkC0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Nat")  `shouldSatisfy` isLeft
+    E.check0 [unsafeExpr|\x -> x|] ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.check0 [unsafeExpr|\x -> 10|] ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Bool") `shouldBe` Right ()
+    E.check0 [unsafeExpr|\x -> \y -> x|] ("Nat" @->: "Bool" @->: "Nat")  `shouldBe` Right ()
+    E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Nat")  `shouldSatisfy` isLeft

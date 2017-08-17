@@ -73,6 +73,9 @@ data Constr' a
   = Constr Name [Type a]
   deriving (Show, Eq, Data, Typeable)
 
+data Prog a = Prog [Decl a]
+  deriving (Show, Eq, Data, Typeable)
+
 -- Here are some combinators for creating un-annotated expressions easily
 
 var :: String -> Expr ()
@@ -194,25 +197,25 @@ type Result t = Either TyErr t
 tyErr :: String -> Result a
 tyErr = Left
 
-checkC0 :: Expr a -> Type () -> Result ()
-checkC0 = checkC empty
+check0 :: Expr a -> Type () -> Result ()
+check0 = check empty
 
 viewTupleT :: Type' a -> Maybe (Type' a, Type' a)
 viewTupleT (A _ (A _ (TFree "Tuple") `TApp` A _ e1) `TApp` A _ e2) = Just (e1, e2)
 viewTupleT _ = Nothing
 
-checkC :: Ctx -> Expr a -> Type () -> Result ()
-checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
-  checkC' :: Expr' a -> Type' () -> Result ()
-  checkC' (Lam nm Nothing bd)    (ta :->: tb) = checkC (M.insert nm ta ctx) bd tb
-  checkC' (Lam nm (Just ta') bd) (ta :->: tb) 
-    | unannT ta' == ta = checkC (M.insert nm ta ctx) bd tb
+check :: Ctx -> Expr a -> Type () -> Result ()
+check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
+  check' :: Expr' a -> Type' () -> Result ()
+  check' (Lam nm Nothing bd)    (ta :->: tb) = check (M.insert nm ta ctx) bd tb
+  check' (Lam nm (Just ta') bd) (ta :->: tb) 
+    | unannT ta' == ta = check (M.insert nm ta ctx) bd tb
     | otherwise       = tyErr $ "parameter annotated with " ++ show (unannT ta') ++ " does not match expected " ++ show ta
-  checkC' (Lam _ _ _) typ = tyErr $ show (unann annce) ++ " cannot check against " ++ show typ
+  check' (Lam _ _ _) typ = tyErr $ show (unann annce) ++ " cannot check against " ++ show typ
 
-  checkC' (Tuple (A _ e1) (A _ e2))  (viewTupleT -> Just (t1, t2)) = checkC' e1 t1 *> checkC' e2 t2 *> pure ()
+  check' (Tuple (A _ e1) (A _ e2))  (viewTupleT -> Just (t1, t2)) = check' e1 t1 *> check' e2 t2 *> pure ()
 
-  checkC' iexpr            typ               = inferI' ctx iexpr =@= (A () typ)
+  check' iexpr            typ               = infer' ctx iexpr =@= (A () typ)
 
   (=@=) :: Result (Type ()) -> Type () -> Result ()
   t1c =@= t2 = do
@@ -221,40 +224,40 @@ checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
       pure ()
       else tyErr (show t1 ++ " cannot check against " ++ show t2)
 
--- inferI :: Ctx -> Expr a -> Result (Type ())
--- inferI ctx (Ann _ expr) = inferI' ctx expr
+-- infer :: Ctx -> Expr a -> Result (Type ())
+-- infer ctx (Ann _ expr) = infer' ctx expr
 
 decorate :: TyErr -> Result a -> Result a
 decorate err res = case res of
   Right r -> Right r
   Left err' -> Left $ err' ++ "\n" ++ err
   
-inferI' :: Ctx -> Expr' a -> Result (Type ())
-inferI' ctx = \case
+infer' :: Ctx -> Expr' a -> Result (Type ())
+infer' ctx = \case
   Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
   Ann ace aty   -> 
     let ty = unannT aty
-    in  checkC ctx ace ty *> pure ty
+    in  check ctx ace ty *> pure ty
 
   App (A _ ie) ace   -> do
-    A _ r <- inferI' ctx ie
+    A _ r <- infer' ctx ie
     case r of
-      t1 :->: t2 -> checkC ctx ace t1 >> pure t2
+      t1 :->: t2 -> check ctx ace t1 >> pure t2
       t         -> tyErr $ show t ++ " was expected to be an arrow type"
 
   Lam nm (Just t1) (A _ bd) -> do
-    t2 <- inferI' (M.insert nm (unannT t1) ctx) bd
+    t2 <- infer' (M.insert nm (unannT t1) ctx) bd
     pure $ unannT t1 @->: t2
 
   -- until we have polymorphism we cannot infer a type of a -> tau 
   Lam nm Nothing (A _ bd) -> 
     tyErr $ "Cannot infer type of un-annotated lambda"
-  --   tryit <- decorate ("Try annotating " ++ show nm) $ inferI' ctx bd
+  --   tryit <- decorate ("Try annotating " ++ show nm) $ infer' ctx bd
   --   pure 
 
   Tuple (A _ e1) (A _ e2) -> do
-    t1 <- inferI' ctx e1
-    t2 <- inferI' ctx e2
+    t1 <- infer' ctx e1
+    t2 <- infer' ctx e2
     let tuple = A () $ TFree "Tuple"
     pure $ tuple @@: t1 @@: t2
   
