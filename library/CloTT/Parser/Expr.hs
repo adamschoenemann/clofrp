@@ -14,15 +14,15 @@ import           CloTT.AST.Name
 type Expr = E.Expr SourcePos
 
 nat :: Parser Expr
-nat = ann <*> (E.Inf . E.Prim . P.Nat <$> natural)
+nat = ann <*> (E.Prim . P.Nat <$> natural)
 
 bool :: Parser Expr
-bool = ann <*> (E.Inf . E.Prim . P.Bool <$> b) where
+bool = ann <*> (E.Prim . P.Bool <$> b) where
   b =   reserved "True" *> pure True
     <|> reserved "False" *> pure False
 
 tuple :: Parser Expr
-tuple = ann <*> parens ((\e1 e2 -> E.Inf $ E.Tuple e1 e2) <$> expr <* comma <*> expr)
+tuple = ann <*> parens ((\e1 e2 -> E.Tuple e1 e2) <$> expr <* comma <*> expr)
 
 lam :: Parser Expr
 lam = do
@@ -34,10 +34,10 @@ lam = do
          <|> parens ((,) <$> (UName <$> identifier) <*> (optionMaybe $ reservedOp ":" *> T.typep))
 
 var :: Parser Expr
-var = ann <*> (E.Inf . E.Var . UName <$> identifier)
+var = ann <*> (E.Var . UName <$> identifier)
 
 anno :: Parser Expr
-anno = ann <*> ((\t e -> E.Inf $ E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)
+anno = ann <*> ((\t e -> E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)
 
 atom :: Parser Expr
 atom =   nat
@@ -59,7 +59,7 @@ expr = lam <|> buildExpressionParser table atom where
        <?> "space application"
   app :: Parser (Expr -> Expr -> Expr)
   app = fn <$> getPosition where
-    fn p (A.A p1 (E.Inf e1)) e2 = A.A p . E.Inf $ E.App (A.A p1 e1) e2
+    fn p (A.A p1 e1) e2 = A.A p . E.Inf $ E.App (A.A p1 e1) e2
     fn p _ e2          = error "Cannot parse application with non-inferrable term"
 
 parseExpr :: String -> Either ParseError Expr

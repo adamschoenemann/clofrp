@@ -40,21 +40,15 @@ infixr 2 @->:
 (@->:) :: Type () -> Type () -> Type ()
 a @->: b = A () $ a :->: b
 
-type CExpr a = Annotated a (CExpr' a)
-type IExpr a = Annotated a (IExpr' a)
-type Expr a  = CExpr a
+type Expr a = Annotated a (Expr' a)
 
-data IExpr' a
+data Expr' a
   = Var Name
-  | Ann (CExpr a) (Type a)
-  | App (IExpr a) (CExpr a)
-  | Tuple (CExpr a) (CExpr a)
+  | Ann (Expr a) (Type a)
+  | App (Expr a) (Expr a)
+  | Lam Name (Maybe (Type a)) (Expr a)
+  | Tuple (Expr a) (Expr a)
   | Prim P.Prim
-  deriving (Show, Eq, Data, Typeable)
-
-data CExpr' a
-  = Inf (IExpr' a)                     -- since it is just an inclusion we do not need an extra annotation
-  | Lam Name (Maybe (Type a)) (CExpr a)
   deriving (Show, Eq, Data, Typeable)
 
 infixr 2 :->*:
@@ -66,7 +60,7 @@ data Kind
 
 type Decl a = Annotated a (Decl' a)
 data Decl' a
-  = FunD Name (CExpr a)
+  = FunD Name (Expr a)
   | DataD Name Kind [Constr a]
   | SigD Name (Type a)
   deriving (Show, Eq, Data, Typeable)
@@ -85,16 +79,16 @@ unit :: Expr ()
 unit = A () . Inf . Prim $ P.Unit
 
 nat :: Integer -> Expr ()
-nat = A () . Inf . Prim . P.Nat
+nat = A () . Prim . P.Nat
 
 true :: Expr ()
-true = A () . Inf . Prim . P.Bool $ True
+true = A () . Prim . P.Bool $ True
 
 false :: Expr ()
-false = A () . Inf . Prim . P.Bool $ False
+false = A () . Prim . P.Bool $ False
 
 the :: Type () -> Expr () -> Expr ()
-the t e = A () $ Inf $ Ann e t
+the t e = A () $ Ann e t
 
 constr :: Name -> [Type ()] -> Constr ()
 constr nm ts = A () $ Constr nm ts
@@ -121,18 +115,18 @@ class IsString a => LamCalc a t | a -> t where
   (@*) :: a -> a -> a
   (@::) :: a -> t -> a
 
-instance IsString (CExpr ()) where
-  fromString = A () . Inf . Var . UName
+instance IsString (Expr ()) where
+  fromString = A () . Var . UName
 
-instance LamCalc (CExpr ()) (Type ()) where
+instance LamCalc (Expr ()) (Type ()) where
   nm @-> e = A () $ Lam (UName nm) Nothing e
   (nm, t) @:-> e = A () $ Lam (UName nm) (Just t) e
 
-  (A a (Inf e1)) @@ e2 = A () $ Inf $ App (A a e1) e2
+  (A a e1) @@ e2 = A () $ (A a e1) e2
   e1             @@ _  = error (show e1 ++ " is not inferrable in application")
 
-  e1 @* e2 = A () $ Inf $ Tuple e1 e2
-  e @:: t = A () $ Inf $ Ann e t
+  e1 @* e2 = A () $ Tuple e1 e2
+  e @:: t = A () $ Ann e t
 
 -- helper
 conv :: (a -> t -> b) -> Annotated a t -> b
@@ -162,25 +156,19 @@ unannConstr (A _ c) =
   case c of
     Constr nm ts -> A () $ Constr nm (map unannT ts)
 
-unannC :: CExpr a -> CExpr ()
-unannC (A _ expr) = A () (unannC' expr) where
-  unannC' = \case
-    Inf ie -> Inf $ unannI' ie
-    Lam nm mty e -> Lam nm (unannT <$> mty) (unannC e)
-
-  unannI :: IExpr a -> IExpr ()
-  unannI (A _ expr0) = A () (unannI' expr0)
-
+unannI :: Expr a -> Expr ()
+unannI (A _ expr0) = A () (unannI' expr0) where
   unannI' = \case
     Var nm -> Var nm
     Ann e t -> Ann (unannC e) (unannT t)
     App e1 e2 -> App (unannI e1) (unannC e2)
+    Lam nm mty e -> Lam nm (unannT <$> mty) (unannI e)
     Tuple e1 e2 -> Tuple (unannC e1) (unannC e2)
     Prim p -> Prim p
     
 
-unann :: CExpr a -> CExpr ()
-unann = unannC
+unann :: Expr a -> Expr ()
+unann = unannI
 
 infix 9 ~=~
 (~=~) :: Expr a -> Expr b -> Bool
@@ -202,13 +190,13 @@ type Result t = Either TyErr t
 tyErr :: String -> Result a
 tyErr = Left
 
-checkC0 :: CExpr a -> Type () -> Result ()
+checkC0 :: Expr a -> Type () -> Result ()
 checkC0 = checkC empty
 
-checkC :: Ctx -> CExpr a -> Type () -> Result ()
+checkC :: Ctx -> Expr a -> Type () -> Result ()
 checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
-  checkC' :: CExpr' a -> Type' () -> Result ()
-  checkC' (Inf iexpr)            typ         = inferI' ctx iexpr =@= (A () typ)
+  checkC' :: Expr' a -> Type' () -> Result ()
+  checkC' iexpr            typ               = inferI' ctx iexpr =@= (A () typ)
   checkC' (Lam nm Nothing bd)    (ta :->: tb) = checkC (M.insert nm ta ctx) bd tb
   checkC' (Lam nm (Just ta') bd) (ta :->: tb) 
     | unannT ta' == ta = checkC (M.insert nm ta ctx) bd tb
@@ -223,10 +211,10 @@ checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
       pure ()
       else tyErr (show t1 ++ " cannot check against " ++ show t2)
 
--- inferI :: Ctx -> IExpr a -> Result (Type ())
+-- inferI :: Ctx -> Expr a -> Result (Type ())
 -- inferI ctx (Ann _ expr) = inferI' ctx expr
 
-inferI' :: Ctx -> IExpr' a -> Result (Type ())
+inferI' :: Ctx -> Expr' a -> Result (Type ())
 inferI' ctx = \case
   Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
   Ann ace aty   -> 
