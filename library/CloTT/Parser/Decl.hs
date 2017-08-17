@@ -6,32 +6,38 @@ import Text.Parsec
 import qualified CloTT.Annotated  as A
 import qualified CloTT.AST.Parsed as E
 import           CloTT.Parser.Lang
-import qualified CloTT.Parser.Type as T
+import qualified CloTT.Parser.Type as P
+import qualified CloTT.Parser.Expr as P
 import           CloTT.AST.Name
 
--- type Decl = E.Decl SourcePos
-type Decl = (String,String)
+type Decl = E.Decl SourcePos
 
-data ParsedDecl a 
-  = Fun Name (E.Expr a)
-  | DataDecl Name E.Kind [E.Constr a]
-  deriving (Show, Eq)
-
+decls :: Parser [Decl]
 decls = many decl
 
--- decl :: Parser Decl
-decl = datadecl <|> fundef 
+decl :: Parser Decl
+decl = datad <|> try fund <|> sigd
 
-fundef = undefined
+fund :: Parser Decl
+fund = ann <*> p <* reservedOp "." where 
+  p = E.FunD <$> (UName <$> identifier) <*> (reservedOp "=" *> P.expr)
 
-datadecl :: Parser (E.Decl SourcePos)
-datadecl = ann <*> p where
-  p = E.DataDecl <$> 
+datad :: Parser Decl
+datad = ann <*> p where
+  p = E.DataD <$> 
         (E.UName <$> (reserved "data" *> identifier)) <*>
-        (foldr (\a b -> E.Star E.:->*:b ) E.Star <$> many identifier) <*> 
+        (foldr (\_ b -> E.Star E.:->*:b ) E.Star <$> many identifier) <*> 
         (reservedOp "=" *> (constr `sepBy` symbol "|")) <*
         reservedOp "."
 
+sigd :: Parser Decl
+sigd = ann <*> p <* reservedOp "." where
+  p = E.SigD <$> (UName <$> identifier) <*> (reservedOp ":" *> P.typep)
+
 constr :: Parser (E.Constr SourcePos)
-constr = ann <*> (E.Constr <$> (UName <$> identifier) <*> many T.typep)
+constr = ann <*> (E.Constr <$> (UName <$> identifier) <*> params) where
+  -- to achieve the "space-separation" of constructor params, we have to do this instead of
+  -- just `many P.typep`
+  params = many (ann <*> (E.TFree . UName <$> identifier) <|> parens P.typep)
+
 

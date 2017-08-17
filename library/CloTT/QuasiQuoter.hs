@@ -4,6 +4,7 @@ module CloTT.QuasiQuoter where
 
 import qualified CloTT.Parser.Expr as P
 import qualified CloTT.Parser.Type as P
+import qualified CloTT.Parser.Decl as P
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
@@ -23,4 +24,15 @@ unsafeExpr = QuasiQuoter
   } where
     unsafeQuoteExpr s = do
       ast <- liftParse P.expr s
+      liftData ast
+
+unsafeDecl :: QuasiQuoter
+unsafeDecl = QuasiQuoter 
+  { quoteExp  = unsafeQuoteDecl
+  , quotePat  = undefined
+  , quoteDec  = undefined
+  , quoteType = undefined
+  } where
+    unsafeQuoteDecl s = do
+      ast <- liftParse P.decl s
       liftData ast

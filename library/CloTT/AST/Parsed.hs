@@ -66,8 +66,9 @@ data Kind
 
 type Decl a = Annotated a (Decl' a)
 data Decl' a
-  = FunDef Name (CExpr a) (Type a)
-  | DataDecl Name Kind [Constr a]
+  = FunD Name (CExpr a)
+  | DataD Name Kind [Constr a]
+  | SigD Name (Type a)
   deriving (Show, Eq, Data, Typeable)
 
 type Constr a = Annotated a (Constr' a)
@@ -98,8 +99,14 @@ the t e = A () $ Inf $ Ann e t
 constr :: Name -> [Type ()] -> Constr ()
 constr nm ts = A () $ Constr nm ts
 
-datadecl :: Name -> Kind -> [Constr ()] -> Decl ()
-datadecl nm k cs = A () $ DataDecl nm k cs
+datad :: Name -> Kind -> [Constr ()] -> Decl ()
+datad nm k cs = A () $ DataD nm k cs
+
+fund :: Name -> Expr () -> Decl ()
+fund nm e =  A () $ FunD nm e
+
+sigd :: Name -> Type () -> Decl ()
+sigd nm t =  A () $ SigD nm t
 
 infixr 2 @->
 infixr 2 @:->
@@ -146,8 +153,9 @@ unannD :: Decl a -> Decl ()
 unannD = help go where
   help = conv' (const ())
   go = \case 
-    FunDef nm c t -> FunDef nm (unannC c) (unannT t)
-    DataDecl nm k cstrs -> DataDecl nm k (map unannConstr cstrs)
+    FunD nm c -> FunD nm (unannC c) 
+    DataD nm k cstrs -> DataD nm k (map unannConstr cstrs)
+    SigD nm t  -> SigD nm (unannT t)
 
 unannConstr :: Constr a -> Constr ()
 unannConstr (A _ c) =

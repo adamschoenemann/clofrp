@@ -105,31 +105,55 @@ spec = do
 
 quasiSpec :: Spec
 quasiSpec = do
-  it "expression Q Exp quoter works" $ do
+  it "expression quoter works" $ do
     E.unann expr01 `shouldBe` "x" @-> "y" @-> E.the "Nat" ("x" @@ "y" @@ E.true)
+  it "decl quoter works" $ do
+    E.unannD decl01 `shouldBe`
+      E.datad "Tree" (E.Star E.:->*: E.Star)
+                      [ E.constr "Leaf" []
+                      , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
+                      ]
     
 
 expr01 :: P.Expr
 expr01 = [unsafeExpr|\x -> \y -> the (Nat) (x y True)|]
 
+decl01, decl02, decl03 :: P.Decl
+decl01 = [unsafeDecl|data Tree a = Leaf | Branch a (Tree a) (Tree a).|]
+decl02 = undefined
+decl03 = undefined
+
 declSpec :: Spec
 declSpec = do
   it "parses data type decls" $ do
-    do let Right decl = E.unannD <$> parse P.datadecl "" "data Foo = ."
-       decl `shouldBe` E.datadecl "Foo" E.Star []
-    do let Right decl = E.unannD <$> parse P.datadecl "" "data Foo a = ."
-       decl `shouldBe` E.datadecl "Foo" (E.Star E.:->*: E.Star) []
-    do let Right decl = E.unannD <$> parse P.datadecl "" "data Foo a b = ."
-       decl `shouldBe` E.datadecl "Foo" (E.Star E.:->*: E.Star E.:->*: E.Star) []
-    do let Right decl = E.unannD <$> parse P.datadecl "" "data Unit = MkUnit."
-       decl `shouldBe` E.datadecl "Unit" E.Star [E.constr "MkUnit" []]
-    do let Right decl = E.unannD <$> parse P.datadecl "" "data Bool = True | False."
-       decl `shouldBe` E.datadecl "Bool" E.Star [E.constr "True" [], E.constr "False" []]
-    do let Right decl = E.unannD <$> parse P.datadecl "" "data Maybe a = Nothing | Just a."
-       decl `shouldBe` E.datadecl "Maybe" (E.Star E.:->*: E.Star) [E.constr "Nothing" [], E.constr "Just" ["a"]]
-    do let Right decl = E.unannD <$> parse P.datadecl "" "data List a = Nil | Cons (List a)."
-       decl `shouldBe` E.datadecl "List" (E.Star E.:->*: E.Star) [E.constr "Nil" [], E.constr "Cons" ["List" @@: "a"]]
+    do let Right decl = E.unannD <$> parse P.decl "" "data Foo = ."
+       decl `shouldBe` E.datad "Foo" E.Star []
+    do let Right decl = E.unannD <$> parse P.decl "" "data Foo a = ."
+       decl `shouldBe` E.datad "Foo" (E.Star E.:->*: E.Star) []
+    do let Right decl = E.unannD <$> parse P.decl "" "data Foo a b = ."
+       decl `shouldBe` E.datad "Foo" (E.Star E.:->*: E.Star E.:->*: E.Star) []
+    do let Right decl = E.unannD <$> parse P.decl "" "data Unit = MkUnit."
+       decl `shouldBe` E.datad "Unit" E.Star [E.constr "MkUnit" []]
+    do let Right decl = E.unannD <$> parse P.decl "" "data Bool = True | False."
+       decl `shouldBe` E.datad "Bool" E.Star [E.constr "True" [], E.constr "False" []]
+    do let Right decl = E.unannD <$> parse P.decl "" "data Maybe a = Nothing | Just a."
+       decl `shouldBe` E.datad "Maybe" (E.Star E.:->*: E.Star) [E.constr "Nothing" [], E.constr "Just" ["a"]]
+    do let Right decl = E.unannD <$> parse P.decl "" "data List a = Nil | Cons (List a)."
+       decl `shouldBe` E.datad "List" (E.Star E.:->*: E.Star) [E.constr "Nil" [], E.constr "Cons" ["List" @@: "a"]]
+    do let Right decl = E.unannD <$> parse P.decl "" "data Tree a = Leaf | Branch a (Tree a) (Tree a)."
+       E.unannD decl `shouldBe`
+          E.datad "Tree" (E.Star E.:->*: E.Star)
+                          [ E.constr "Leaf" []
+                          , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
+                          ]
 
+  it "parses function declarations" $ do
+    do let Right decl = E.unannD <$> parse P.decl "" "id = \\x -> x."
+       decl `shouldBe` E.fund "id" ("x" @-> "x")
+
+  it "parses type signatures" $ do
+    do let Right decl = E.unannD <$> parse P.decl "" "id : a -> a."
+       decl `shouldBe` E.sigd "id" ("a" @->: "a")
 
 tcSpec :: Spec
 tcSpec = do
