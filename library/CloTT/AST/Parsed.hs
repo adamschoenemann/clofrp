@@ -6,12 +6,15 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module CloTT.AST.Parsed ( 
   module CloTT.AST.Parsed,
   module CloTT.AST.Name,
   P.Prim(..)
 ) where
+
+import Debug.Trace 
 
 import CloTT.Annotated hiding (unann)
 import qualified CloTT.Annotated as A
@@ -205,9 +208,18 @@ tyErr = Left
 checkC0 :: CExpr a -> Type () -> Result ()
 checkC0 = checkC empty
 
+tupView :: Type' a -> Maybe (Type a, Type a)
+tupView (A _ (A _ (TFree "Tuple") `TApp` A a1 e1) `TApp` A a2 e2) = Just (A a1 e1, A a2 e2)
+tupView _ = Nothing
+
 checkC :: Ctx -> CExpr a -> Type () -> Result ()
 checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
   checkC' :: CExpr' a -> Type' () -> Result ()
+  checkC' (Inf (Tuple e1 e2))    (tupView -> Just (t1, t2)) = do
+    traceM ("t1: " ++ show t1)
+    traceM ("t2: " ++ show t2)
+    checkC ctx e1 t1 *> checkC ctx e2 t2 *> pure ()
+
   checkC' (Inf iexpr)            typ         = inferI' ctx iexpr =@= (A () typ)
   checkC' (Lam nm Nothing bd)    (ta :->: tb) = checkC (M.insert nm ta ctx) bd tb
   checkC' (Lam nm (Just ta') bd) (ta :->: tb) 
@@ -221,7 +233,7 @@ checkC ctx annce@(A _ cexpr) (A _ annty) = checkC' cexpr annty where
     t1 <- t1c
     if t1 == t2 then
       pure ()
-      else tyErr (show t1 ++ " cannot check against " ++ show t2)
+      else tyErr ("inferred type " ++ show t1 ++ " cannot check against " ++ show t2)
 
 -- inferI :: Ctx -> IExpr a -> Result (Type ())
 -- inferI ctx (Ann _ expr) = inferI' ctx expr

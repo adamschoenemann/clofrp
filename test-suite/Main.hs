@@ -178,5 +178,7 @@ tcSpec = do
     E.checkC0 [unsafeExpr|(10,20)|] ("Tuple" @@: "Nat" @@: "Nat") `shouldBe` Right ()
     E.checkC (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) [unsafeExpr|(x, f x)|] ("Tuple" @@: "Nat" @@: "Bool")
         `shouldBe` Right ()
-    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> x)|] ("Tuple" @@: "Nat" @@: "Bool")
-        `shouldSatisfy` isLeft
+    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, \y -> y)|] ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
+        `shouldBe` Right ()
+    E.checkC (E.ctx [("x", "Nat")]) [unsafeExpr|(x, the (Nat -> Nat) \y -> x)|] ("Tuple" @@: "Nat" @@: ("Nat" @->: "Nat"))
+        `shouldBe` Right ()
