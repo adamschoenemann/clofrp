@@ -24,11 +24,13 @@ fund = ann <*> p <* reservedOp "." where
 
 datad :: Parser Decl
 datad = ann <*> p where
-  p = E.DataD <$> 
-        (E.UName <$> (reserved "data" *> identifier)) <*>
-        (foldr (\_ b -> E.Star E.:->*:b ) E.Star <$> many identifier) <*> 
-        (reservedOp "=" *> (constr `sepBy` symbol "|")) <*
-        reservedOp "."
+  p = do 
+    nm <- E.UName <$> (reserved "data" *> identifier)
+    vars <- many identifier
+    let kind = foldr (\_ b -> E.Star E.:->*:b ) E.Star vars
+    let bound = map UName vars
+    constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) <* reservedOp "."
+    pure $ E.DataD nm kind bound constrs
 
 sigd :: Parser Decl
 sigd = ann <*> p <* reservedOp "." where

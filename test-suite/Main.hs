@@ -19,9 +19,10 @@ import qualified CloTT.Parser.Type as P
 import qualified CloTT.Parser.Decl as P
 import qualified CloTT.Parser.Prog as P
 import qualified CloTT.AST.Parsed  as E
-import           CloTT.AST.Parsed ((@->:), (@@:))
+import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
 import qualified CloTT.Annotated   as A
+import qualified Data.Map.Strict   as M
 
 import CloTT.QuasiQuoter
 
@@ -31,7 +32,9 @@ main = do
   quasi <- testSpec "quasi" quasiSpec
   tc <- testSpec "type checking" tcSpec
   decl <- testSpec "declarations" declSpec
-  let group = Test.Tasty.testGroup "tests" [test, quasi, tc, decl]
+  elab <- testSpec "elaboration" elabSpec
+  kindOf <- testSpec "kindOf" kindOfSpec
+  let group = Test.Tasty.testGroup "tests" [test, quasi, tc, decl, elab, kindOf]
   Test.Tasty.defaultMain group
 
 spec :: Spec
@@ -112,7 +115,7 @@ quasiSpec = do
     E.unann expr01 `shouldBe` "x" @-> "y" @-> E.the "Nat" ("x" @@ "y" @@ E.true)
   it "decl quoter works" $ do
     E.unannD decl01 `shouldBe`
-      E.datad "Tree" (E.Star E.:->*: E.Star)
+      E.datad "Tree" (Star :->*: Star) ["a"]
                       [ E.constr "Leaf" []
                       , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
                       ]
@@ -124,14 +127,16 @@ quasiSpec = do
       , E.sigd "twice" ("Nat" @->: "Tuple" @@: "Nat" @@: "Nat")
       , E.fund "twice" ("x" @-> ("x" @* "x"))
       , E.datad "Maybe" 
-          (E.Star E.:->*: E.Star)
+          (Star :->*: Star)
+          ["a"]
           [ E.constr "Nothing" []
           , E.constr "Just" ["a"]
           ]
       , E.datad "List" 
-          (E.Star E.:->*: E.Star)
+          (Star :->*: Star)
+          ["a"]
           [ E.constr "Nil" []
-          , E.constr "Cons" ["List" @@: "a"]
+          , E.constr "Cons" ["a", "List" @@: "a"]
           ]
       , E.sigd "head" ("List" @@: "a" @->: "Maybe" @@: "a")
       , E.fund "head" ("xs" @-> "xs")
@@ -153,7 +158,7 @@ prog01 = [unsafeProg|
   twice = \x -> (x, x).
 
   data Maybe a = Nothing | Just a.
-  data List a = Nil | Cons (List a).
+  data List a = Nil | Cons a (List a).
 
   head : List a -> Maybe a.
   head = \xs -> xs.
@@ -163,22 +168,22 @@ declSpec :: Spec
 declSpec = do
   it "parses data type decls" $ do
     do let Right decl = E.unannD <$> parse P.decl "" "data Foo = ."
-       decl `shouldBe` E.datad "Foo" E.Star []
+       decl `shouldBe` E.datad "Foo" Star [] []
     do let Right decl = E.unannD <$> parse P.decl "" "data Foo a = ."
-       decl `shouldBe` E.datad "Foo" (E.Star E.:->*: E.Star) []
+       decl `shouldBe` E.datad "Foo" (Star :->*: Star) ["a"] []
     do let Right decl = E.unannD <$> parse P.decl "" "data Foo a b = ."
-       decl `shouldBe` E.datad "Foo" (E.Star E.:->*: E.Star E.:->*: E.Star) []
+       decl `shouldBe` E.datad "Foo" (Star :->*: Star :->*: Star) ["a", "b"] []
     do let Right decl = E.unannD <$> parse P.decl "" "data Unit = MkUnit."
-       decl `shouldBe` E.datad "Unit" E.Star [E.constr "MkUnit" []]
+       decl `shouldBe` E.datad "Unit" Star [] [E.constr "MkUnit" []]
     do let Right decl = E.unannD <$> parse P.decl "" "data Bool = True | False."
-       decl `shouldBe` E.datad "Bool" E.Star [E.constr "True" [], E.constr "False" []]
+       decl `shouldBe` E.datad "Bool" Star [] [E.constr "True" [], E.constr "False" []]
     do let Right decl = E.unannD <$> parse P.decl "" "data Maybe a = Nothing | Just a."
-       decl `shouldBe` E.datad "Maybe" (E.Star E.:->*: E.Star) [E.constr "Nothing" [], E.constr "Just" ["a"]]
+       decl `shouldBe` E.datad "Maybe" (Star :->*: Star) ["a"] [E.constr "Nothing" [], E.constr "Just" ["a"]]
     do let Right decl = E.unannD <$> parse P.decl "" "data List a = Nil | Cons (List a)."
-       decl `shouldBe` E.datad "List" (E.Star E.:->*: E.Star) [E.constr "Nil" [], E.constr "Cons" ["List" @@: "a"]]
+       decl `shouldBe` E.datad "List" (Star :->*: Star) ["a"] [E.constr "Nil" [], E.constr "Cons" ["List" @@: "a"]]
     do let Right decl = E.unannD <$> parse P.decl "" "data Tree a = Leaf | Branch a (Tree a) (Tree a)."
        E.unannD decl `shouldBe`
-          E.datad "Tree" (E.Star E.:->*: E.Star)
+          E.datad "Tree" (Star :->*: Star) ["a"]
                           [ E.constr "Leaf" []
                           , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
                           ]
@@ -222,8 +227,84 @@ tcSpec = do
         `shouldSatisfy` isLeft
   
   it "checks lambdas" $ do
-    E.check0 [unsafeExpr|\x -> x|] ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.check0 [unsafeExpr|\x -> x|]  ("Nat" @->: "Nat") `shouldBe` Right ()
     E.check0 [unsafeExpr|\x -> 10|] ("Nat" @->: "Nat") `shouldBe` Right ()
-    E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Bool") `shouldBe` Right ()
-    E.check0 [unsafeExpr|\x -> \y -> x|] ("Nat" @->: "Bool" @->: "Nat")  `shouldBe` Right ()
-    E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat" @->: "Nat")  `shouldSatisfy` isLeft
+    E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat"  @->: "Bool") `shouldBe` Right ()
+    E.check0 [unsafeExpr|\x -> \y -> x|] ("Nat"  @->: "Bool" @->: "Nat")  `shouldBe` Right ()
+    E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat"  @->: "Nat")  `shouldSatisfy` isLeft
+
+elabSpec :: Spec
+elabSpec = do
+  it "elabs the empty program" $ do
+    let prog = [unsafeProg| |]
+    E.elabProg prog `shouldBe` Right (E.emptyk, E.empty)
+  
+  it "elabs a program with one annotated definition" $ do
+    let prog = [unsafeProg|id : Nat -> Nat. id = \x -> x.|]
+    E.elabProg prog `shouldBe` Right (E.emptyk, E.ctx [("id", "Nat" @->: "Nat")])
+
+  it "elabs a program with one data declaration" $ do
+    let prog = [unsafeProg|data Maybe a = Nothing | Just a.|]
+    E.elabProg prog `shouldBe`
+      Right ( E.ctxk [("Maybe", Star :->*: Star)]
+            , E.ctx  [ ("Just", "a" @->: "Maybe" @@: "a")
+                     , ("Nothing", "Maybe" @@: "a")
+                     ]
+            )
+  
+  it "elabs prog01" $ do
+    let Right (ctxk, ctx) = E.elabProg prog01
+    ctxk `shouldBe` E.ctxk [ ("List", Star :->*: Star)
+                           , ("Maybe", Star :->*: Star)
+                           ]
+
+    M.lookup "Cons"    ctx `shouldBe` Just ("a"     @->: "List"  @@: "a" @->: "List" @@: "a")
+    M.lookup "Just"    ctx `shouldBe` Just ("a"     @->: "Maybe" @@: "a")
+    M.lookup "Nil"     ctx `shouldBe` Just ("List"  @@: "a")
+    M.lookup "Nothing" ctx `shouldBe` Just ("Maybe" @@: "a")
+    M.lookup "head"    ctx `shouldBe` Just ("List"  @@: "a" @->: "Maybe" @@: "a")
+    M.lookup "twice"   ctx `shouldBe` Just ("Nat"   @->: "Tuple" @@: "Nat" @@: "Nat")
+    M.lookup "id"      ctx `shouldBe` Just ("a"     @->: "a")
+
+  it "fails when a definition is missing" $ do
+    let prog = [unsafeProg|id : Nat -> Nat.|]
+    E.elabProg prog `shouldSatisfy` isLeft
+
+  it "fails when a signature is missing" $ do
+    let prog = [unsafeProg|id = \x -> x.|]
+    E.elabProg prog `shouldSatisfy` isLeft
+
+kindOfSpec :: Spec
+kindOfSpec = do
+  let kinds = [ ("List", Star :->*: Star)
+              , ("Tuple", Star :->*: Star :->*: Star)
+              , ("Nat", Star)
+              , ("a", Star)
+              , ("b", Star)
+              ]
+  let [listK, tupK, natK, aK, bK] = kinds
+
+  it "looks up kinds" $ do
+    E.kindOf (E.ctxk [natK]) "Nat" `shouldBe` Right Star
+
+  it "infers arrow types to be kind *" $ do
+    E.kindOf (E.ctxk [natK]) ("Nat" @->: "Nat") `shouldBe` Right Star
+    E.kindOf (E.ctxk [natK, listK]) ("List" @@: "Nat" @->: "List" @@: "Nat") `shouldBe` Right Star
+
+  it "fails when type not found in ctx" $ do
+    E.kindOf (E.ctxk []) "Nat" `shouldSatisfy` isLeft
+  
+  it "fails with partially applied types in arrows" $ do
+    E.kindOf (E.ctxk [listK, aK]) ("List" @->: "a") `shouldSatisfy` isLeft
+
+  it "infers lists" $ do
+    E.kindOf (E.ctxk [listK, aK]) ("List" @@: "a") `shouldBe` Right Star
+
+  it "infers tuples (curried)" $ do
+    E.kindOf (E.ctxk [tupK, aK]) ("Tuple" @@: "a") `shouldBe` Right (Star :->*: Star)
+
+  it "infers tuples" $ do
+    E.kindOf (E.ctxk [tupK, aK, bK]) ("Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+
+  it "infers tuples of lists" $ do
+    E.kindOf (E.ctxk [tupK, listK, aK, bK]) ("Tuple" @@: ("List" @@: "a") @@: "b") `shouldBe` Right Star

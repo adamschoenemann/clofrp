@@ -64,7 +64,8 @@ data Kind
 type Decl a = Annotated a (Decl' a)
 data Decl' a
   = FunD Name (Expr a)
-  | DataD Name Kind [Constr a]
+  -- |    name kind bound  constructors
+  | DataD Name Kind [Name] [Constr a]
   | SigD Name (Type a)
   deriving (Show, Eq, Data, Typeable)
 
@@ -99,8 +100,8 @@ the t e = A () $ Ann e t
 constr :: Name -> [Type ()] -> Constr ()
 constr nm ts = A () $ Constr nm ts
 
-datad :: Name -> Kind -> [Constr ()] -> Decl ()
-datad nm k cs = A () $ DataD nm k cs
+datad :: Name -> Kind -> [Name] -> [Constr ()] -> Decl ()
+datad nm k b cs = A () $ DataD nm k b cs
 
 fund :: Name -> Expr () -> Decl ()
 fund nm e =  A () $ FunD nm e
@@ -156,7 +157,7 @@ unannD = help go where
   help = conv' (const ())
   go = \case 
     FunD nm c -> FunD nm (unann c) 
-    DataD nm k cstrs -> DataD nm k (map unannConstr cstrs)
+    DataD nm k b cstrs -> DataD nm k b (map unannConstr cstrs)
     SigD nm t  -> SigD nm (unannT t)
 
 unannP :: Prog a -> Prog ()
@@ -187,15 +188,51 @@ infix 9 ~=~
 (~=~) :: Expr a -> Expr b -> Bool
 e1 ~=~ e2 = unann e1 == unann e2
 
+-- Program "elaboration"
+-- Go through a parsed program and compute the type signatures of the constructors and
+-- the kinds of the data-types. Also check that all tlds have signatures and there are
+-- no orphan signatures
+-- TODO: Determine where and how to check that data decls and type annotations are well-formed
+-- Should we do it linearly? Or generate "constraints" on e.g. type kinds and solve them?
+elabProg :: Prog a -> Result (KiCtx, TyCtx)
+elabProg (Prog decls) =
+  let (kinds, funds, sigds, cnstrs) = foldr folder (M.empty, M.empty, M.empty, M.empty) decls 
+
+      folder (A _ x) (ks, fs, ss, cs) = case x of
+        DataD nm k b cs' -> (M.insert nm k ks, fs, ss, elabCs nm b cs' `M.union` cs)
+        FunD nm _e       -> (ks, M.insert nm x fs, ss, cs)
+        SigD nm t        -> (ks, fs, M.insert nm (unannT t) ss, cs)
+
+      defsNoSig = sigds `M.difference` funds
+      sigsNoDef = funds `M.difference` sigds
+      defsHaveSigs = M.null defsNoSig -- all tlds have signatures
+      sigsHaveDefs = M.null sigsNoDef -- all signatures have definitions
+  in case () of
+      _ | not defsHaveSigs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k v -> show k ++ " lacks a signature.") defsNoSig
+        | not sigsHaveDefs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k v -> show k ++ " lacks a binding.") sigsNoDef
+        | otherwise     -> pure (kinds, sigds `M.union` cnstrs)
+
+elabCs :: Name -> [Name] -> [Constr a] -> M.Map Name (Type ())
+elabCs tyname bound cs = M.fromList $ map fn cs where
+  fullyApplied = foldl (@@:) (A () $ TFree tyname) $ map (A () . TFree) bound
+  fn (A _ (Constr nm params)) = (nm, foldr (@->:) fullyApplied $ map unannT params)
+
 -- Type checking 
 
-type Ctx = M.Map Name (Type ())
+type KiCtx = M.Map Name Kind
+type TyCtx = M.Map Name (Type ())
 
-empty :: Ctx
+empty :: TyCtx
 empty = M.empty
 
-ctx :: [(Name, Type ())] -> Ctx
+emptyk :: KiCtx
+emptyk = M.empty
+
+ctx :: [(Name, Type ())] -> TyCtx
 ctx = M.fromList
+
+ctxk :: [(Name, Kind)] -> KiCtx
+ctxk = M.fromList
 
 type TyErr = String
 type Result t = Either TyErr t
@@ -210,7 +247,36 @@ viewTupleT :: Type' a -> Maybe (Type' a, Type' a)
 viewTupleT (A _ (A _ (TFree "Tuple") `TApp` A _ e1) `TApp` A _ e2) = Just (e1, e2)
 viewTupleT _ = Nothing
 
-check :: Ctx -> Expr a -> Type () -> Result ()
+kindOf :: KiCtx -> Type () -> Result Kind
+kindOf ctx (A _ t) =
+  case t of
+    TFree v -> maybe (notFound v) pure $ M.lookup v ctx
+    TApp t1 t2 -> do
+      k1 <- kindOf ctx t1
+      k2 <- kindOf ctx t2
+      case (k1, k2) of
+        (k11 :->*: k12, k2') | k11 == k2' -> pure k12
+                            | otherwise -> tyErr $ "Expected " ++ show t2 ++ " to have kind " ++ show k11
+        (k1, _) -> tyErr $ "Expected " ++ show t1 ++ " to be a type constructor"
+    t1 :->: t2 -> do
+      k1 <- kindOf ctx t1
+      k2 <- kindOf ctx t2
+      case (k1, k2) of
+        (Star, Star) -> pure Star
+        (k1', k2')   -> tyErr $ "Both operands in arrow types must have kind *, but had " 
+                    ++ show k1' ++ " and " ++ show k2' ++ " in " ++ show t
+  where
+    notFound v = tyErr $ "Type " ++ show v ++ " not found in context."
+
+validType :: KiCtx -> Type () -> Result ()
+validType ctx t = do
+  t' <- kindOf ctx t
+  if t' == Star
+    then pure ()
+    else tyErr $ show t ++ " is not a valid type"
+
+
+check :: TyCtx -> Expr a -> Type () -> Result ()
 check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
   check' :: Expr' a -> Type' () -> Result ()
   check' (Lam nm Nothing bd)    (ta :->: tb) = check (M.insert nm ta ctx) bd tb
@@ -230,15 +296,16 @@ check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
       pure ()
       else tyErr (show t1 ++ " cannot check against " ++ show t2)
 
--- infer :: Ctx -> Expr a -> Result (Type ())
--- infer ctx (Ann _ expr) = infer' ctx expr
+-- checkProg :: Prog a -> Result ()
+-- checkProg prog = 
+--   let (kctx, tctx) = elabProg prog
 
 decorate :: TyErr -> Result a -> Result a
 decorate err res = case res of
   Right r -> Right r
   Left err' -> Left $ err' ++ "\n" ++ err
   
-infer' :: Ctx -> Expr' a -> Result (Type ())
+infer' :: TyCtx -> Expr' a -> Result (Type ())
 infer' ctx = \case
   Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
   Ann ace aty   -> 
@@ -255,7 +322,7 @@ infer' ctx = \case
     t2 <- infer' (M.insert nm (unannT t1) ctx) bd
     pure $ unannT t1 @->: t2
 
-  -- until we have polymorphism we cannot infer a type of a -> tau 
+  -- until we have polymorphism we cannot infer a type of forall a. a -> tau 
   Lam nm Nothing (A _ bd) -> 
     tyErr $ "Cannot infer type of un-annotated lambda"
   --   tryit <- decorate ("Try annotating " ++ show nm) $ infer' ctx bd
