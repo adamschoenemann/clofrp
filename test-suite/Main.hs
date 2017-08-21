@@ -231,47 +231,83 @@ tcSpec = do
     E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat"  @->: "Bool") `shouldBe` Right ()
     E.check0 [unsafeExpr|\x -> \y -> x|] ("Nat"  @->: "Bool" @->: "Nat")  `shouldBe` Right ()
     E.check0 [unsafeExpr|\x -> \y -> x|] ("Bool" @->: "Nat"  @->: "Nat")  `shouldSatisfy` isLeft
+  
+  it "fails programs with invalid types (1)" $ do
+    let prog = [unsafeProg|
+      data Foo a = MkFoo a.
+      foo : Foo -> Nat.
+      foo = \x -> x.
+    |]
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "fails programs with invalid types (2)" $ do
+    let prog = [unsafeProg|
+      data List a = Nil | Cons a (List a a).
+    |]
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "succeeds for mono-types" $ do
+    let prog = [unsafeProg|
+      data Int = .
+      data IntList = Nil | Cons Int IntList.
+    |]
+    E.checkProg prog `shouldBe` Right ()
 
 elabSpec :: Spec
 elabSpec = do
+  let two (x,y,z) = (x,y)
+  let elabProg prog = two <$> E.elabProg prog
+
   it "elabs the empty program" $ do
     let prog = [unsafeProg| |]
-    E.elabProg prog `shouldBe` Right (E.emptyk, E.empty)
+    elabProg prog `shouldBe` Right (E.emptyk, E.empty)
   
   it "elabs a program with one annotated definition" $ do
     let prog = [unsafeProg|id : Nat -> Nat. id = \x -> x.|]
-    E.elabProg prog `shouldBe` Right (E.emptyk, E.ctx [("id", "Nat" @->: "Nat")])
+    elabProg prog `shouldBe` Right (E.emptyk, E.ctx [("id", "Nat" @->: "Nat")])
 
   it "elabs a program with one data declaration" $ do
     let prog = [unsafeProg|data Maybe a = Nothing | Just a.|]
-    E.elabProg prog `shouldBe`
+    elabProg prog `shouldBe`
       Right ( E.ctxk [("Maybe", Star :->*: Star)]
-            , E.ctx  [ ("Just", "a" @->: "Maybe" @@: "a")
-                     , ("Nothing", "Maybe" @@: "a")
+            , E.ctx  [ ("Just", E.forAll ["a"] $ "a" @->: "Maybe" @@: "a")
+                     , ("Nothing", E.forAll ["a"] $ "Maybe" @@: "a")
                      ]
             )
   
   it "elabs prog01" $ do
-    let Right (ctxk, ctx) = E.elabProg prog01
+    let Right (ctxk, ctx) = elabProg prog01
     ctxk `shouldBe` E.ctxk [ ("List", Star :->*: Star)
                            , ("Maybe", Star :->*: Star)
                            ]
 
-    M.lookup "Cons"    ctx `shouldBe` Just ("a"     @->: "List"  @@: "a" @->: "List" @@: "a")
-    M.lookup "Just"    ctx `shouldBe` Just ("a"     @->: "Maybe" @@: "a")
-    M.lookup "Nil"     ctx `shouldBe` Just ("List"  @@: "a")
-    M.lookup "Nothing" ctx `shouldBe` Just ("Maybe" @@: "a")
+    M.lookup "Cons"    ctx `shouldBe` Just (E.forAll ["a"] $ "a"     @->: "List"  @@: "a" @->: "List" @@: "a")
+    M.lookup "Just"    ctx `shouldBe` Just (E.forAll ["a"] $ "a"     @->: "Maybe" @@: "a")
+    M.lookup "Nil"     ctx `shouldBe` Just (E.forAll ["a"] $ "List"  @@: "a")
+    M.lookup "Nothing" ctx `shouldBe` Just (E.forAll ["a"] $ "Maybe" @@: "a")
     M.lookup "head"    ctx `shouldBe` Just ("List"  @@: "a" @->: "Maybe" @@: "a")
     M.lookup "twice"   ctx `shouldBe` Just ("Nat"   @->: "Tuple" @@: "Nat" @@: "Nat")
     M.lookup "id"      ctx `shouldBe` Just ("a"     @->: "a")
 
   it "fails when a definition is missing" $ do
     let prog = [unsafeProg|id : Nat -> Nat.|]
-    E.elabProg prog `shouldSatisfy` isLeft
+    elabProg prog `shouldSatisfy` isLeft
 
   it "fails when a signature is missing" $ do
     let prog = [unsafeProg|id = \x -> x.|]
-    E.elabProg prog `shouldSatisfy` isLeft
+    elabProg prog `shouldSatisfy` isLeft
+  
+  it "succeeds even when types are not well-formed" $ do
+    let prog = [unsafeProg|
+      data Foo a = MkFoo a.
+      foo : Foo -> Nat.
+      foo = \x -> x.
+    |]
+    let Right (ctxk, ctx) = elabProg prog
+    M.lookup "Foo"      ctxk `shouldBe` Just (Star :->*: Star)
+    M.lookup "MkFoo"    ctx  `shouldBe` Just (E.forAll ["a"] $ "a"     @->: "Foo" @@: "a")
+    M.lookup "foo"      ctx  `shouldBe` Just ("Foo"   @->: "Nat")
+
 
 kindOfSpec :: Spec
 kindOfSpec = do
