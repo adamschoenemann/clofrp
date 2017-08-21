@@ -89,6 +89,20 @@ parserSpec = do
       Left e -> fail $ show e
       Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" @->: "Int" @->: "Int")
   
+  it "parses case statements" $ do
+    case E.unann <$> parse P.expr "" "case x of | y -> y" of
+      Right e -> e `shouldBe` E.caseof "x" [("y", "y")]
+      Left e -> fail $ show e
+    case E.unann <$> parse P.expr "" "case x of | Tuple a b -> 10 | y -> y" of
+      Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" ["a", "b"], E.nat 10), ("y", "y")]
+      Left e -> fail $ show e
+    case E.unann <$> parse P.expr "" "case x of | Tuple (Cons x y) b -> 10 | y -> y" of
+      Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" [E.match "Cons" ["x", "y"], "b"], E.nat 10), ("y", "y")]
+      Left e -> fail $ show e
+    case E.unann <$> parse P.expr "" "case n of | Z -> n | S n' -> n'" of
+      Right e -> e `shouldBe` E.caseof "n" [(E.match "Z" [], "n"), (E.match "S" ["n'"], "n'")]
+      Left e -> fail $ show e
+  
   it "parses compound expressions" $ 
     do let Right e = E.unann <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
        e `shouldBe` "x" @-> ("y" @-> "x" @@ "y") @* "y" @@ (E.true @* "x")
@@ -130,7 +144,7 @@ quasiSpec = do
                       [ E.constr "Leaf" []
                       , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
                       ]
-  it "program quoter works" $ do
+  it "program quoter works (01)" $ do
     E.unannP prog01 `shouldBe`
       E.prog [
         E.sigd "id" ("a" @->: "a")
@@ -152,6 +166,22 @@ quasiSpec = do
       , E.sigd "head" ("List" @@: "a" @->: "Maybe" @@: "a")
       , E.fund "head" ("xs" @-> "xs")
       ]
+  it "program quoter works (02)" $ do
+    E.unannP prog02 `shouldBe`
+      E.prog [
+        E.datad "N" 
+          Star
+          []
+          [ E.constr "Z" []
+          , E.constr "S" ["N"]
+          ]
+      , E.sigd "plus" ("N" @->: "N" @->: "N")
+      , E.fund "plus" ("m" @-> "n" @-> E.caseof "m"
+          [ (E.match "Z" [], "n")
+          , (E.match "S" ["m'"], "S" @@ ("plus" @@ "m'" @@ "n"))
+          ]
+        )
+      ]
     
 
 expr01 :: P.Expr
@@ -160,7 +190,7 @@ expr01 = [unsafeExpr|\x -> \y -> the (Nat) (x y True)|]
 decl01 :: P.Decl
 decl01 = [unsafeDecl|data Tree a = Leaf | Branch a (Tree a) (Tree a).|]
 
-prog01 :: P.Prog
+prog01, prog02 :: P.Prog
 prog01 = [unsafeProg|
   id : a -> a.
   id = \x -> x.
@@ -173,6 +203,15 @@ prog01 = [unsafeProg|
 
   head : List a -> Maybe a.
   head = \xs -> xs.
+|]
+
+prog02 = [unsafeProg|
+  data N = Z | S N.
+  plus : N -> N -> N.
+  plus = \m -> \n -> 
+    case m of
+      | Z    -> n
+      | S m' -> S (plus m' n).
 |]
 
 declSpec :: Spec

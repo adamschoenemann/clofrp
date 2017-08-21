@@ -16,7 +16,7 @@ import qualified CloTT.Annotated as A
 import Text.Parsec.String
 import Text.Parsec
 import Text.Parsec.Expr
--- import FRP.Pretty
+import Data.Char (isUpper, isLower)
 import qualified Text.Parsec.Token as Tok
 
 -- instance Pretty SourcePos where
@@ -80,6 +80,16 @@ postfix name fun       = Postfix (reservedOp name >> return fun)
 
 lexer      = Tok.makeTokenParser languageDef
 identifier = Tok.identifier lexer -- parses an identifier
+
+satisfies predicate err p = do
+  r <- p
+  if (predicate r)
+    then pure r
+    else fail (err r)
+
+uidentifier = satisfies (isUpper . head) (\ident -> ident ++ " must start with an upper-case character") identifier
+lidentifier = satisfies (isLower . head) (\ident -> ident ++ " must start with a lower-case character")  identifier
+
 reserved   = Tok.reserved   lexer -- parses a reserved name
 reservedOp = Tok.reservedOp lexer -- parses an operator
 parens     = Tok.parens     lexer -- parses surrounding parenthesis:

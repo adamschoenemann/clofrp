@@ -19,13 +19,13 @@ decl = datad <|> try fund <|> sigd
 
 fund :: Parser Decl
 fund = ann <*> p <* reservedOp "." where 
-  p = E.FunD <$> (UName <$> identifier) <*> (reservedOp "=" *> P.expr)
+  p = E.FunD <$> (UName <$> lidentifier) <*> (reservedOp "=" *> P.expr)
 
 datad :: Parser Decl
 datad = ann <*> p where
   p = do 
-    nm <- E.UName <$> (reserved "data" *> identifier)
-    vars <- many identifier
+    nm <- E.UName <$> (reserved "data" *> uidentifier)
+    vars <- many lidentifier
     let kind = foldr (\_ b -> E.Star E.:->*:b ) E.Star vars
     let bound = map UName vars
     constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) <* reservedOp "."
@@ -36,7 +36,7 @@ sigd = ann <*> p <* reservedOp "." where
   p = E.SigD <$> (UName <$> identifier) <*> (reservedOp ":" *> P.typep)
 
 constr :: Parser (E.Constr SourcePos)
-constr = ann <*> (E.Constr <$> (UName <$> identifier) <*> params) where
+constr = ann <*> (E.Constr <$> (UName <$> uidentifier) <*> params) where
   -- to achieve the "space-separation" of constructor params, we have to do this instead of
   -- just `many P.typep`
   params = many (ann <*> (E.TFree . UName <$> identifier) <|> parens P.typep)

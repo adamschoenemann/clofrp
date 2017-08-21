@@ -18,6 +18,7 @@ import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Name
 import Data.String (IsString(..))
 import Data.Data (Data, Typeable)
+import Data.Char (isUpper)
 import qualified CloTT.AST.Prim as P
 import qualified Data.Map.Strict as M
 
@@ -49,7 +50,7 @@ data Expr' a
   | App (Expr a) (Expr a)
   | Lam Name (Maybe (Type a)) (Expr a)
   | Tuple (Expr a) (Expr a)
-  | Case [(Pat a, Expr a)]
+  | Case (Expr a) [(Pat a, Expr a)]
   | Prim P.Prim
   deriving (Show, Eq, Data, Typeable)
 
@@ -57,8 +58,10 @@ infixr 2 :->*:
 
 type Pat a = Annotated a (Pat' a)
 
-data Pat' a = 
-  Bind 
+data Pat' a  
+  = Bind Name 
+  | Match Name [Pat a]
+  deriving (Show, Eq, Data, Typeable)
 
 data Kind
   = Star
@@ -119,6 +122,12 @@ prog = Prog
 forAll :: [String] -> Type () -> Type ()
 forAll nm t = A () . Forall (map UName nm) $ t
 
+caseof :: Expr () -> [(Pat (), Expr ())] -> Expr ()
+caseof expr clauses = A () $ Case expr clauses
+
+match :: Name -> [Pat ()] -> Pat ()
+match nm ps = A () $ Match nm ps
+
 infixr 2 @->
 infixr 2 @:->
 infixl 9 @@
@@ -131,6 +140,12 @@ class IsString a => LamCalc a t | a -> t where
   (@@) :: a -> a -> a
   (@*) :: a -> a -> a
   (@::) :: a -> t -> a
+
+
+instance IsString (Pat ()) where
+  fromString nm 
+    | isUpper $ head nm = error "Pat.fromString must be given a lower-chase string"
+    | otherwise         = A () . Bind . UName $ nm
 
 instance IsString (Expr ()) where
   fromString = A () . Var . UName
@@ -186,8 +201,13 @@ unannI' = \case
   App e1 e2 -> App (unannI e1) (unann e2)
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannI e)
   Tuple e1 e2 -> Tuple (unann e1) (unann e2)
+  Case e clauses -> Case (unann e) $ map (\(p,e) -> (unannPat p, unann e)) clauses
   Prim p -> Prim p
     
+unannPat :: Pat a -> Pat ()
+unannPat (A _ p) = A () $ case p of
+  Bind nm -> Bind nm
+  Match nm ps ->  Match nm (map unannPat ps)
 
 unann :: Expr a -> Expr ()
 unann = unannI

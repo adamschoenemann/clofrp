@@ -12,6 +12,7 @@ import qualified CloTT.Parser.Type as T
 import           CloTT.AST.Name
 
 type Expr = E.Expr SourcePos
+type Pat  = E.Pat  SourcePos
 
 nat :: Parser Expr
 nat = ann <*> (E.Prim . P.Nat <$> natural)
@@ -39,12 +40,29 @@ var = ann <*> (E.Var . UName <$> identifier)
 anno :: Parser Expr
 anno = ann <*> ((\t e -> E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)
 
+casep :: Parser Expr
+casep = do
+  _ <- reserved "case"
+  scrutinee <- expr
+  _ <- reserved "of"
+  _ <- reservedOp "|"
+  ann <*> (E.Case scrutinee <$> matchp `sepBy` (reservedOp "|"))
+  where
+    matchp = (,) <$> (pat <* reservedOp "->") <*> expr
+
+pat :: Parser Pat
+pat = ann <*> p where 
+  p = (try bind <|> match <|> parens p) 
+  bind = E.Bind . UName <$> lidentifier
+  match = (E.Match <$> (UName <$> uidentifier) <*> many pat)
+
 atom :: Parser Expr
 atom =   nat
      <|> bool
      <|> try tuple
      <|> var
      <|> anno
+     <|> casep
      <|> parens expr
 
 expr :: Parser Expr

@@ -10,8 +10,8 @@ import           CloTT.AST.Name
 
 type Type = E.Type SourcePos
 
-var :: Parser Type
-var = ann <*> (E.TFree . UName <$> identifier)
+free :: Parser Type
+free = ann <*> (E.TFree . UName <$> identifier)
 
 arr :: Parser (Type -> Type -> Type)
 arr = pure (\p a b -> A.A p $ a E.:->: b) <*> getPosition
@@ -23,7 +23,7 @@ forAll = ann <*> p where
       typep
 
 typeexpr :: Parser Type
-typeexpr = var <|> forAll <|> parens typep
+typeexpr = free <|> forAll <|> parens typep
 
 typep :: Parser Type
 typep = buildExpressionParser table typeexpr where

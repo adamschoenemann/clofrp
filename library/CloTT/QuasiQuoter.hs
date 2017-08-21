@@ -5,6 +5,7 @@ module CloTT.QuasiQuoter where
 import qualified CloTT.Parser.Expr as P
 import qualified CloTT.Parser.Decl as P
 import qualified CloTT.Parser.Prog as P
+import qualified CloTT.Parser.Lang as P
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
@@ -13,7 +14,7 @@ import Text.Parsec.String (Parser)
 
 
 liftParse :: Monad m => Parser p -> String -> m p
-liftParse p s = either (fail . show) return $ parse (spaces >> p) "quasi" s
+liftParse p s = either (fail . show) pure $ parse (P.ws >> p) "quasi" s
 
 unsafeExpr :: QuasiQuoter
 unsafeExpr = QuasiQuoter 
