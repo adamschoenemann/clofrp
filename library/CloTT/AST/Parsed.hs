@@ -14,10 +14,7 @@ module CloTT.AST.Parsed (
   P.Prim(..)
 ) where
 
-import Debug.Trace
-
-import CloTT.Annotated hiding (unann)
-import qualified CloTT.Annotated as A
+import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Name
 import Data.String (IsString(..))
 import Data.Data (Data, Typeable)
@@ -208,8 +205,8 @@ elabProg (Prog decls) =
       defsHaveSigs = M.null defsNoSig -- all tlds have signatures
       sigsHaveDefs = M.null sigsNoDef -- all signatures have definitions
   in case () of
-      _ | not defsHaveSigs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k v -> show k ++ " lacks a signature.") defsNoSig
-        | not sigsHaveDefs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k v -> show k ++ " lacks a binding.") sigsNoDef
+      _ | not defsHaveSigs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a signature.") defsNoSig
+        | not sigsHaveDefs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
         | otherwise     -> pure (kinds, sigds `M.union` cnstrs)
 
 elabCs :: Name -> [Name] -> [Constr a] -> M.Map Name (Type ())
@@ -257,7 +254,7 @@ kindOf ctx (A _ t) =
       case (k1, k2) of
         (k11 :->*: k12, k2') | k11 == k2' -> pure k12
                             | otherwise -> tyErr $ "Expected " ++ show t2 ++ " to have kind " ++ show k11
-        (k1, _) -> tyErr $ "Expected " ++ show t1 ++ " to be a type constructor"
+        (_k1', _) -> tyErr $ "Expected " ++ show t1 ++ " to be a type constructor"
     t1 :->: t2 -> do
       k1 <- kindOf ctx t1
       k2 <- kindOf ctx t2
@@ -323,7 +320,7 @@ infer' ctx = \case
     pure $ unannT t1 @->: t2
 
   -- until we have polymorphism we cannot infer a type of forall a. a -> tau 
-  Lam nm Nothing (A _ bd) -> 
+  Lam _nm Nothing (A _ _bd) -> 
     tyErr $ "Cannot infer type of un-annotated lambda"
   --   tryit <- decorate ("Try annotating " ++ show nm) $ infer' ctx bd
   --   pure 

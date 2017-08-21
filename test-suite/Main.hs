@@ -21,7 +21,6 @@ import qualified CloTT.Parser.Prog as P
 import qualified CloTT.AST.Parsed  as E
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
-import qualified CloTT.Annotated   as A
 import qualified Data.Map.Strict   as M
 
 import CloTT.QuasiQuoter
