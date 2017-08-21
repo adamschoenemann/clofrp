@@ -56,7 +56,6 @@ languageDef = Tok.LanguageDef
                           , "of"
                           , "out"
                           , "into"
-                          , "S"
                           , "alloc"
                           , "fix"
                           , "mu"
@@ -65,6 +64,7 @@ languageDef = Tok.LanguageDef
                           , "import"
                           , "the"
                           , "data"
+                          , "forall"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True

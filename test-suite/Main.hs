@@ -27,17 +27,17 @@ import CloTT.QuasiQuoter
 
 main :: IO ()
 main = do
-  test <- testSpec "parsing" spec
+  parser <- testSpec "parsing" parserSpec
   quasi <- testSpec "quasi" quasiSpec
   tc <- testSpec "type checking" tcSpec
   decl <- testSpec "declarations" declSpec
   elab <- testSpec "elaboration" elabSpec
   kindOf <- testSpec "kindOf" kindOfSpec
-  let group = Test.Tasty.testGroup "tests" [test, quasi, tc, decl, elab, kindOf]
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, tc, decl, elab, kindOf]
   Test.Tasty.defaultMain group
 
-spec :: Spec
-spec = do
+parserSpec :: Spec
+parserSpec = do
   it "parses natural numbers" $ do
     do let Right e = parse P.expr "" "10"
        E.unann e `shouldBe` E.nat 10
@@ -106,6 +106,18 @@ spec = do
        e `shouldBe` "a" @->: "b" @->: "c"
     do let Right e = E.unannT <$> parse P.typep "" "(a -> b) -> c"
        e `shouldBe` ("a" @->: "b") @->: "c"
+
+  it "parses foralls" $ do
+    do let Right e = E.unannT <$> parse P.typep "" "forall a. a"
+       e `shouldBe` E.forAll ["a"] "a"
+    do let Right e = E.unannT <$> parse P.typep "" "forall a. a -> Int"
+       e `shouldBe` E.forAll ["a"] ("a" @->: "Int")
+    do let Right e = E.unannT <$> parse P.typep "" "forall a b. (a -> b) -> (b -> a) -> Iso a b"
+       e `shouldBe` E.forAll ["a", "b"] (("a" @->: "b") @->: ("b" @->: "a") @->: "Iso" @@: "a" @@: "b")
+    do let Right e = E.unannT <$> parse P.typep "" "forall a. (forall b. a -> b) -> b"
+       e `shouldBe` E.forAll ["a"] ((E.forAll ["b"] $ "a" @->: "b") @->: "b")
+    do let Right e = E.unannT <$> parse P.typep "" "forall a. forall b. a -> b -> b"
+       e `shouldBe` E.forAll ["a"] (E.forAll ["b"] $ "a" @->: "b" @->: "b")
 
 
 quasiSpec :: Spec
@@ -246,12 +258,80 @@ tcSpec = do
     |]
     E.checkProg prog `shouldSatisfy` isLeft
 
+  it "fails programs with invalid types (3)" $ do
+    let prog = [unsafeProg|
+      data List = Nil | Cons a (List a).
+    |]
+    E.checkProg prog `shouldSatisfy` isLeft
+
   it "succeeds for mono-types" $ do
     let prog = [unsafeProg|
       data Int = .
       data IntList = Nil | Cons Int IntList.
     |]
     E.checkProg prog `shouldBe` Right ()
+
+  it "succeeds for poly-types" $ do
+    let prog = [unsafeProg|
+      data List a = Nil | Cons a (List a).
+    |]
+    E.checkProg prog `shouldBe` Right ()
+
+  it "fails wrong signatures (wrong kind)" $ do
+    let prog = [unsafeProg|
+      data List a = Nil | Cons a (List a).
+      data Int = .
+      head : List -> List Int.
+      head = \x -> x.
+    |]
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "fails signatures without explicit foralls" $ do
+    let prog = [unsafeProg|
+      data List a = Nil | Cons a (List a).
+      listId : List a -> List a.
+      listId = \x -> x.
+    |]
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "succeeds with explicit foralls" $ do
+    let prog = [unsafeProg|
+      data List a = Nil | Cons a (List a).
+      listId : forall a. List a -> List a.
+      listId = \x -> x.
+    |]
+    E.checkProg prog `shouldBe` Right ()
+  
+  it "succeeds with simple id function" $ do
+    let prog = [unsafeProg|
+      id : forall a. a -> a.
+      id = \x -> x.
+    |]
+    E.checkProg prog `shouldBe` Right ()
+  
+  it "succeeds with mono-types (1)" $ do
+    let prog = [unsafeProg|
+      data N = Z | S N.
+
+      zero : N.
+      zero = Z.
+
+      one : N.
+      one = S Z.
+
+      succ : N -> N.
+      succ = \n -> S n.
+
+      plus2 : N -> N.
+      plus2 = \n -> succ (succ n).
+
+      -- should fail when we stop having implicit general recursion
+      bottom : N -> N.
+      bottom = \n -> bottom n.
+    |]
+    E.checkProg prog `shouldBe` Right ()
+
+
 
 elabSpec :: Spec
 elabSpec = do
@@ -343,3 +423,9 @@ kindOfSpec = do
 
   it "infers tuples of lists" $ do
     E.kindOf (E.ctxk [tupK, listK, aK, bK]) ("Tuple" @@: ("List" @@: "a") @@: "b") `shouldBe` Right Star
+
+  it "infers foralls" $ do
+    E.kindOf (E.ctxk [listK]) (E.forAll ["a"] $ "List" @@: "a") `shouldBe` Right Star
+    E.kindOf (E.ctxk [tupK])  (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+    E.kindOf (E.ctxk [tupK])  (E.forAll ["a"] "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
+

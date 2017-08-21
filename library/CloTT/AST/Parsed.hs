@@ -49,10 +49,16 @@ data Expr' a
   | App (Expr a) (Expr a)
   | Lam Name (Maybe (Type a)) (Expr a)
   | Tuple (Expr a) (Expr a)
+  | Case [(Pat a, Expr a)]
   | Prim P.Prim
   deriving (Show, Eq, Data, Typeable)
 
 infixr 2 :->*:
+
+type Pat a = Annotated a (Pat' a)
+
+data Pat' a = 
+  Bind 
 
 data Kind
   = Star
@@ -206,8 +212,8 @@ elabProg (Prog decls) =
         FunD nm e        -> (ks, M.insert nm e fs, ss, cs)
         SigD nm t        -> (ks, fs, M.insert nm (unannT t) ss, cs)
 
-      defsNoSig = sigds `M.difference` funds
-      sigsNoDef = funds `M.difference` sigds
+      defsNoSig = funds `M.difference` sigds
+      sigsNoDef = sigds `M.difference` funds
       defsHaveSigs = M.null defsNoSig -- all tlds have signatures
       sigsHaveDefs = M.null sigsNoDef -- all signatures have definitions
         
@@ -220,9 +226,15 @@ checkElabedProg :: (KiCtx, TyCtx, Defs a) -> Result ()
 checkElabedProg (kinds, types, defs) = do
   checkTypes
   checkDefs
+  pure ()
   where 
     checkTypes = traverse (validType kinds) types
-    checkDefs  = pure ()
+    checkDefs  = M.traverseWithKey traverseDefs defs
+
+      -- we have implicit recursion going on here. In the future, we should probably disallow this
+    traverseDefs k expr = case M.lookup k types of
+      Just ty -> check types expr ty
+      Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
 
 checkProg :: Prog a -> Result ()
 checkProg = (checkElabedProg =<<) . elabProg
@@ -318,13 +330,16 @@ validType ctx t = do
 check :: TyCtx -> Expr a -> Type () -> Result ()
 check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
   check' :: Expr' a -> Type' () -> Result ()
+  check' expr       (Forall vs (A _ tau))  = check' expr tau 
+
   check' (Lam nm Nothing bd)    (ta :->: tb) = check (M.insert nm ta ctx) bd tb
   check' (Lam nm (Just ta') bd) (ta :->: tb) 
     | unannT ta' == ta = check (M.insert nm ta ctx) bd tb
     | otherwise       = tyErr $ "parameter annotated with " ++ show (unannT ta') ++ " does not match expected " ++ show ta
   check' (Lam _ _ _) typ = tyErr $ show (unann annce) ++ " cannot check against " ++ show typ
 
-  check' (Tuple (A _ e1) (A _ e2))  (viewTupleT -> Just (t1, t2)) = check' e1 t1 *> check' e2 t2 *> pure ()
+  check' (Tuple (A _ e1) (A _ e2))  (viewTupleT -> Just (t1, t2)) =
+    check' e1 t1 *> check' e2 t2 *> pure ()
 
   check' iexpr            typ               = infer' ctx iexpr =@= (A () typ)
 
@@ -334,10 +349,6 @@ check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
     if t1 == t2 then
       pure ()
       else tyErr (show t1 ++ " cannot check against " ++ show t2)
-
--- checkProg :: Prog a -> Result ()
--- checkProg prog = 
---   let (kctx, tctx) = elabProg prog
 
 decorate :: TyErr -> Result a -> Result a
 decorate err res = case res of

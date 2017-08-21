@@ -16,8 +16,17 @@ var = ann <*> (E.TFree . UName <$> identifier)
 arr :: Parser (Type -> Type -> Type)
 arr = pure (\p a b -> A.A p $ a E.:->: b) <*> getPosition
 
+forAll :: Parser Type
+forAll = ann <*> p where
+  p = E.Forall <$>
+      (reserved "forall" *> (map UName <$> many identifier) <* reservedOp ".") <*> 
+      typep
+
+typeexpr :: Parser Type
+typeexpr = var <|> forAll <|> parens typep
+
 typep :: Parser Type
-typep = buildExpressionParser table (var <|> parens typep) where
+typep = buildExpressionParser table typeexpr where
   table = 
     [ [Infix spacef AssocLeft]
     , [binary' "->" arr AssocRight]
