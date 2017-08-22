@@ -369,6 +369,112 @@ tcSpec = do
       bottom = \n -> bottom n.
     |]
     E.checkProg prog `shouldBe` Right ()
+  
+  it "checks pattern matches successfully (prog02)" $ do
+    E.checkProg prog02 `shouldBe` Right ()
+  
+  it "errors when patterns are missing bindings" $ do
+    let prog = [unsafeProg|
+      data N = Z | S N.
+      plus : N -> N -> N.
+      plus = \m -> \n -> 
+        case m of
+          | Z -> n
+          | S -> m.
+    |]
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "errors when patterns have too many bindings" $ do
+    let prog = [unsafeProg|
+      data N = Z | S N.
+      plus : N -> N -> N.
+      plus = \m -> \n -> 
+        case m of
+          | Z    -> n
+          | S m' n' -> m'.
+    |]
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "errors when patterns have different types" $ do
+    let prog = [unsafeProg|
+      data N = Z | S N.
+      data Foo = MkFoo.
+      plus : N -> N -> N.
+      plus = \m -> \n -> 
+        case m of
+          | Z     -> n
+          | MkFoo -> m.
+    |]
+    -- let Left err = E.checkProg prog in print err
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "errors when cases have different types" $ do
+    let prog = [unsafeProg|
+      data N = Z | S N.
+      data Foo = MkFoo.
+      plus : N -> N -> N.
+      plus = \m -> \n -> 
+        case m of
+          | Z     -> n
+          | S m'  -> MkFoo.
+    |]
+    -- let Left err = E.checkProg prog in print err
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "errors when matching with wrong constructor" $ do
+    let prog = [unsafeProg|
+      data N = Z | S N.
+      data Foo = MkFoo N.
+      plus : N -> N -> N.
+      plus = \m -> \n -> 
+        case m of
+          | MkFoo m' -> m.
+    |]
+    let Left err = E.checkProg prog in print err
+    E.checkProg prog `shouldSatisfy` isLeft
+
+  it "works with some mono-morphic list examples" $ do
+    let prog = [unsafeProg|
+      data N       = Z | S N.
+      data NList   = Nil | Cons N NList.
+      data NMaybe  = NNothing | NJust N.
+      data NLMaybe = NLNothing | NLJust NList.
+
+      head : NList -> NMaybe.
+      head = \xs -> 
+        case xs of
+          | Nil -> NNothing
+          | Cons n xs' -> NJust n.
+      
+      tail : NList -> NLMaybe.
+      tail = \xs -> 
+        case xs of
+          | Nil -> NLNothing
+          | Cons n xs' -> NLJust xs'.
+      
+      append : NList -> NList -> NList.
+      append = \xs -> \ys -> 
+        case xs of
+          | Nil -> ys
+          | Cons n xs' -> Cons n (append xs' ys).
+    |]
+    -- let Left err = E.checkProg prog in print err
+    E.checkProg prog `shouldBe` Right ()
+
+  -- FIXME: We still don't support polymorphism, so this will fail.
+  it "works with some polymorphic examples" $ do
+    let prog = [unsafeProg|
+      data N      = Z | S N.
+      data List a = Nil | Cons a (List a).
+
+      append : List N -> List N -> List N.
+      append = \xs -> \ys -> 
+        case xs of
+          | Nil -> ys
+          | Cons n xs' -> Cons n (append xs' ys).
+    |]
+    -- let Left err = E.checkProg prog in print err
+    E.checkProg prog `shouldBe` Right ()
 
 
 

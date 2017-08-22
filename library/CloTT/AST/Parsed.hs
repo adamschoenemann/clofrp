@@ -167,13 +167,14 @@ conv' :: (a -> c) -> (t a -> t c) -> Annotated a (t a) -> Annotated c (t c)
 conv' an fn (A a e) = A (an a) (fn e)
 
 unannT :: Type a -> Type ()
-unannT = help go where
-  help = conv' (const ())
-  go = \case
-    TFree x -> TFree x
-    t1 `TApp` t2 -> help go t1 `TApp` help go t2
-    t1 :->: t2 -> help go t1 :->: help go t2
-    Forall ts tau -> Forall ts (help go tau)
+unannT (A _ t) = A () $ unannT' t
+
+unannT' :: Type' a -> Type' ()
+unannT' = \case 
+  TFree x -> TFree x
+  t1 `TApp` t2 -> unannT t1 `TApp` unannT t2
+  t1 :->: t2 -> unannT t1 :->: unannT t2
+  Forall ts tau -> Forall ts (unannT tau)
 
 unannD :: Decl a -> Decl ()
 unannD = help go where
@@ -205,7 +206,10 @@ unannI' = \case
   Prim p -> Prim p
     
 unannPat :: Pat a -> Pat ()
-unannPat (A _ p) = A () $ case p of
+unannPat (A _ p) = A () $ unannPat' p
+
+unannPat' :: Pat' a -> Pat' ()
+unannPat' p = case p of
   Bind nm -> Bind nm
   Match nm ps ->  Match nm (map unannPat ps)
 
@@ -374,7 +378,10 @@ decorate :: TyErr -> Result a -> Result a
 decorate err res = case res of
   Right r -> Right r
   Left err' -> Left $ err' ++ "\n" ++ err
-  
+
+infer :: TyCtx -> Expr a -> Result (Type ())
+infer ctx (A _ e) = infer' ctx e
+
 infer' :: TyCtx -> Expr' a -> Result (Type ())
 infer' ctx = \case
   Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
@@ -404,7 +411,66 @@ infer' ctx = \case
     let tuple = A () $ TFree "Tuple"
     pure $ tuple @@: t1 @@: t2
 
+  Case (A _ e) clauses -> do
+    pty <- infer' ctx e
+    checkClauses ctx (pty, Nothing) clauses
+
   Prim p        -> inferPrim p
+
+headResult :: TyErr -> [a] -> Result a
+headResult err [] = tyErr err
+headResult _ (x:_) = pure x
+
+-- in a context, check each clause against a type of (pattern, Maybe expression)
+-- if second type is nothing, it is because we do not yet know which type to infer,
+-- but we should know in first recursive call
+checkClauses :: TyCtx -> (Type (), Maybe (Type ())) -> [(Pat a, Expr a)] -> Result (Type ())
+checkClauses _ (_, mety) [] = 
+  case mety of 
+    Just ty -> pure ty
+    Nothing -> tyErr $ "case expressions must have at least one clause"
+checkClauses ctx (pty, mety) ((pat, e) : clauses) = do
+  nctx <- checkPat ctx pat pty
+  case mety of 
+    Just ety -> check nctx e ety *> checkClauses ctx (pty, mety) clauses
+    Nothing  -> do 
+      ety <- infer nctx e
+      checkClauses ctx (pty, Just ety) clauses
+
+-- check that patterns type-check and return a new ctx extended with bound variables
+checkPat :: TyCtx -> Pat a -> Type () -> Result TyCtx
+checkPat ctx (A _ pat) ty = 
+  case pat of
+    Bind nm -> pure $ M.insert nm ty ctx
+    Match nm bound -> case M.lookup nm ctx of
+      Nothing  -> tyErr $ "Pattern " ++ show nm ++ " not found in context."
+      -- TODO: Check if it is actually a constructor and not just a function
+      Just cty -> bind ctx nm bound cty ty
+
+-- in a context, bind a pattern (a constructor name and a list of sub-patterns) of a type, with an expected type,
+-- and extend the context with the resulting bindings.
+-- TODO: We should keep a map of constructors and destructors instead of merging it into the type context
+-- and then having this quite complex logic to re-capture how to bind constructors and stuf
+bind :: TyCtx -> Name -> [Pat a] -> Type () -> Type () -> Result TyCtx
+bind ctx nm [] (A _ cty) (A _ expected) = 
+  case expected of 
+    A _ t1 :->: A _ t2 -> tyErr $ "Constructor " ++ show nm ++ " requires parameters."
+    Forall _ _        -> tyErr "I have no clue what to do with foralls..."
+    _                 -> 
+      if cty == expected
+        then pure ctx 
+        else tyErr $ "Cannot check " ++ show (unannT' cty) ++ " against expected type " ++ show (unannT' expected)
+                  ++ " in pattern for " ++ show nm
+bind ctx nm (b : bs) (A _ cty) expected =
+  case cty of 
+    t1 :->: t2 -> do 
+      nctx <- checkPat ctx b t1
+      bind nctx nm bs t2 expected
+
+    Forall _ _ -> tyErr "I have no clue what to do with foralls..."
+    _          -> tyErr $ "Cannot bind pattern " ++ show (unannPat b) ++ " to type " ++ show (unannT' cty)
+
+
 
 inferPrim :: P.Prim -> Result (Type ())
 inferPrim = \case

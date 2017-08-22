@@ -9,7 +9,7 @@ import qualified CloTT.Parser.Lang as P
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
-import Text.Parsec (parse, spaces)
+import Text.Parsec (parse)
 import Text.Parsec.String (Parser)
 
 
