@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 
 module CloTT.Parser.Expr where
 
@@ -10,6 +11,8 @@ import qualified CloTT.AST.Prim   as P
 import           CloTT.Parser.Lang
 import qualified CloTT.Parser.Type as T
 import           CloTT.AST.Name
+import           Data.Char (isSpace, isUpper)
+import           Data.List (intercalate)
 
 type Expr = E.Expr SourcePos
 type Pat  = E.Pat  SourcePos
@@ -50,11 +53,25 @@ casep = do
   where
     matchp = (,) <$> (pat <* reservedOp "->") <*> expr
 
+-- pat :: Parser Pat
+-- pat = do 
+--   ast <- p
+--   pure ast
+--   where 
+--     p = do
+--       tree <- spacetree (ann <*> uidentifier) (ann <*> identifier)
+--       pure $ fn tree
+--     fn (Leaf (A.A a i)) = A.A a (E.Bind $ UName i)
+--     fn (Branch (A.A a i) next) = A.A a (E.Match (UName i) $ map fn next)
+
 pat :: Parser Pat
-pat = ann <*> p where 
-  p = (try bind <|> match <|> parens p) 
-  bind = E.Bind . UName <$> lidentifier
-  match = (E.Match <$> (UName <$> uidentifier) <*> many pat)
+pat = ann <*> p where
+  p = (bind <|> match <|> parens p) 
+  bind  = E.Bind . UName <$> lidentifier
+  match = E.Match <$> (UName <$> uidentifier) <*> many (ann <*> pat')
+  pat'  =  E.Match <$> (UName <$> uidentifier) <*> pure [] 
+        <|> E.Bind . UName <$> lidentifier
+        <|> parens (E.Match <$> (UName <$> uidentifier) <*> many pat)
 
 atom :: Parser Expr
 atom =   nat

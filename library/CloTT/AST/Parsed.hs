@@ -512,32 +512,12 @@ checkPat ctx (A _ pat) ty =
 -- if it succeeds, it binds the names listed in the pattern match to the input context
 checkPats :: Ctx -> [Pat a] -> Destr () -> Type () -> Result Ctx
 checkPats ctx pats (Destr {name, typ, args}) expected
-  | length pats /= length args  = tyErr $ "Incorrect number of arguments in pattern " ++ show name
-  | typ          /= expected      = tyErr $ "Pattern '" ++ show name ++ "' has type " ++ show typ ++ " but expected " ++ show expected
-  | otherwise                    = 
+  | length pats /= length args  = tyErr $ "Expected " ++ show (length args) ++ " arguments to " ++ show name ++ " but got " ++ show (length pats)
+  | typ          /= expected    = tyErr $ "Pattern '" ++ show name ++ "' has type " ++ show typ ++ " but expected " ++ show expected
+  | otherwise                  = 
     foldlM folder ctx $ zip pats args
     where 
       folder acc (p, t) = checkPat acc p t
-
--- bind ctx nm [] (A _ cty) (A _ expected) = 
---   case expected of 
---     A _ _t1 :->: A _ _t2 -> tyErr $ "Constructor " ++ show nm ++ " requires parameters."
---     Forall _ _        -> tyErr "I have no clue what to do with foralls..."
---     _                 -> 
---       if cty == expected
---         then pure ctx 
---         else tyErr $ "Cannot check " ++ show (unannT' cty) ++ " against expected type " ++ show (unannT' expected)
---                   ++ " in pattern for " ++ show nm
--- bind ctx nm (b : bs) (A _ cty) expected =
---   case cty of 
---     t1 :->: t2 -> do 
---       nctx <- checkPat ctx b t1
---       bind nctx nm bs t2 expected
-
---     Forall _ _ -> tyErr "I have no clue what to do with foralls..."
---     _          -> tyErr $ "Cannot bind pattern " ++ show (unannPat b) ++ " to type " ++ show (unannT' cty)
-
-
 
 inferPrim :: P.Prim -> Result (Type ())
 inferPrim = \case

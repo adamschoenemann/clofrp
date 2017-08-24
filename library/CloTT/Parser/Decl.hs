@@ -14,12 +14,25 @@ type Decl = E.Decl SourcePos
 decls :: Parser [Decl]
 decls = many decl
 
+-- using monadic parser style here is a bit annoying, but
+-- it improves the parser error messages significantly
 decl :: Parser Decl
-decl = datad <|> try fund <|> sigd
+decl = datad <|> p where
+  p = do
+    nm <- lidentifier
+    op <- (oneOf [':', '=']) <* ws
+    let p' = case op of
+              '=' -> E.FunD (UName nm) <$> P.expr
+              ':' -> E.SigD (UName nm) <$> P.typep
+    ann <*> p' <* reservedOp "."
 
-fund :: Parser Decl
-fund = ann <*> p <* reservedOp "." where 
-  p = E.FunD <$> (UName <$> lidentifier) <*> (reservedOp "=" *> P.expr)
+-- sigd :: Parser Decl
+-- sigd = ann <*> p <* reservedOp "." where
+--   p = E.SigD <$> (UName <$> identifier) <*> (reservedOp ":" *> P.typep)
+
+-- fund :: Parser Decl
+-- fund = ann <*> p <* reservedOp "." where 
+--   p = E.FunD <$> (UName <$> lidentifier) <*> (reservedOp "=" *> P.expr)
 
 datad :: Parser Decl
 datad = ann <*> p where
@@ -31,14 +44,11 @@ datad = ann <*> p where
     constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) <* reservedOp "."
     pure $ E.DataD nm kind bound constrs
 
-sigd :: Parser Decl
-sigd = ann <*> p <* reservedOp "." where
-  p = E.SigD <$> (UName <$> identifier) <*> (reservedOp ":" *> P.typep)
 
 constr :: Parser (E.Constr SourcePos)
-constr = ann <*> (E.Constr <$> (UName <$> uidentifier) <*> params) where
-  -- to achieve the "space-separation" of constructor params, we have to do this instead of
+constr = ann <*> (E.Constr <$> (UName <$> uidentifier) <*> args) where
+  -- to achieve the "space-separation" of constructor args, we have to do this instead of
   -- just `many P.typep`
-  params = many (ann <*> (E.TFree . UName <$> identifier) <|> parens P.typep)
+  args = many (ann <*> (E.TFree . UName <$> identifier) <|> parens P.typep)
 
 

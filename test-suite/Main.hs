@@ -440,15 +440,36 @@ tcSpec = do
     -- let Left err = E.checkProg prog in print err
     E.checkProg prog `shouldSatisfy` isLeft
 
-    -- let Left err = E.checkProg prog in print err
-    E.checkProg prog `shouldSatisfy` isLeft
+  it "works with nested pattern matches" $ do
+    let prog = [unsafeProg|
+      data N       = Z | S N.
+      data NList   = Nil | Cons N NList.
+      data Bool    = True | False.
 
+      isZeroes : NList -> Bool.
+      isZeroes = \xs -> 
+        case xs of
+          | Nil -> True
+          | Cons Z xs' -> isZeroes xs'
+          | Cons (S n) xs' -> False.
+    |]
+    E.checkProg prog `shouldBe` Right ()
+  
   it "works with some mono-morphic list examples" $ do
     let prog = [unsafeProg|
       data N       = Z | S N.
       data NList   = Nil | Cons N NList.
       data NMaybe  = NNothing | NJust N.
       data NLMaybe = NLNothing | NLJust NList.
+      data Bool    = True | False.
+
+      leq : N -> N -> Bool.
+      leq = \m -> \n -> 
+        case m of
+          | Z -> True
+          | S m' -> case n of
+            | Z -> False
+            | S n' -> leq m' n'.
 
       head : NList -> NMaybe.
       head = \xs -> 
@@ -456,17 +477,18 @@ tcSpec = do
           | Nil -> NNothing
           | Cons n xs' -> NJust n.
       
-      -- tail : NList -> NLMaybe.
-      -- tail = \xs -> 
-      --   case xs of
-      --     | Nil -> NLNothing
-      --     | Cons n xs' -> NLJust xs'.
+      tail : NList -> NLMaybe.
+      tail = \xs -> 
+        case xs of
+          | Nil -> NLNothing
+          | Cons n xs' -> NLJust xs'.
       
-      -- append : NList -> NList -> NList.
-      -- append = \xs -> \ys -> 
-      --   case xs of
-      --     | Nil -> ys
-      --     | Cons n xs' -> Cons n (append xs' ys).
+      append : NList -> NList -> NList.
+      append = \xs -> \ys -> 
+        case xs of
+          | Nil -> ys
+          | Cons n xs' -> Cons n (append xs' ys).
+      
     |]
     -- let Left err = E.checkProg prog in print err
     E.checkProg prog `shouldBe` Right ()

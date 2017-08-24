@@ -82,13 +82,17 @@ lexer      = Tok.makeTokenParser languageDef
 identifier = Tok.identifier lexer -- parses an identifier
 
 satisfies predicate err p = do
-  r <- p
+  r <- try p
   if (predicate r)
     then pure r
-    else fail (err r)
+    else unexpected (err r)
 
-uidentifier = satisfies (isUpper . head) (\ident -> ident ++ " must start with an upper-case character") identifier
-lidentifier = satisfies (isLower . head) (\ident -> ident ++ " must start with a lower-case character")  identifier
+inIdent = many $ alphaNum <|> oneOf ['\'', '_']
+uidentifier = lexeme $ (:) <$> upper <*> inIdent
+lidentifier = lexeme $ (:) <$> lower <*> inIdent
+
+-- uidentifier = satisfies (isUpper . head) (\ident -> ident ++ " must start with an upper-case character") identifier
+-- lidentifier = satisfies (isLower . head) (\ident -> ident ++ " must start with a lower-case character")  identifier
 
 reserved   = Tok.reserved   lexer -- parses a reserved name
 reservedOp = Tok.reservedOp lexer -- parses an operator
@@ -101,6 +105,7 @@ natural    = Tok.natural    lexer
 ws         = Tok.whiteSpace lexer -- parses whitespace
 comma      = Tok.comma lexer
 symbol     = Tok.symbol lexer
+lexeme     = Tok.lexeme lexer
 
 ann :: Parser (t -> A.Annotated SourcePos t)
 ann = A.A <$> getPosition
