@@ -8,6 +8,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module CloTT.AST.Parsed ( 
   module CloTT.AST.Parsed,
@@ -20,6 +21,7 @@ import CloTT.AST.Name
 import Data.String (IsString(..))
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
+import Data.Foldable (foldlM)
 import qualified CloTT.AST.Prim as P
 import qualified Data.Map.Strict as M
 
@@ -225,23 +227,31 @@ e1 ~=~ e2 = unann e1 == unann e2
 -- Go through a parsed program and compute the type signatures of the constructors and
 -- the kinds of the data-types. Also checks that all tlds have signatures and there are
 -- no orphan signatures
+
+-- alias for definitions
 type Defs a = M.Map Name (Expr a)
-type ElabRes a = (KiCtx, Defs a, TyCtx, TyCtx)
+-- alias for destructors 
+type Destrs = M.Map Name (Destr ())
+type ElabRes a = (KiCtx, Defs a, TyCtx, TyCtx, Destrs)
 data ElabProg a = ElabProg
-  { kinds :: KiCtx
-  , types :: TyCtx
-  , defs  :: Defs a
-  }
+  { kinds  :: KiCtx
+  , types  :: TyCtx
+  , defs   :: Defs a
+  , destrs :: Destrs
+  } deriving (Show, Eq, Data, Typeable)
 
 elabProg :: Prog a -> Result (ElabProg a)
 elabProg (Prog decls) =
-  let (kinds, funds, sigds, cnstrs) = foldr folder (M.empty, M.empty, M.empty, M.empty) decls 
+  let (kinds, funds, sigds, cnstrs, destrs) = foldr folder (M.empty, M.empty, M.empty, M.empty, M.empty) decls 
 
       folder :: Decl a -> ElabRes a -> ElabRes a
-      folder (A _ x) (ks, fs, ss, cs) = case x of
-        DataD nm k b cs' -> (M.insert nm k ks, fs, ss, elabCs nm b cs' `M.union` cs)
-        FunD nm e        -> (ks, M.insert nm e fs, ss, cs)
-        SigD nm t        -> (ks, fs, M.insert nm (unannT t) ss, cs)
+      folder (A _ x) (ks, fs, ss, cs, ds) = case x of
+        DataD nm k b cs' ->
+          let (tys, dstrs) = elabCs nm b cs' 
+          in  (M.insert nm k ks, fs, ss, tys `M.union` cs, dstrs `M.union` ds)
+
+        FunD nm e        -> (ks, M.insert nm e fs, ss, cs, ds)
+        SigD nm t        -> (ks, fs, M.insert nm (unannT t) ss, cs, ds)
 
       defsNoSig = funds `M.difference` sigds
       sigsNoDef = sigds `M.difference` funds
@@ -251,10 +261,10 @@ elabProg (Prog decls) =
   in case () of
       _ | not defsHaveSigs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a signature.") defsNoSig
         | not sigsHaveDefs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
-        | otherwise     -> pure $ ElabProg kinds (sigds `M.union` cnstrs) funds
+        | otherwise     -> pure $ ElabProg kinds (sigds `M.union` cnstrs) funds destrs
 
 checkElabedProg :: ElabProg a -> Result ()
-checkElabedProg (ElabProg {kinds, types, defs}) = do
+checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do
   _ <- checkTypes
   _ <- checkDefs
   pure ()
@@ -262,24 +272,40 @@ checkElabedProg (ElabProg {kinds, types, defs}) = do
     checkTypes = traverse (validType kinds) types
     checkDefs  = M.traverseWithKey traverseDefs defs
 
+    ctx = Ctx {kinds = kinds, types = types, destrs = destrs}
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case M.lookup k types of
-      Just ty -> check types expr ty
+      Just ty -> check ctx expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
 
 checkProg :: Prog a -> Result ()
 checkProg = (checkElabedProg =<<) . elabProg
+
+-- A destructor which is elaborated from a pattern
+data Destr a = Destr
+  { name   :: Name
+  , typ     :: Type a
+  , args :: [Type a]
+  } deriving (Show, Eq, Data, Typeable)
 
 -- "Elaborate" the constructors of a type, return a mapping from constructor names
 -- to their types, e.g.
 -- `data Maybe a = Nothing | Just a` gives
 -- Nothing : Maybe a
 -- Just : a -> Maybe a
-elabCs :: Name -> [Name] -> [Constr a] -> M.Map Name (Type ())
-elabCs tyname bound cs = M.fromList $ map fn cs where
-  fullyApplied                = foldl (@@:) (A () $ TFree tyname) $ map (A () . TFree) bound
-  fn (A _ (Constr nm params)) = (nm, quantify $ foldr (@->:) fullyApplied $ map unannT params)
-  quantify                    = if length bound > 0 then A () . Forall bound else id
+-- and a mapping from constructors to their destructors
+elabCs :: Name -> [Name] -> [Constr a] -> (M.Map Name (Type ()), M.Map Name (Destr ()))
+elabCs tyname bound cs = (M.fromList $ map toFn cs, M.fromList $ map toDestr cs) where
+  -- | The fully applied type e.g. Maybe a
+  fullyApplied = foldl (@@: ) (A () $ TFree tyname) $ map (A () . TFree) bound
+  -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
+  quantify     = if length bound > 0 then A () . Forall bound else id
+  -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
+  toFn    (A _ (Constr nm args)) = (nm, quantify $ foldr (@->:) fullyApplied $ map unannT args)
+  -- | Convert a constructor to a destructor, to just for pattern matches
+  toDestr (A _ (Constr nm args)) = 
+    let ps = map unannT args
+    in  (nm, Destr {name = nm, typ = quantify fullyApplied, args = ps})
 
 -- declIsWellformed :: KiCtx -> Decl a -> Result ()
 -- declIsWellformed ctx = \case 
@@ -293,17 +319,46 @@ elabCs tyname bound cs = M.fromList $ map fn cs where
 
 -- Type checking 
 
+-- These things should have better names
 type KiCtx = M.Map Name Kind
 type TyCtx = M.Map Name (Type ())
+data Ctx = Ctx 
+  { kinds  :: KiCtx
+  , types  :: TyCtx
+  , destrs :: Destrs
+  } deriving (Show, Eq)
 
-empty :: TyCtx
-empty = M.empty
+addT :: Name -> Type () -> Ctx -> Ctx
+addT nm t ctx@(Ctx {types}) = ctx {types = M.insert nm t types}
+
+addK :: Name -> Kind -> Ctx -> Ctx
+addK nm t ctx@(Ctx {kinds}) = ctx {kinds = M.insert nm t kinds}
+
+addD :: Name -> Destr () -> Ctx -> Ctx
+addD nm t ctx@(Ctx {destrs}) = ctx {destrs = M.insert nm t destrs}
+
+lookupVar :: Name -> Ctx -> Result (Type ())
+lookupVar nm ctx@(Ctx {types}) = 
+  maybe (tyErr $ "variable " ++ show nm ++ " not found in context") pure $ M.lookup nm types
+
+lookupDestr :: Name -> Ctx -> Result (Destr ())
+lookupDestr nm ctx@(Ctx {destrs}) = 
+  maybe (tyErr $ "pattern " ++ show nm ++ " not found in context") pure $ M.lookup nm destrs
+
+empty :: Ctx
+empty = Ctx {kinds = M.empty, types = M.empty, destrs = M.empty}
+
+emptyt :: TyCtx
+emptyt = M.empty
 
 emptyk :: KiCtx
 emptyk = M.empty
 
-ctx :: [(Name, Type ())] -> TyCtx
-ctx = M.fromList
+tymap :: [(Name, Type ())] -> TyCtx
+tymap = M.fromList
+
+tyctx :: [(Name, Type ())] -> Ctx
+tyctx xs = empty {types = M.fromList xs}
 
 ctxk :: [(Name, Kind)] -> KiCtx
 ctxk = M.fromList
@@ -358,14 +413,14 @@ validType ctx t = do
     else tyErr $ show t ++ " is not a valid type"
 
 
-check :: TyCtx -> Expr a -> Type () -> Result ()
+check :: Ctx -> Expr a -> Type () -> Result ()
 check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
   check' :: Expr' a -> Type' () -> Result ()
   check' expr       (Forall vs (A _ tau))  = check' expr tau 
 
-  check' (Lam nm Nothing bd)    (ta :->: tb) = check (M.insert nm ta ctx) bd tb
+  check' (Lam nm Nothing bd)    (ta :->: tb) = check (addT nm ta ctx) bd tb
   check' (Lam nm (Just ta') bd) (ta :->: tb) 
-    | unannT ta' == ta = check (M.insert nm ta ctx) bd tb
+    | unannT ta' == ta = check (addT nm ta ctx) bd tb
     | otherwise       = tyErr $ "parameter annotated with " ++ show (unannT ta') ++ " does not match expected " ++ show ta
   check' (Lam _ _ _) typ = tyErr $ show (unann annce) ++ " cannot check against " ++ show typ
 
@@ -386,12 +441,12 @@ decorate err res = case res of
   Right r -> Right r
   Left err' -> Left $ err' ++ "\n" ++ err
 
-infer :: TyCtx -> Expr a -> Result (Type ())
+infer :: Ctx -> Expr a -> Result (Type ())
 infer ctx (A _ e) = infer' ctx e
 
-infer' :: TyCtx -> Expr' a -> Result (Type ())
+infer' :: Ctx -> Expr' a -> Result (Type ())
 infer' ctx = \case
-  Var nm        -> maybe (tyErr $ show nm ++ " not found in context") pure $ M.lookup nm ctx
+  Var nm        -> lookupVar nm ctx
   Ann ace aty   -> 
     let ty = unannT aty
     in  check ctx ace ty *> pure ty
@@ -403,7 +458,7 @@ infer' ctx = \case
       t         -> tyErr $ show t ++ " was expected to be an arrow type"
 
   Lam nm (Just t1) (A _ bd) -> do
-    t2 <- infer' (M.insert nm (unannT t1) ctx) bd
+    t2 <- infer' (addT nm (unannT t1) ctx) bd
     pure $ unannT t1 @->: t2
 
   -- until we have polymorphism we cannot infer a type of forall a. a -> tau 
@@ -431,7 +486,7 @@ headResult _ (x:_) = pure x
 -- in a context, check each clause against a type of (pattern, Maybe expression)
 -- if second type is nothing, it is because we do not yet know which type to infer,
 -- but we should know in first recursive call
-checkClauses :: TyCtx -> (Type (), Maybe (Type ())) -> [(Pat a, Expr a)] -> Result (Type ())
+checkClauses :: Ctx -> (Type (), Maybe (Type ())) -> [(Pat a, Expr a)] -> Result (Type ())
 checkClauses _ (_, mety) [] = 
   case mety of 
     Just ty -> pure ty
@@ -445,37 +500,42 @@ checkClauses ctx (pty, mety) ((pat, e) : clauses) = do
       checkClauses ctx (pty, Just ety) clauses
 
 -- check that patterns type-check and return a new ctx extended with bound variables
-checkPat :: TyCtx -> Pat a -> Type () -> Result TyCtx
+checkPat :: Ctx -> Pat a -> Type () -> Result Ctx
 checkPat ctx (A _ pat) ty = 
   case pat of
-    Bind nm -> pure $ M.insert nm ty ctx
-    Match nm bound -> case M.lookup nm ctx of
-      Nothing  -> tyErr $ "Pattern " ++ show nm ++ " not found in context."
-      -- TODO: Check if it is actually a constructor and not just a function
-      Just cty -> bind ctx nm bound cty ty
+    Bind nm -> pure $ addT nm ty ctx
+    Match nm pats -> case lookupDestr nm ctx of
+      Left _  -> tyErr $ "Pattern " ++ show nm ++ " not found in context."
+      Right destr -> checkPats ctx pats destr ty
 
--- in a context, bind a pattern (a constructor name and a list of sub-patterns) of a type, with an expected type,
--- and extend the context with the resulting bindings.
--- TODO: We should keep a map of constructors and destructors instead of merging it into the type context
--- and then having this quite complex logic to re-capture how to bind constructors and stuf
-bind :: TyCtx -> Name -> [Pat a] -> Type () -> Type () -> Result TyCtx
-bind ctx nm [] (A _ cty) (A _ expected) = 
-  case expected of 
-    A _ _t1 :->: A _ _t2 -> tyErr $ "Constructor " ++ show nm ++ " requires parameters."
-    Forall _ _        -> tyErr "I have no clue what to do with foralls..."
-    _                 -> 
-      if cty == expected
-        then pure ctx 
-        else tyErr $ "Cannot check " ++ show (unannT' cty) ++ " against expected type " ++ show (unannT' expected)
-                  ++ " in pattern for " ++ show nm
-bind ctx nm (b : bs) (A _ cty) expected =
-  case cty of 
-    t1 :->: t2 -> do 
-      nctx <- checkPat ctx b t1
-      bind nctx nm bs t2 expected
+-- in a context, check a list of patterns against a destructor and an expected type.
+-- if it succeeds, it binds the names listed in the pattern match to the input context
+checkPats :: Ctx -> [Pat a] -> Destr () -> Type () -> Result Ctx
+checkPats ctx pats (Destr {name, typ, args}) expected
+  | length pats /= length args  = tyErr $ "Incorrect number of arguments in pattern " ++ show name
+  | typ          /= expected      = tyErr $ "Pattern '" ++ show name ++ "' has type " ++ show typ ++ " but expected " ++ show expected
+  | otherwise                    = 
+    foldlM folder ctx $ zip pats args
+    where 
+      folder acc (p, t) = checkPat acc p t
 
-    Forall _ _ -> tyErr "I have no clue what to do with foralls..."
-    _          -> tyErr $ "Cannot bind pattern " ++ show (unannPat b) ++ " to type " ++ show (unannT' cty)
+-- bind ctx nm [] (A _ cty) (A _ expected) = 
+--   case expected of 
+--     A _ _t1 :->: A _ _t2 -> tyErr $ "Constructor " ++ show nm ++ " requires parameters."
+--     Forall _ _        -> tyErr "I have no clue what to do with foralls..."
+--     _                 -> 
+--       if cty == expected
+--         then pure ctx 
+--         else tyErr $ "Cannot check " ++ show (unannT' cty) ++ " against expected type " ++ show (unannT' expected)
+--                   ++ " in pattern for " ++ show nm
+-- bind ctx nm (b : bs) (A _ cty) expected =
+--   case cty of 
+--     t1 :->: t2 -> do 
+--       nctx <- checkPat ctx b t1
+--       bind nctx nm bs t2 expected
+
+--     Forall _ _ -> tyErr "I have no clue what to do with foralls..."
+--     _          -> tyErr $ "Cannot bind pattern " ++ show (unannPat b) ++ " to type " ++ show (unannT' cty)
 
 
 

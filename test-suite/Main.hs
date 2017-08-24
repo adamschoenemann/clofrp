@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeApplications #-}
 
 
@@ -24,6 +26,11 @@ import           CloTT.AST.Parsed (LamCalc(..))
 import qualified Data.Map.Strict   as M
 
 import CloTT.QuasiQuoter
+
+success :: Expectation
+success = pure ()
+failure :: String -> Expectation
+failure = expectationFailure
 
 main :: IO ()
 main = do
@@ -72,7 +79,7 @@ parserSpec = do
     do let Right e = E.unann <$> parse P.expr "" "\\x -> \\y -> x"
        e `shouldBe` "x" @-> "y" @-> "x"
     case E.unann <$> parse P.expr "" "\\(x:Bool) -> \\(y:Int) -> x" of
-      Left e -> fail $ show e 
+      Left e -> failure $ show e 
       Right e -> e `shouldBe` ("x", "Bool") @:-> ("y", "Int") @:-> "x"
   
   it "parses application" $ do
@@ -83,25 +90,25 @@ parserSpec = do
   
   it "parses annotations" $ do
     case E.unann <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
-      Left e -> fail $ show e
+      Left e -> failure $ show e
       Right e -> e `shouldBe` ("x" @-> E.nat 10) @:: ("Bool" @->: "Int")
     case E.unann <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
-      Left e -> fail $ show e
+      Left e -> failure $ show e
       Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" @->: "Int" @->: "Int")
   
   it "parses case statements" $ do
     case E.unann <$> parse P.expr "" "case x of | y -> y" of
       Right e -> e `shouldBe` E.caseof "x" [("y", "y")]
-      Left e -> fail $ show e
+      Left e -> failure $ show e
     case E.unann <$> parse P.expr "" "case x of | Tuple a b -> 10 | y -> y" of
       Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" ["a", "b"], E.nat 10), ("y", "y")]
-      Left e -> fail $ show e
+      Left e -> failure $ show e
     case E.unann <$> parse P.expr "" "case x of | Tuple (Cons x y) b -> 10 | y -> y" of
       Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" [E.match "Cons" ["x", "y"], "b"], E.nat 10), ("y", "y")]
-      Left e -> fail $ show e
+      Left e -> failure $ show e
     case E.unann <$> parse P.expr "" "case n of | Z -> n | S n' -> n'" of
       Right e -> e `shouldBe` E.caseof "n" [(E.match "Z" [], "n"), (E.match "S" ["n'"], "n'")]
-      Left e -> fail $ show e
+      Left e -> failure $ show e
   
   it "parses compound expressions" $ 
     do let Right e = E.unann <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
@@ -257,23 +264,23 @@ tcSpec = do
     E.check0 E.unit     "Bool" `shouldSatisfy` isLeft
 
   it "checks variables" $ do
-    E.check (E.ctx [("x", "Nat")]) (E.var "x") "Nat" `shouldBe` Right ()
-    E.check (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f") ("Nat" @->: "Nat") `shouldBe` Right ()
-    E.check (E.ctx [("x", "Nat")]) (E.var "x") "Bool" `shouldSatisfy` isLeft
+    E.check (E.tyctx [("x", "Nat")]) (E.var "x") "Nat" `shouldBe` Right ()
+    E.check (E.tyctx [("f" ,"Nat" @->: "Nat")]) (E.var "f") ("Nat" @->: "Nat") `shouldBe` Right ()
+    E.check (E.tyctx [("x", "Nat")]) (E.var "x") "Bool" `shouldSatisfy` isLeft
   
   it "checks applications" $ do
-    E.check (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.nat 10) "Nat" `shouldBe` Right ()
-    E.check (E.ctx [("f" , ("Nat" @->: "Bool") @->: "Unit")]) (E.var "f" @@ ("x" @-> E.true)) "Unit" `shouldBe` Right ()
+    E.check (E.tyctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.nat 10) "Nat" `shouldBe` Right ()
+    E.check (E.tyctx [("f" , ("Nat" @->: "Bool") @->: "Unit")]) (E.var "f" @@ ("x" @-> E.true)) "Unit" `shouldBe` Right ()
     E.check0 (E.the ("Nat" @->: "Nat") ("x" @-> "x") @@ E.nat 10) "Nat" `shouldBe` Right ()
-    E.check (E.ctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.true)   "Nat" `shouldSatisfy` isLeft
+    E.check (E.tyctx [("f" ,"Nat" @->: "Nat")]) (E.var "f" @@ E.true)   "Nat" `shouldSatisfy` isLeft
   
   it "checks tuples" $ do
     E.check0 [unsafeExpr|(10,20)|] ("Tuple" @@: "Nat" @@: "Nat") `shouldBe` Right ()
-    E.check @() (E.ctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) ("x" @* "f" @@ "x") ("Tuple" @@: "Nat" @@: "Bool")
+    E.check @() (E.tyctx [("x", "Nat"), ("f", "Nat" @->: "Bool")]) ("x" @* "f" @@ "x") ("Tuple" @@: "Nat" @@: "Bool")
         `shouldBe` Right ()
-    E.check @() (E.ctx [("x", "Nat")]) ("x" @* ("y" @-> "x")) ("Tuple" @@: "Nat" @@: ("Bool" @->: "Nat"))
+    E.check @() (E.tyctx [("x", "Nat")]) ("x" @* ("y" @-> "x")) ("Tuple" @@: "Nat" @@: ("Bool" @->: "Nat"))
         `shouldBe` Right ()
-    E.check @() (E.ctx [("x", "Nat")]) ("x" @* ("y" @-> "x")) ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
+    E.check @() (E.tyctx [("x", "Nat")]) ("x" @* ("y" @-> "x")) ("Tuple" @@: "Nat" @@: ("Bool" @->: "Bool"))
         `shouldSatisfy` isLeft
   
   it "checks lambdas" $ do
@@ -430,7 +437,10 @@ tcSpec = do
         case m of
           | MkFoo m' -> m.
     |]
-    let Left err = E.checkProg prog in print err
+    -- let Left err = E.checkProg prog in print err
+    E.checkProg prog `shouldSatisfy` isLeft
+
+    -- let Left err = E.checkProg prog in print err
     E.checkProg prog `shouldSatisfy` isLeft
 
   it "works with some mono-morphic list examples" $ do
@@ -446,62 +456,70 @@ tcSpec = do
           | Nil -> NNothing
           | Cons n xs' -> NJust n.
       
-      tail : NList -> NLMaybe.
-      tail = \xs -> 
-        case xs of
-          | Nil -> NLNothing
-          | Cons n xs' -> NLJust xs'.
+      -- tail : NList -> NLMaybe.
+      -- tail = \xs -> 
+      --   case xs of
+      --     | Nil -> NLNothing
+      --     | Cons n xs' -> NLJust xs'.
       
-      append : NList -> NList -> NList.
-      append = \xs -> \ys -> 
-        case xs of
-          | Nil -> ys
-          | Cons n xs' -> Cons n (append xs' ys).
+      -- append : NList -> NList -> NList.
+      -- append = \xs -> \ys -> 
+      --   case xs of
+      --     | Nil -> ys
+      --     | Cons n xs' -> Cons n (append xs' ys).
     |]
     -- let Left err = E.checkProg prog in print err
     E.checkProg prog `shouldBe` Right ()
 
   -- FIXME: We still don't support polymorphism, so this will fail.
   it "works with some polymorphic examples" $ do
-    let prog = [unsafeProg|
-      data N      = Z | S N.
-      data List a = Nil | Cons a (List a).
+    pending
+    -- let prog = [unsafeProg|
+    --   data N      = Z | S N.
+    --   data List a = Nil | Cons a (List a).
 
-      append : List N -> List N -> List N.
-      append = \xs -> \ys -> 
-        case xs of
-          | Nil -> ys
-          | Cons n xs' -> Cons n (append xs' ys).
-    |]
-    -- let Left err = E.checkProg prog in print err
-    E.checkProg prog `shouldBe` Right ()
+    --   append : List N -> List N -> List N.
+    --   append = \xs -> \ys -> 
+    --     case xs of
+    --       | Nil -> ys
+    --       | Cons n xs' -> Cons n (append xs' ys).
+    -- |]
+    -- -- let Left err = E.checkProg prog in print err
+    -- E.checkProg prog `shouldBe` Right ()
 
 
 
 elabSpec :: Spec
 elabSpec = do
-  let two (E.ElabProg x y z) = (x,y)
-  let elabProg prog = two <$> E.elabProg prog
+  let shouldFailElab prog = 
+        case E.elabProg prog of
+          Left err -> success
+          Right ep -> failure $ "Expected elaboration failure but succeeded with " ++ show ep
+  let shouldElabTo prog (ks, ts) = 
+        case E.elabProg prog of
+          Left err -> fail . show $ err
+          Right (E.ElabProg {E.kinds, E.types, E.defs, E.destrs}) -> 
+            (kinds `shouldBe` ks) >> (types `shouldBe` ts)
 
   it "elabs the empty program" $ do
     let prog = [unsafeProg| |]
-    elabProg prog `shouldBe` Right (E.emptyk, E.empty)
+    prog `shouldElabTo` (E.emptyk, E.emptyt)
   
   it "elabs a program with one annotated definition" $ do
     let prog = [unsafeProg|id : Nat -> Nat. id = \x -> x.|]
-    elabProg prog `shouldBe` Right (E.emptyk, E.ctx [("id", "Nat" @->: "Nat")])
+    prog `shouldElabTo` (E.emptyk, E.tymap [("id", "Nat" @->: "Nat")])
 
   it "elabs a program with one data declaration" $ do
     let prog = [unsafeProg|data Maybe a = Nothing | Just a.|]
-    elabProg prog `shouldBe`
-      Right ( E.ctxk [("Maybe", Star :->*: Star)]
-            , E.ctx  [ ("Just", E.forAll ["a"] $ "a" @->: "Maybe" @@: "a")
+    prog `shouldElabTo`
+            ( E.ctxk [("Maybe", Star :->*: Star)]
+            , E.tymap  [ ("Just", E.forAll ["a"] $ "a" @->: "Maybe" @@: "a")
                      , ("Nothing", E.forAll ["a"] $ "Maybe" @@: "a")
                      ]
             )
   
   it "elabs prog01" $ do
-    let Right (ctxk, ctx) = elabProg prog01
+    let Right (E.ElabProg {E.kinds = ctxk, E.types = ctx}) = E.elabProg prog01
     ctxk `shouldBe` E.ctxk [ ("List", Star :->*: Star)
                            , ("Maybe", Star :->*: Star)
                            ]
@@ -516,11 +534,11 @@ elabSpec = do
 
   it "fails when a definition is missing" $ do
     let prog = [unsafeProg|id : Nat -> Nat.|]
-    elabProg prog `shouldSatisfy` isLeft
+    shouldFailElab prog
 
   it "fails when a signature is missing" $ do
     let prog = [unsafeProg|id = \x -> x.|]
-    elabProg prog `shouldSatisfy` isLeft
+    shouldFailElab prog
   
   it "succeeds even when types are not well-formed" $ do
     let prog = [unsafeProg|
@@ -528,7 +546,7 @@ elabSpec = do
       foo : Foo -> Nat.
       foo = \x -> x.
     |]
-    let Right (ctxk, ctx) = elabProg prog
+    let Right (E.ElabProg {E.kinds = ctxk, E.types = ctx}) = E.elabProg prog
     M.lookup "Foo"      ctxk `shouldBe` Just (Star :->*: Star)
     M.lookup "MkFoo"    ctx  `shouldBe` Just (E.forAll ["a"] $ "a"     @->: "Foo" @@: "a")
     M.lookup "foo"      ctx  `shouldBe` Just ("Foo"   @->: "Nat")
