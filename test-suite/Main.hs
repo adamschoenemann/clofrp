@@ -480,7 +480,7 @@ tcSpec = do
 
 elabSpec :: Spec
 elabSpec = do
-  let two (x,y,z) = (x,y)
+  let two (E.ElabProg x y z) = (x,y)
   let elabProg prog = two <$> E.elabProg prog
 
   it "elabs the empty program" $ do

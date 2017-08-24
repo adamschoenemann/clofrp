@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -202,7 +203,7 @@ unannI' = \case
   App e1 e2 -> App (unannI e1) (unann e2)
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannI e)
   Tuple e1 e2 -> Tuple (unann e1) (unann e2)
-  Case e clauses -> Case (unann e) $ map (\(p,e) -> (unannPat p, unann e)) clauses
+  Case e clauses -> Case (unann e) $ map (\(p,c) -> (unannPat p, unann c)) clauses
   Prim p -> Prim p
     
 unannPat :: Pat a -> Pat ()
@@ -226,7 +227,13 @@ e1 ~=~ e2 = unann e1 == unann e2
 -- no orphan signatures
 type Defs a = M.Map Name (Expr a)
 type ElabRes a = (KiCtx, Defs a, TyCtx, TyCtx)
-elabProg :: Prog a -> Result (KiCtx, TyCtx, Defs a)
+data ElabProg a = ElabProg
+  { kinds :: KiCtx
+  , types :: TyCtx
+  , defs  :: Defs a
+  }
+
+elabProg :: Prog a -> Result (ElabProg a)
 elabProg (Prog decls) =
   let (kinds, funds, sigds, cnstrs) = foldr folder (M.empty, M.empty, M.empty, M.empty) decls 
 
@@ -244,18 +251,18 @@ elabProg (Prog decls) =
   in case () of
       _ | not defsHaveSigs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a signature.") defsNoSig
         | not sigsHaveDefs -> tyErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
-        | otherwise     -> pure (kinds, sigds `M.union` cnstrs, funds)
+        | otherwise     -> pure $ ElabProg kinds (sigds `M.union` cnstrs) funds
 
-checkElabedProg :: (KiCtx, TyCtx, Defs a) -> Result ()
-checkElabedProg (kinds, types, defs) = do
-  checkTypes
-  checkDefs
+checkElabedProg :: ElabProg a -> Result ()
+checkElabedProg (ElabProg {kinds, types, defs}) = do
+  _ <- checkTypes
+  _ <- checkDefs
   pure ()
   where 
     checkTypes = traverse (validType kinds) types
     checkDefs  = M.traverseWithKey traverseDefs defs
 
-      -- we have implicit recursion going on here. In the future, we should probably disallow this
+    -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case M.lookup k types of
       Just ty -> check types expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
@@ -270,9 +277,9 @@ checkProg = (checkElabedProg =<<) . elabProg
 -- Just : a -> Maybe a
 elabCs :: Name -> [Name] -> [Constr a] -> M.Map Name (Type ())
 elabCs tyname bound cs = M.fromList $ map fn cs where
-  fullyApplied = foldl (@@:) (A () $ TFree tyname) $ map (A () . TFree) bound
+  fullyApplied                = foldl (@@:) (A () $ TFree tyname) $ map (A () . TFree) bound
   fn (A _ (Constr nm params)) = (nm, quantify $ foldr (@->:) fullyApplied $ map unannT params)
-  quantify = if length bound > 0 then A () . Forall bound else id
+  quantify                    = if length bound > 0 then A () . Forall bound else id
 
 -- declIsWellformed :: KiCtx -> Decl a -> Result ()
 -- declIsWellformed ctx = \case 
@@ -454,7 +461,7 @@ checkPat ctx (A _ pat) ty =
 bind :: TyCtx -> Name -> [Pat a] -> Type () -> Type () -> Result TyCtx
 bind ctx nm [] (A _ cty) (A _ expected) = 
   case expected of 
-    A _ t1 :->: A _ t2 -> tyErr $ "Constructor " ++ show nm ++ " requires parameters."
+    A _ _t1 :->: A _ _t2 -> tyErr $ "Constructor " ++ show nm ++ " requires parameters."
     Forall _ _        -> tyErr "I have no clue what to do with foralls..."
     _                 -> 
       if cty == expected
