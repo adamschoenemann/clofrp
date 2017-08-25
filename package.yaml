@@ -14,7 +14,7 @@ benchmarks:
     main: Main.hs
     source-dirs: benchmark
 category: Other
-description: clott is a new Haskeleton package.
+description: clott is a language for guarded FRP using clocked type theory.
 executables:
   clott:
     dependencies:
@@ -33,7 +33,7 @@ extra-source-files:
 - README.md
 - stack.yaml
 ghc-options: -Wall
-github: githubuser/clott
+github: adamschoenemann/clott
 library:
   dependencies:
   - base
@@ -42,9 +42,9 @@ library:
   - containers
   source-dirs: library
 license: MIT
-maintainer: Author name here
+maintainer: Adam Schønemann
 name: clott
-synopsis: A new Haskeleton package.
+synopsis: A DSL for FRP based on Clocked Type Theory.
 tests:
   clott-test-suite:
     dependencies:
