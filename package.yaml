@@ -53,6 +53,7 @@ tests:
     - tasty
     - tasty-hspec
     - parsec
+    - containers
     ghc-options:
     - -rtsopts
     - -threaded

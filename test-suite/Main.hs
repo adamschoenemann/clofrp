@@ -21,6 +21,8 @@ import qualified CloTT.Parser.Type as P
 import qualified CloTT.Parser.Decl as P
 import qualified CloTT.Parser.Prog as P
 import qualified CloTT.AST.Parsed  as E
+import qualified CloTT.AST.Elab    as E
+import qualified CloTT.Check.Mono  as E
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
 import qualified Data.Map.Strict   as M
@@ -339,6 +341,13 @@ tcSpec = do
       listId = \x -> x.
     |]
     E.checkProg prog `shouldSatisfy` isLeft
+  
+  it "succeeds with mutual recursive data" $ do
+    let prog = [unsafeProg|
+      data Foo = Bar | Baz Baz.
+      data Baz = MkBaz Foo.
+    |]
+    E.checkProg prog `shouldBe` Right ()
 
   it "succeeds with explicit foralls" $ do
     let prog = [unsafeProg|
@@ -455,7 +464,7 @@ tcSpec = do
     |]
     E.checkProg prog `shouldBe` Right ()
   
-  it "works with some mono-morphic list examples" $ do
+  it "works with some mono-morphic examples" $ do
     let prog = [unsafeProg|
       data N       = Z | S N.
       data NList   = Nil | Cons N NList.
