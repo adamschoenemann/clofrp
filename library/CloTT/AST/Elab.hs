@@ -9,6 +9,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE DataKinds #-}
 
 module CloTT.AST.Elab where
 
@@ -17,6 +18,11 @@ import Data.Data (Data, Typeable)
 
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Parsed
+
+type PolyType a = Type a Poly
+type PolyType' a = Type' a Poly
+type MonoType a = Type a Mono
+type MonoType' a = Type' a Mono
 
 -- Program "elaboration"
 -- Go through a parsed program and compute the type signatures of the constructors and
@@ -31,7 +37,7 @@ tyErr = Left
 
 -- These things should have better names
 type KiCtx = M.Map Name Kind
-type TyCtx = M.Map Name (Type ())
+type TyCtx = M.Map Name (PolyType ())
 
 -- alias for definitions
 type Defs a = M.Map Name (Expr a)
@@ -71,8 +77,8 @@ elabProg (Prog decls) =
 -- A destructor which is elaborated from a pattern
 data Destr a = Destr
   { name   :: Name
-  , typ     :: Type a
-  , args :: [Type a]
+  , typ    :: Type a Poly
+  , args   :: [Type a Poly]
   } deriving (Show, Eq, Data, Typeable)
 
 -- "Elaborate" the constructors of a type, return a mapping from constructor names
@@ -81,7 +87,7 @@ data Destr a = Destr
 -- Nothing : Maybe a
 -- Just : a -> Maybe a
 -- and a mapping from constructors to their destructors
-elabCs :: Name -> [Name] -> [Constr a] -> (M.Map Name (Type ()), M.Map Name (Destr ()))
+elabCs :: Name -> [Name] -> [Constr a] -> (M.Map Name (Type () Poly), M.Map Name (Destr ()))
 elabCs tyname bound cs = (M.fromList $ map toFn cs, M.fromList $ map toDestr cs) where
   -- | The fully applied type e.g. Maybe a
   fullyApplied = foldl (@@: ) (A () $ TFree tyname) $ map (A () . TFree) bound

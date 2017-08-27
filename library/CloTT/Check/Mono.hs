@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -25,7 +26,7 @@ data Ctx = Ctx
   , destrs :: Destrs
   } deriving (Show, Eq)
 
-addT :: Name -> Type () -> Ctx -> Ctx
+addT :: Name -> PolyType () -> Ctx -> Ctx
 addT nm t ctx@(Ctx {types}) = ctx {types = M.insert nm t types}
 
 addK :: Name -> Kind -> Ctx -> Ctx
@@ -34,7 +35,7 @@ addK nm t ctx@(Ctx {kinds}) = ctx {kinds = M.insert nm t kinds}
 addD :: Name -> Destr () -> Ctx -> Ctx
 addD nm t ctx@(Ctx {destrs}) = ctx {destrs = M.insert nm t destrs}
 
-lookupVar :: Name -> Ctx -> Result (Type ())
+lookupVar :: Name -> Ctx -> Result (PolyType ())
 lookupVar nm ctx@(Ctx {types}) = 
   maybe (tyErr $ "variable " ++ show nm ++ " not found in context") pure $ M.lookup nm types
 
@@ -51,26 +52,24 @@ emptyt = M.empty
 emptyk :: KiCtx
 emptyk = M.empty
 
-tymap :: [(Name, Type ())] -> TyCtx
+tymap :: [(Name, PolyType ())] -> TyCtx
 tymap = M.fromList
 
-tyctx :: [(Name, Type ())] -> Ctx
+tyctx :: [(Name, PolyType ())] -> Ctx
 tyctx xs = empty {types = M.fromList xs}
 
 ctxk :: [(Name, Kind)] -> KiCtx
 ctxk = M.fromList
 
-
-
-check0 :: Expr a -> Type () -> Result ()
+check0 :: Expr a -> PolyType () -> Result ()
 check0 = check empty
 
-viewTupleT :: Type' a -> Maybe (Type' a, Type' a)
+viewTupleT :: PolyType' a -> Maybe (PolyType' a, PolyType' a)
 viewTupleT (A _ (A _ (TFree "Tuple") `TApp` A _ e1) `TApp` A _ e2) = Just (e1, e2)
 viewTupleT _ = Nothing
 
 -- Infer the kind of a type expression
-kindOf :: KiCtx -> Type () -> Result Kind
+kindOf :: KiCtx -> PolyType () -> Result Kind
 kindOf ctx (A _ t) =
   case t of
     TFree v -> maybe (notFound v) pure $ M.lookup v ctx
@@ -98,7 +97,7 @@ kindOf ctx (A _ t) =
     notFound v = tyErr $ "Type " ++ show v ++ " not found in context."
 
 -- Types are only valid if they have kind *
-validType :: KiCtx -> Type () -> Result ()
+validType :: KiCtx -> PolyType () -> Result ()
 validType ctx t = do
   t' <- kindOf ctx t
   if t' == Star
@@ -106,9 +105,9 @@ validType ctx t = do
     else tyErr $ show t ++ " is not a valid type"
 
 
-check :: Ctx -> Expr a -> Type () -> Result ()
+check :: Ctx -> Expr a -> PolyType () -> Result ()
 check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
-  check' :: Expr' a -> Type' () -> Result ()
+  check' :: Expr' a -> PolyType' () -> Result ()
   check' expr       (Forall vs (A _ tau))  = check' expr tau 
 
   check' (Lam nm Nothing bd)    (ta :->: tb) = check (addT nm ta ctx) bd tb
@@ -122,7 +121,7 @@ check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
 
   check' iexpr            typ               = infer' ctx iexpr =@= (A () typ)
 
-  (=@=) :: Result (Type ()) -> Type () -> Result ()
+  (=@=) :: Result (PolyType ()) -> PolyType () -> Result ()
   t1c =@= t2 = do
     t1 <- t1c
     if t1 == t2 then
@@ -134,10 +133,10 @@ decorate err res = case res of
   Right r -> Right r
   Left err' -> Left $ err' ++ "\n" ++ err
 
-infer :: Ctx -> Expr a -> Result (Type ())
+infer :: Ctx -> Expr a -> Result (PolyType ())
 infer ctx (A _ e) = infer' ctx e
 
-infer' :: Ctx -> Expr' a -> Result (Type ())
+infer' :: Ctx -> Expr' a -> Result (PolyType ())
 infer' ctx = \case
   Var nm        -> lookupVar nm ctx
   Ann ace aty   -> 
@@ -179,7 +178,7 @@ headResult _ (x:_) = pure x
 -- in a context, check each clause against a type of (pattern, Maybe expression)
 -- if second type is nothing, it is because we do not yet know which type to infer,
 -- but we should know in first recursive call
-checkClauses :: Ctx -> (Type (), Maybe (Type ())) -> [(Pat a, Expr a)] -> Result (Type ())
+checkClauses :: Ctx -> (PolyType (), Maybe (PolyType ())) -> [(Pat a, Expr a)] -> Result (PolyType ())
 checkClauses _ (_, mety) [] = 
   case mety of 
     Just ty -> pure ty
@@ -193,7 +192,7 @@ checkClauses ctx (pty, mety) ((pat, e) : clauses) = do
       checkClauses ctx (pty, Just ety) clauses
 
 -- check that patterns type-check and return a new ctx extended with bound variables
-checkPat :: Ctx -> Pat a -> Type () -> Result Ctx
+checkPat :: Ctx -> Pat a -> PolyType () -> Result Ctx
 checkPat ctx (A _ pat) ty = 
   case pat of
     Bind nm -> pure $ addT nm ty ctx
@@ -203,7 +202,7 @@ checkPat ctx (A _ pat) ty =
 
 -- in a context, check a list of patterns against a destructor and an expected type.
 -- if it succeeds, it binds the names listed in the pattern match to the input context
-checkPats :: Ctx -> [Pat a] -> Destr () -> Type () -> Result Ctx
+checkPats :: Ctx -> [Pat a] -> Destr () -> PolyType () -> Result Ctx
 checkPats ctx pats (Destr {name, typ, args}) expected
   | length pats /= length args  = tyErr $ "Expected " ++ show (length args) ++ " arguments to " ++ show name ++ " but got " ++ show (length pats)
   | typ          /= expected    = tyErr $ "Pattern '" ++ show name ++ "' has type " ++ show typ ++ " but expected " ++ show expected
@@ -212,7 +211,7 @@ checkPats ctx pats (Destr {name, typ, args}) expected
     where 
       folder acc (p, t) = checkPat acc p t
 
-inferPrim :: Prim -> Result (Type ())
+inferPrim :: Prim -> Result (PolyType ())
 inferPrim = \case
   Unit   -> pure "Unit"
   Bool _ -> pure "Bool"

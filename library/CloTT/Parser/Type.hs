@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module CloTT.Parser.Type where
 
 import Text.Parsec.Pos
@@ -8,7 +10,7 @@ import qualified CloTT.AST.Parsed as E
 import           CloTT.Parser.Lang
 import           CloTT.AST.Name
 
-type Type = E.Type SourcePos
+type Type = E.Type SourcePos E.Poly
 
 free :: Parser Type
 free = ann <*> (E.TFree . UName <$> identifier)
