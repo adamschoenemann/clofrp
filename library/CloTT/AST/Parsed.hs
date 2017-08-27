@@ -158,7 +158,7 @@ infixl 9 @@
 infixl 8 @*
 infixl 3 @::
 
-class IsString a => LamCalc a t where
+class IsString a => LamCalc a t | a -> t where
   (@->) :: String -> a -> a
   (@:->) :: (String, t) -> a -> a
   (@@) :: a -> a -> a
