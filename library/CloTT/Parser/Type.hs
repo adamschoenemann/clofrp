@@ -4,6 +4,7 @@ module CloTT.Parser.Type where
 
 import Text.Parsec.Pos
 import Text.Parsec
+import Data.Foldable (foldrM)
 
 import qualified CloTT.Annotated  as A
 import qualified CloTT.AST.Parsed as E
@@ -19,10 +20,12 @@ arr :: Parser (Type -> Type -> Type)
 arr = pure (\p a b -> A.A p $ a E.:->: b) <*> getPosition
 
 forAll :: Parser Type
-forAll = ann <*> p where
-  p = E.Forall <$>
-      (reserved "forall" *> (map UName <$> many identifier) <* reservedOp ".") <*> 
-      typep
+forAll = p where
+  p = do
+    nms <- reserved "forall" *> (map UName <$> many identifier) <* reservedOp "."
+    ty <- typep
+    foldrM fn ty nms
+  fn nm t = (\p -> A.A p $ E.Forall nm t) <$> getPosition
 
 typeexpr :: Parser Type
 typeexpr = free <|> forAll <|> parens typep

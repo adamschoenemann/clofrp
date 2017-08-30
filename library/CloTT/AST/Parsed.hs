@@ -24,6 +24,7 @@ module CloTT.AST.Parsed (
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Name
 import Data.String (IsString(..))
+import qualified Data.Set as S
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
 import qualified CloTT.AST.Prim as P
@@ -34,9 +35,10 @@ data TySort = Mono | Poly deriving (Show, Eq)
 
 data Type' :: * -> TySort -> * where
   TFree  :: Name                      -> Type' a s
+  TExists :: Name  -> Type' a s
   TApp   :: Type a Poly -> Type a s    -> Type' a s
   (:->:)  :: Type a s    -> Type a s    -> Type' a s
-  Forall :: [Name]      -> Type a Poly -> Type' a Poly
+  Forall :: Name        -> Type a Poly -> Type' a Poly
 
 deriving instance Show a     => Show (Type' a s)
 deriving instance Eq a       => Eq (Type' a s)
@@ -53,6 +55,19 @@ a @@: b = A () $ a `TApp` b
 infixr 2 @->:
 (@->:) :: Type () s -> Type () s -> Type () s 
 a @->: b = A () $ a :->: b
+
+freeVars :: Type a s -> S.Set Name
+freeVars (A _ t) =
+  case t of
+    TFree n -> S.singleton n
+    TExists n -> S.singleton n
+    TApp x y -> freeVars x `S.union` freeVars y
+    x :->: y  -> freeVars x `S.union` freeVars y
+    Forall n t -> freeVars t `S.difference` S.singleton n
+
+inFreeVars :: Name -> Type a s -> Bool
+inFreeVars nm t = nm `S.member` freeVars t
+
 
 type Expr a = Annotated a (Expr' a)
 
@@ -144,7 +159,9 @@ prog :: [Decl ()] -> Prog ()
 prog = Prog
 
 forAll :: [String] -> Type () Poly -> Type () Poly
-forAll nm t = A () . Forall (map UName nm) $ t
+forAll nms t = foldr fn t $ map UName nms where
+  fn nm acc = A () $ Forall nm acc
+-- forAll nms t = A () . Forall (map UName nm) $ t
 
 caseof :: Expr () -> [(Pat (), Expr ())] -> Expr ()
 caseof expr clauses = A () $ Case expr clauses
@@ -239,7 +256,3 @@ unannPat' p = case p of
 
 unann :: Expr a -> Expr ()
 unann = unannI
-
-infix 9 ~=~
-(~=~) :: Expr a -> Expr b -> Bool
-e1 ~=~ e2 = unann e1 == unann e2

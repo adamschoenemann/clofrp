@@ -90,8 +90,8 @@ kindOf ctx (A _ t) =
         (k1', k2')   -> tyErr $ "Both operands in arrow types must have kind *, but had " 
                     ++ show k1' ++ " and " ++ show k2' ++ " in " ++ show t
     
-    Forall vs tau -> 
-      let ctx' = foldr (\v c -> M.insert v Star c) ctx vs
+    Forall v tau -> 
+      let ctx' = M.insert v Star ctx
       in  kindOf ctx' tau
   where
     notFound v = tyErr $ "Type " ++ show v ++ " not found in context."

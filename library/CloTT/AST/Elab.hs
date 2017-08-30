@@ -92,7 +92,7 @@ elabCs tyname bound cs = (M.fromList $ map toFn cs, M.fromList $ map toDestr cs)
   -- | The fully applied type e.g. Maybe a
   fullyApplied = foldl (@@: ) (A () $ TFree tyname) $ map (A () . TFree) bound
   -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
-  quantify     = if length bound > 0 then A () . Forall bound else id
+  quantify     = if length bound > 0 then (\t -> foldr (\nm t' -> A () $ Forall nm t') t bound) else id
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
   toFn    (A _ (Constr nm args)) = (nm, quantify $ foldr (@->:) fullyApplied $ map unannT args)
   -- | Convert a constructor to a destructor, to just for pattern matches
