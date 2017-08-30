@@ -62,3 +62,5 @@ tests:
     source-dirs: test-suite
 version: '0.0.0'
 ghc-options: -Wno-unticked-promoted-constructors
+dependencies:
+  - mtl
