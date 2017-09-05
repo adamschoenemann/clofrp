@@ -68,6 +68,28 @@ freeVars (A _ t) =
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
+asPolytype :: Type a s -> Type a Poly
+asPolytype (A a ty) = A a $ 
+  case ty of
+    TFree x      -> TFree x
+    TExists x    -> TExists x
+    t1 `TApp` t2 -> asPolytype t1 `TApp` asPolytype t2
+    t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
+    Forall x t   -> Forall x (asPolytype t) 
+
+asMonotype :: Type a s -> Maybe (Type a Mono)
+asMonotype (A a ty) = 
+  case ty of
+    TFree x -> pure (A a $ TFree x)
+
+    TExists x -> pure (A a $ TExists x)
+
+    t1 `TApp` t2 -> (\x y -> A a $ TApp x y) <$> pure (asPolytype t1) <*> asMonotype t2
+    
+    t1 :->: t2 -> (\x y -> A a (x :->: y)) <$> asMonotype t1 <*> asMonotype t2
+    
+    Forall _ _ -> Nothing
+
 
 type Expr a = Annotated a (Expr' a)
 

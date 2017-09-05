@@ -86,6 +86,7 @@ newtype TypingM a r = TypingM { unTypingM :: RWST (TypingRead a) () TypingState 
            , MonadReader (TypingRead a)
            )
 
+-- Under input context Γ, type A is a subtype of B, with output context ∆
 -- TODO: Consider how to avoid name capture (alpha renaming probably)
 subtypeOf :: Eq a => Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A _ t1) ty2@(A _ t2) = subtypeOf' t1 t2 where
@@ -108,7 +109,8 @@ subtypeOf ty1@(A _ t1) ty2@(A _ t2) = subtypeOf' t1 t2 where
 
   -- <:\/L
   subtypeOf' (Forall nm (A at1 t1)) t2 = do
-    ctx' <- local (\g -> g <+ marker nm <+ exists nm) $ (subst (A at1 $ TExists nm) nm (A at1 t1)) `subtypeOf` ty2
+    let ty1' = subst (A at1 $ TExists nm) nm (A at1 t1)
+    ctx' <- local (\g -> g <+ marker nm <+ exists nm) $ ty1' `subtypeOf` ty2
     pure $ dropTil (marker nm) ctx'
 
   -- <:\/R
@@ -161,10 +163,6 @@ dropTil el (Gamma xs) = Gamma $ tl $ dropWhile (/= el) xs where
   tl []     = []
   tl (_:ys) = ys
 
--- in subtyping it is used with Type' instead of Type.
--- TODO: Figure out which one to use (Type' vs Type) and how
--- to deal with annotations: subst them too or keep them?
--- Subst them!
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
   case inTy of
@@ -179,5 +177,20 @@ subst x forY (A a inTy) =
     -- TODO: Fix capture problems here
     Forall x' t -> A a $ Forall x' (subst x forY t)
 
-instL = undefined
+-- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
+instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
+instL ahat ty =
+  case ty of
+    _ -> undefined
+    -- TFree y | y == forY -> x
+
+    -- TExists x -> error $ "Should never encounter existentials in subst"
+
+    -- t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
+    
+    -- t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
+    
+    -- -- TODO: Fix capture problems here
+    -- Forall x' t -> A a $ Forall x' (subst x forY t)
+
 instR = undefined
