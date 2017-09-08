@@ -17,14 +17,16 @@ import CloTT.Check.MonoSpec
 import CloTT.ParserSpec
 import CloTT.AST.ElabSpec
 import CloTT.QuasiQuoterSpec
+import CloTT.Check.PolySpec
 
 main :: IO ()
 main = do
   parser <- testSpec "parsing" parserSpec
   quasi <- testSpec "quasi" quasiSpec
-  tc <- testSpec "type checking" tcSpec
+  mono <- testSpec "mono-type checking" monoSpec
+  poly <- testSpec "poly-type checking" polySpec
   decl <- testSpec "declarations" declSpec
   elab <- testSpec "elaboration" elabSpec
   kindOf <- testSpec "kindOf" kindOfSpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, tc, decl, elab, kindOf]
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, mono, poly, decl, elab, kindOf]
   Test.Tasty.defaultMain group

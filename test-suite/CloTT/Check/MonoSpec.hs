@@ -15,8 +15,8 @@ import           CloTT.QuasiQuoter
 
 import Fixtures
 
-tcSpec :: Spec
-tcSpec = do
+monoSpec :: Spec
+monoSpec = do
   it "checks primitives" $ do
     E.check0 (E.nat 10) "Nat"  `shouldBe` Right ()
     E.check0 E.true     "Bool" `shouldBe` Right ()

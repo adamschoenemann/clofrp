@@ -61,6 +61,6 @@ tests:
     main: Main.hs
     source-dirs: test-suite
 version: '0.0.0'
-ghc-options: -Wno-unticked-promoted-constructors
+ghc-options: -Wall -Wno-unticked-promoted-constructors -fno-warn-unused-matches -fno-warn-unused-imports
 dependencies:
   - mtl
