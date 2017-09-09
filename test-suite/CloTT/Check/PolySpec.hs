@@ -18,46 +18,96 @@ import           CloTT.Check.Poly
 
 polySpec :: Spec
 polySpec = do
+  let nil = emptyCtx @()
   describe "splitCtx" $ do
     it "fails for empty context" $ do
-      let ctx = Gamma @() []
-      splitCtxMaybe (uni "a") ctx `shouldBe` Nothing
+      let ctx = nil
+      splitCtx' (uni "a") ctx `shouldBe` Nothing
     it "fails for context without el" $ do
-      do let ctx = Gamma @() [uni "b"]
-         splitCtxMaybe (uni "a") ctx `shouldBe` Nothing
-      do let ctx = Gamma @() [exists "a"]
-         splitCtxMaybe (uni "a") ctx `shouldBe` Nothing
-      do let ctx = Gamma @() [uni "b", exists "a"]
-         splitCtxMaybe (uni "a") ctx `shouldBe` Nothing
+      do let ctx = nil <+ uni "b"
+         splitCtx' (uni "a") ctx `shouldBe` Nothing
+      do let ctx = nil <+ exists "a"
+         splitCtx' (uni "a") ctx `shouldBe` Nothing
+      do let ctx = nil <+ uni "b" <+ exists "a"
+         splitCtx' (uni "a") ctx `shouldBe` Nothing
     it "works for context with el" $ do
-      do let ctx = Gamma @() [uni "b"]
-         splitCtxMaybe (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", emptyCtx)
-      do let xs = [uni "x", exists "y", marker "x"]
-         let ctx = Gamma @() ([uni "b"] ++ xs)
-         splitCtxMaybe (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", Gamma xs)
-      do let xs = [uni "x", exists "y", marker "x"]
-         let ctx = Gamma @() (xs ++ [uni "b"])
-         splitCtxMaybe (uni "b") ctx `shouldBe` Just (Gamma xs, uni "b", emptyCtx)
-      do let xs = [uni "x", exists "y", marker "x"]
-         let ys = [uni "z", exists "u", marker "v"]
-         let ctx = Gamma @() (xs ++ [uni "b"] ++ ys)
-         splitCtxMaybe (uni "b") ctx `shouldBe` Just (Gamma xs, uni "b", Gamma ys)
-    specify "if splitCtxMaybe alpha ctx == (xs, alpha, ys) then ctx == ys <+ alpha ++ xs" $ do
-      let xs = [uni "x", exists "y", marker "x"]
-      let ys = [uni "z", exists "u", marker "v"]
-      let ctx = Gamma @() (xs ++ [uni "b"] ++ ys)
-      let Just (xs', b, ys') = splitCtxMaybe (uni "b") ctx
-      ctx `shouldBe` ys' <+ b <++ xs'
+      do let ctx = nil <+ uni "b"
+         splitCtx' (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", emptyCtx)
+      do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+         let ctx = nil <+ uni "b" <++ xs
+         splitCtx' (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", xs)
+      do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+         let ctx = xs <+ uni "b"
+         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", emptyCtx)
+      do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+         let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
+         let ctx = xs <+ uni "b" <++ ys
+         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", ys)
+    specify "if splitCtx' alpha ctx == (xs, alpha, ys) then ctx == xs <+ alpha <++ ys" $ do
+      let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+      let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
+      let ctx = xs <+ uni "b" <++ ys
+      let Just (xs', b, ys') = splitCtx' (uni "b") ctx
+      ctx `shouldBe` xs' <+ b <++ ys'
   describe "before'" $ do
     it "fails on empty context" $ do
       let ctx = Gamma @() []
-      before' (Exists "a" ) (Exists "b") ctx `shouldBe` False
+      before' (Exists "a") (Exists "b") ctx `shouldBe` False
     it "fails on singleton context" $ do
       let ctx = Gamma @() [exists "a"]
-      before' (exists "a" ) (exists "b") ctx `shouldBe` False
-    it "before a b [a,b] == True" $ do
-      let ctx = Gamma @() [exists "a", exists "b"]
+      before' (exists "a") (exists "b") ctx `shouldBe` False
+    it "before' a b (.,a,b) == True" $ do
+      let ctx = nil <+ exists "a" <+ exists "b"
       before' (exists "a" ) (exists "b") ctx `shouldBe` True
+    it "before' a b (T,a,T',b,T'') == True" $ do
+      let t  = nil <+ uni "x" <+ exists "z"
+      let t' = nil <+ uni "x'" <+ exists "z'" 
+      let t'' = nil <+ uni "x''" <+ exists "z''" 
+      let ctx = t <+ exists "a" <++ t' <+ exists "b" <++ t''
+      putStrLn . show $ ctx
+      before' (exists "a") (exists "b") ctx `shouldBe` True
+    it "before' a b (.,b,a) == False" $ do
+      let ctx = nil <+ exists "b" <+ exists "a"
+      before' (exists "a") (exists "b") ctx `shouldBe` False
+    it "before' a b (.,b,T,a) == False" $ do
+      let t   = nil <+ uni "x" <+ exists "y"
+      let ctx = nil <+ exists "b" <++ t <+ exists "a"
+      before' (exists "a") (exists "b") ctx `shouldBe` False
+  describe "assign'" $ do
+    it "fails for empty context" $ do
+      let ctx = nil
+      assign' "a" "Unit" ctx `shouldBe` Nothing
+    it "fails for singleton context without 'a^'" $ do
+      let ctx = nil <+ exists "b"
+      assign' "a" "Unit" ctx `shouldBe` Nothing
+    it "fails for singleton context without 'a^' but with 'a'" $ do
+      let ctx = nil <+ uni "a"
+      assign' "a" "Unit" ctx `shouldBe` Nothing
+    it "fails for context without 'a^' but with 'a'" $ do
+      let ctx = nil <+ uni "a" <+ exists "b" <+ marker "c"
+      assign' "a" "Unit" ctx `shouldBe` Nothing
+    it "works for context with 'a^'" $ do
+      do let t   = nil <+ uni "a" <+ exists "b"
+         let t'  = nil <+ marker "c"
+         let ctx = t <+ exists "a" <++ t'
+         assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+      do let t   = nil 
+         let t'  = nil <+ marker "c"
+         let ctx = t <+ exists "a" <++ t'
+         assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+      do let t   = nil <+ uni "a" <+ exists "b"
+         let t'  = nil 
+         let ctx = t <+ exists "a" <++ t'
+         assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+  describe "insertAt'" $ do
+    it "fails with context without elem" $ do
+      let ctx = nil <+ uni "a" <+ exists "b"
+      let put = nil <+ uni "put"
+      insertAt' (exists "a") put ctx `shouldBe` Nothing
+    it "succeds in context with elem" $ do
+      let ctx = nil <+ marker "m" <+ exists "a" <+ uni "a"
+      let put = nil <+ uni "put"
+      insertAt' (exists "a") put ctx `shouldBe` Just (nil <+ marker "m" <++ put <+ uni "a")
 
 
 

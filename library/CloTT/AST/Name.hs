@@ -7,6 +7,7 @@ import Data.String (IsString(..))
 
 data Name 
   = UName String
+  | MName Integer
   deriving (Show, Ord, Eq, Data, Typeable)
 
 instance IsString Name where

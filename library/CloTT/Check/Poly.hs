@@ -13,6 +13,7 @@ import CloTT.AST.Parsed
 import Control.Monad.RWS.Strict
 import Control.Monad.Except
 import Data.List (break)
+import Control.Monad (foldM)
 
 data CtxElem a
   = Uni Name -- ^ Universal
@@ -31,7 +32,7 @@ marker = Marker
 uni :: Name -> CtxElem a
 uni = Uni
 
-newtype TyCtx a = Gamma [CtxElem a]
+newtype TyCtx a = Gamma { unGamma :: [CtxElem a] }
   deriving (Show, Eq)
 
 emptyCtx :: TyCtx a
@@ -98,6 +99,12 @@ newtype TypingM a r = TypingM { unTypingM :: RWST (TypingRead a) () TypingState 
 getCtx :: TypingM a (TyCtx a)
 getCtx = ask
 
+freshName :: TypingM a Name
+freshName = do 
+  i <- get
+  modify (+ 1)
+  pure $ MName i
+
 runTypingM0 :: TypingM a r -> TypingRead a -> Either (TyExcept a) (r, TypingState, ())
 runTypingM0 tm r = runExcept $ runRWST (unTypingM tm) r initState where
   initState = 0
@@ -108,7 +115,7 @@ runTypingM tm r s = runExcept $ runRWST (unTypingM tm) r s
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- TODO: Consider how to avoid name capture (alpha renaming probably)
 subtypeOf :: Eq a => Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
-subtypeOf ty1@(A _ t1) ty2@(A _ t2) = subtypeOf' t1 t2 where
+subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
   -- <:Var
   subtypeOf' (TFree x) (TFree x')
     | x == x'    = getCtx
@@ -186,73 +193,134 @@ dropTil el (Gamma xs) = Gamma $ tl $ dropWhile (/= el) xs where
   tl (_:ys) = ys
 
 -- again, since contexts are "reversed" notationally, this does not yield 
--- T = (T', alpha, T'') but rather T = (T'', alpha, T')
-splitCtxMaybe :: Eq a => CtxElem a -> TyCtx a -> Maybe (TyCtx a, CtxElem a, TyCtx a)
-splitCtxMaybe el ctx@(Gamma xs) =
+-- we switch ys and zs in the definition
+splitCtx' :: Eq a => CtxElem a -> TyCtx a -> Maybe (TyCtx a, CtxElem a, TyCtx a)
+splitCtx' el ctx@(Gamma xs) =
   case break (== el) xs of
     (_, [])    -> Nothing
-    (ys, z:zs) -> pure (Gamma ys, z, Gamma zs)
+    (ys, z:zs) -> pure (Gamma zs, z, Gamma ys)
 
 splitCtx :: Eq a => CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
-  case splitCtxMaybe el ctx of
+  case splitCtx' el ctx of
     Nothing -> cannotSplit el ctx
     Just x  -> pure x
 
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
   case inTy of
-    TFree y | y == forY -> x
+    TFree y | y == forY  -> x
+            | otherwise -> A a $ TFree y
 
-    TExists x -> error $ "Should never encounter existentials in subst"
+    TExists _x -> error $ "Should never encounter existentials in subst"
 
     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
     
     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
     
     -- TODO: Fix capture problems here
-    Forall x' t -> A a $ Forall x' (subst x forY t)
+    Forall x' t | x' == forY -> A a $ Forall x' t 
+                | otherwise -> A a $ Forall x' (subst x forY t)
 
+-- | Check if an elem alpha comes before beta in a context
 before' :: Eq a => CtxElem a -> CtxElem a -> TyCtx a -> Bool
 before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False where
   comesBefore x y [] xr yr = yr
-  comesBefore x y (a:as) False yr
-    | x == a = comesBefore x y as True yr
-    | y == a = False
+  comesBefore x y (a:as) False False
+    | x == a     = comesBefore x y as True False
+    | y == a     = False
+    | otherwise = comesBefore x y as False False
   comesBefore x y (a:as) True False
     | x == a = False
     | y == a = True
+    | otherwise = comesBefore x y as True False
   comesBefore _ _ _ _ _ = False
 
 before :: Eq a => CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
-assign' :: Name -> Type a Mono -> TyCtx a -> TypingM a (TyCtx a)
-assign' = undefined
+assign' :: Name -> Type a Mono -> TyCtx a -> Maybe (TyCtx a)
+assign' nm ty (Gamma ctx) = 
+  case foldr fn ([], False) ctx of
+    (_, False) -> Nothing
+    (xs, True) -> Just (Gamma xs)
+  where
+    fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
+    fn x (xs, b)                       = (x : xs, b)
 
 assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
-assign nm ty = assign' nm ty =<< getCtx
+assign nm ty = do
+  ctx <- getCtx
+  case assign' nm ty ctx of
+    Nothing  -> nameNotFound nm
+    Just ctx' -> pure ctx'
+
+insertAt' :: Eq a => CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
+insertAt' at insertee into = do
+  (l, _, r) <- splitCtx' at into
+  pure $ l <++ insertee <++ r
+
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Eq a => Name -> Type a Poly -> TypingM a (TyCtx a)
+-- InstLSolve
 instL ahat (asMonotype -> Just mty) = do
   (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
-  pure (gam' <+ ahat := mty <++ gam)
-
+  pure (gam <+ ahat := mty <++ gam')
 instL ahat (A a ty) = 
   case ty of
+    -- InstLReach
     TExists bhat -> Exists ahat `before` Exists bhat >>= \case
       True -> assign bhat (A a $ TExists ahat)
-      False -> undefined
+      False -> otherErr $ "InstLReach"
 
-
-    -- TExists x -> error $ "Should never encounter existentials in subst"
-
-    -- t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
+    -- InstLArr
+    t1 :->: t2 -> do
+      af1 <- freshName
+      af2 <- freshName
+      let ahat1 = exists af1
+      let ahat2 = exists af2
+      let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
+      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ t1 `instR` af1
+      substed <- substCtx omega t2
+      local (const omega) $ af2 `instL` substed
     
-    -- t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
+    -- InstLAllR
+    Forall beta bty -> do
+      ctx' <- local (\g -> g <+ uni beta) $ ahat `instL` bty
+      (delta, _, delta') <- splitCtx (uni beta) ctx'
+      pure delta
     
-    -- -- TODO: Fix capture problems here
-    -- Forall x' t -> A a $ Forall x' (subst x forY t)
+    _ -> otherErr $ show (unannT' ty) ++ " not expected in instL"
 
-instR = undefined
+instR :: Eq a => Type a Poly -> Name -> TypingM a (TyCtx a)
+-- InstRSolve
+instR (asMonotype -> Just mty) ahat = do
+  (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
+  pure (gam <+ ahat := mty <++ gam')
+instR (A a ty) ahat = 
+  case ty of
+    -- InstRReach
+    TExists bhat -> Exists ahat `before` Exists bhat >>= \case
+      True -> assign bhat (A a $ TExists ahat)
+      False -> otherErr $ "InstLReach"
+
+    -- InstRArr
+    t1 :->: t2 -> do
+      af1 <- freshName
+      af2 <- freshName
+      let ahat1 = exists af1
+      let ahat2 = exists af2
+      let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
+      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ af1 `instL` t1
+      substed <- substCtx omega t2
+      local (const omega) $ substed `instR` af2
+    
+    -- InstRAllR
+    Forall beta bty -> do
+      let substedB = subst (A a $ TExists beta) beta bty
+      ctx' <- local (\g -> g <+ marker beta <+ exists beta) $ substedB `instR` ahat
+      (delta, _, delta') <- splitCtx (marker beta) ctx'
+      pure delta
+    
+    _ -> otherErr $ show (unannT' ty) ++ " not expected in instR"
