@@ -183,7 +183,9 @@ prog = Prog
 forAll :: [String] -> Type () Poly -> Type () Poly
 forAll nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Forall nm acc
--- forAll nms t = A () . Forall (map UName nm) $ t
+
+exists :: Name -> Type () Poly
+exists nm = A () $ TExists nm
 
 caseof :: Expr () -> [(Pat (), Expr ())] -> Expr ()
 caseof expr clauses = A () $ Case expr clauses

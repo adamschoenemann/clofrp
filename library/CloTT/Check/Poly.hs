@@ -9,7 +9,7 @@ module CloTT.Check.Poly where
 
 import CloTT.AST.Name
 import CloTT.Annotated
-import CloTT.AST.Parsed
+import CloTT.AST.Parsed hiding (exists)
 import Control.Monad.RWS.Strict
 import Control.Monad.Except
 import Data.List (break)
@@ -112,6 +112,12 @@ runTypingM0 tm r = runExcept $ runRWST (unTypingM tm) r initState where
 runTypingM :: TypingM a r -> TypingRead a -> TypingState -> Either (TyExcept a) (r, TypingState, ())
 runTypingM tm r s = runExcept $ runRWST (unTypingM tm) r s
 
+runSubtypeOf0 :: Eq a => Type a 'Poly -> Type a 'Poly -> Either (TyExcept a) (TyCtx a, TypingState, ())
+runSubtypeOf0 t1 t2 = runTypingM (t1 `subtypeOf` t2) emptyCtx 0
+
+runSubtypeOf :: Eq a => TyCtx a -> Type a 'Poly -> Type a 'Poly -> Either (TyExcept a) (TyCtx a, TypingState, ())
+runSubtypeOf ctx t1 t2 = runTypingM (t1 `subtypeOf` t2) ctx 0
+
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- TODO: Consider how to avoid name capture (alpha renaming probably)
 subtypeOf :: Eq a => Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
@@ -123,7 +129,11 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
   
   -- <:Exvar
   subtypeOf' (TExists a) (TExists a')
-    | a == a' = getCtx
+    | a == a' = do 
+      ctx <- getCtx
+      if Exists a `isInContext` ctx
+        then pure ctx
+        else nameNotFound a
     | otherwise = cannotSubtype ty1 ty2
 
   -- <:->

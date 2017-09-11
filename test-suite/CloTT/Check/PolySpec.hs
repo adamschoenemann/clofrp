@@ -5,11 +5,13 @@
 module CloTT.Check.PolySpec where
 
 import Test.Tasty.Hspec
+import Data.Either (isLeft)
 
--- import qualified CloTT.AST.Parsed  as E
+import qualified CloTT.AST.Parsed  as E
 import           CloTT.Check.Poly
--- import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
--- import           CloTT.AST.Parsed (LamCalc(..))
+import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
+import           CloTT.AST.Parsed (LamCalc(..))
+import           CloTT.TestUtils
 -- import           CloTT.QuasiQuoter
 
 -- import Fixtures
@@ -19,6 +21,7 @@ import           CloTT.Check.Poly
 polySpec :: Spec
 polySpec = do
   let nil = emptyCtx @()
+
   describe "splitCtx" $ do
     it "fails for empty context" $ do
       let ctx = nil
@@ -49,6 +52,7 @@ polySpec = do
       let ctx = xs <+ uni "b" <++ ys
       let Just (xs', b, ys') = splitCtx' (uni "b") ctx
       ctx `shouldBe` xs' <+ b <++ ys'
+
   describe "before'" $ do
     it "fails on empty context" $ do
       let ctx = Gamma @() []
@@ -73,6 +77,7 @@ polySpec = do
       let t   = nil <+ uni "x" <+ exists "y"
       let ctx = nil <+ exists "b" <++ t <+ exists "a"
       before' (exists "a") (exists "b") ctx `shouldBe` False
+
   describe "assign'" $ do
     it "fails for empty context" $ do
       let ctx = nil
@@ -99,6 +104,7 @@ polySpec = do
          let t'  = nil 
          let ctx = t <+ exists "a" <++ t'
          assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+         
   describe "insertAt'" $ do
     it "fails with context without elem" $ do
       let ctx = nil <+ uni "a" <+ exists "b"
@@ -108,6 +114,33 @@ polySpec = do
       let ctx = nil <+ marker "m" <+ exists "a" <+ uni "a"
       let put = nil <+ uni "put"
       insertAt' (exists "a") put ctx `shouldBe` Just (nil <+ marker "m" <++ put <+ uni "a")
+
+  describe "subtypeOf" $ do
+    let shouldYield comp ctx = 
+          case comp of
+            Right (ctx', _, _) -> ctx' `shouldBe` ctx
+            Left err           -> failure (show err)
+
+    it "is reflexive" $ do
+      runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
+      runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
+      do let ctx = nil <+ exists "a"
+         runSubtypeOf ctx (E.exists "a") (E.exists "a") `shouldYield` ctx
+         runSubtypeOf nil (E.exists "a") (E.exists "a") `shouldSatisfy` isLeft
+      do let t  = "Nat" @->: "Nat"
+         let t' = "Nat" @->: "Bool"
+         runSubtypeOf nil t t `shouldYield` nil
+         runSubtypeOf nil t t' `shouldSatisfy` isLeft
+      do let t  = E.forAll ["a"] "Bool"
+         let t' = E.forAll ["a"] "Nat"
+         let t'' = E.forAll ["b"] "Bool"
+         runSubtypeOf nil t t `shouldYield` nil
+         runSubtypeOf nil t t' `shouldSatisfy` isLeft
+         runSubtypeOf nil t t'' `shouldYield` nil
+    it "foralls are alpha equivalent" $ do
+      do let t  = E.forAll ["a"] "a"
+         let t' = E.forAll ["b"] "b"
+         runSubtypeOf nil t t' `shouldYield` nil
 
 
 
