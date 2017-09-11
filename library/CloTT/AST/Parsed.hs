@@ -237,6 +237,7 @@ unannT (A _ t) = A () $ unannT' t
 unannT' :: Type' a s -> Type' () s
 unannT' = \case 
   TFree x -> TFree x
+  TExists x -> TExists x
   t1 `TApp` t2 -> unannT t1 `TApp` unannT t2
   t1 :->: t2 -> unannT t1 :->: unannT t2
   Forall ts tau -> Forall ts (unannT tau)

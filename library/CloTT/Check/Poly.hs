@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module CloTT.Check.Poly where
 
@@ -12,8 +13,11 @@ import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
 import Control.Monad.RWS.Strict
 import Control.Monad.Except
-import Data.List (break)
+import Control.Monad.Writer
+import Control.Monad.State
+import Data.List (break, intercalate)
 import Control.Monad (foldM)
+import Debug.Trace
 
 data CtxElem a
   = Uni Name -- ^ Universal
@@ -55,9 +59,56 @@ Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 isInContext :: Eq a => CtxElem a -> TyCtx a -> Bool
 isInContext el (Gamma xs) = el `elem` xs
 
--- just an integer for generating names
-type TypingState  = Integer
-type TypingRead a = TyCtx a
+data BuildTree a
+  = Empty
+  | Root a [BuildTree a]
+  | Extend [BuildTree a]
+
+branch :: MonadWriter (BuildTree a) m => m r -> m r
+branch = censor (Extend . (:[]))
+
+root :: MonadWriter (BuildTree a) m => a -> m ()
+root x = tell (Root x [])
+
+instance Monoid (BuildTree a) where
+  mempty = Empty
+  mappend Empty y = y
+  mappend x Empty = x
+  mappend (Extend xs) (Extend ys) = Extend (xs ++ ys)
+  mappend (Root x xs) (Extend ys) = Root x (xs ++ ys)
+  mappend (Extend xs) (Root y ys) = Root y (xs ++ ys)
+  mappend (Root x xs) (Root y ys) = Extend [Root x xs, Root y ys]
+
+showTree :: Show a => Int -> BuildTree a -> String
+showTree i = \case 
+  Empty -> "Empty"
+  Root x [] -> show x
+  Root x xs -> show x ++ "\n" ++ (intercalate "\n" $ map ((indent ++) . showTree (i+1)) xs)
+  Extend xs -> "<no-root>\n" ++ (intercalate "\n" $ map ((indent ++) . showTree (i+1)) xs)
+  where
+    indent = replicate (i * 2) ' ' ++ "`-- "
+
+instance Show a => Show (BuildTree a) where
+  show = showTree 0
+
+testTree :: Int -> Writer (BuildTree Int) ()
+testTree 0 = root 0
+testTree i = do
+  root i
+  _ <- branch $ testTree (i-1)
+  branch $ testTree' (i-1)
+
+testTree' :: Int -> Writer (BuildTree Int) ()
+testTree' i 
+  | i <= 0 = root i
+  | otherwise = do
+    root (negate i)
+    _ <- branch $ testTree (i-1)
+    branch $ testTree' (i-1)
+
+type TypingState   = Integer -- |Just an integer for generating names
+type TypingRead a  = TyCtx a
+type TypingWrite a = BuildTree String
 
 data TyExcept a
   = Type a Poly `CannotSubtype` Type a Poly
@@ -85,16 +136,31 @@ cannotSplit el ctx = tyExcept $ CannotSplit el ctx
 otherErr :: String -> TypingM a r
 otherErr s = tyExcept $ Other s
 
--- the typing monad
-newtype TypingM a r = TypingM { unTypingM :: RWST (TypingRead a) () TypingState (Except (TyExcept a)) r }
+newtype TypingM a r = Typ { unTypingM :: ExceptT (TyExcept a) (RWS (TypingRead a) (TypingWrite a) TypingState) r }
   deriving ( Functor
            , Applicative
            , Monad
            , MonadError (TyExcept a)
            , MonadState TypingState
-           , MonadWriter ()
+           , MonadWriter (TypingWrite a)
            , MonadReader (TypingRead a)
            )
+
+type TypingMRes a r = (Either (TyExcept a) r, TypingState, TypingWrite a)
+
+runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
+runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
+
+-- -- the typing monad
+-- newtype TypingM a r = TypingM { unTypingM :: RWST (TypingRead a) (TypingWrite a) TypingState (Except (TyExcept a)) r }
+--   deriving ( Functor
+--            , Applicative
+--            , Monad
+--            , MonadError (TyExcept a)
+--            , MonadState TypingState
+--            , MonadWriter (TypingWrite a)
+--            , MonadReader (TypingRead a)
+--            )
 
 getCtx :: TypingM a (TyCtx a)
 getCtx = ask
@@ -105,74 +171,19 @@ freshName = do
   modify (+ 1)
   pure $ MName i
 
-runTypingM0 :: TypingM a r -> TypingRead a -> Either (TyExcept a) (r, TypingState, ())
-runTypingM0 tm r = runExcept $ runRWST (unTypingM tm) r initState where
+runTypingM0 :: TypingM a r -> TypingRead a -> TypingMRes a r
+runTypingM0 tm r = runTypingM tm r initState where
   initState = 0
 
-runTypingM :: TypingM a r -> TypingRead a -> TypingState -> Either (TyExcept a) (r, TypingState, ())
-runTypingM tm r s = runExcept $ runRWST (unTypingM tm) r s
+-- runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
+-- runTypingM tm r s = runExcept $ runRWST (unTypingM tm) r s
 
-runSubtypeOf0 :: Eq a => Type a 'Poly -> Type a 'Poly -> Either (TyExcept a) (TyCtx a, TypingState, ())
-runSubtypeOf0 t1 t2 = runTypingM (t1 `subtypeOf` t2) emptyCtx 0
+runSubtypeOf0 :: Eq a => Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
+runSubtypeOf0 t1 t2 = runSubtypeOf emptyCtx t1 t2
 
-runSubtypeOf :: Eq a => TyCtx a -> Type a 'Poly -> Type a 'Poly -> Either (TyExcept a) (TyCtx a, TypingState, ())
+runSubtypeOf :: Eq a => TyCtx a -> Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runSubtypeOf ctx t1 t2 = runTypingM (t1 `subtypeOf` t2) ctx 0
 
--- Under input context Γ, type A is a subtype of B, with output context ∆
--- TODO: Consider how to avoid name capture (alpha renaming probably)
-subtypeOf :: Eq a => Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
-subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
-  -- <:Var
-  subtypeOf' (TFree x) (TFree x')
-    | x == x'    = getCtx
-    | otherwise = cannotSubtype ty1 ty2
-  
-  -- <:Exvar
-  subtypeOf' (TExists a) (TExists a')
-    | a == a' = do 
-      ctx <- getCtx
-      if Exists a `isInContext` ctx
-        then pure ctx
-        else nameNotFound a
-    | otherwise = cannotSubtype ty1 ty2
-
-  -- <:->
-  subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
-    ctx' <- b1 `subtypeOf` a1
-    a2' <- substCtx ctx' a2
-    b2' <- substCtx ctx' b2
-    local (const ctx') $ a2' `subtypeOf` b2'
-
-  -- <:\/L
-  subtypeOf' (Forall nm (A at1 t1)) t2 = do
-    let ty1' = subst (A at1 $ TExists nm) nm (A at1 t1)
-    ctx' <- local (\g -> g <+ marker nm <+ exists nm) $ ty1' `subtypeOf` ty2
-    pure $ dropTil (marker nm) ctx'
-
-  -- <:\/R
-  subtypeOf' t1 (Forall a (A _ t2)) = do
-    ctx' <- local (\g -> g <+ uni a) $ t1 `subtypeOf'` t2
-    pure $ dropTil (uni a) ctx'
-  
-  -- <:InstantiateL
-  subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = occursIn ahat ty2
-    | otherwise = do 
-      ctx <- getCtx
-      if (Exists ahat) `isInContext` ctx 
-        then ahat `instL` ty2
-        else nameNotFound ahat
-
-  -- <:InstantiateR
-  subtypeOf' _ (TExists ahat)
-    | ahat `inFreeVars` ty1 = occursIn ahat ty1
-    | otherwise = do 
-      ctx <- getCtx
-      if (Exists ahat) `isInContext` ctx 
-        then ty1 `instR` ahat
-        else nameNotFound ahat
-  
-  subtypeOf' t1 t2 = cannotSubtype ty1 ty2
 
 substCtx :: Eq a => TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
 substCtx ctx (A a ty) = A a <$> 
@@ -219,18 +230,19 @@ splitCtx el ctx =
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
   case inTy of
-    TFree y | y == forY  -> x
-            | otherwise -> A a $ TFree y
+    TFree y     | y == forY  -> x
+                | otherwise -> A a $ TFree y
 
-    TExists _x -> error $ "Should never encounter existentials in subst"
+    TExists y   | y == forY  -> x
+                | otherwise -> A a $ TExists y
+
+    Forall y t  | y == forY  -> A a $ Forall y t 
+                | otherwise -> A a $ Forall y (subst x forY t)
 
     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
     
     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
     
-    -- TODO: Fix capture problems here
-    Forall x' t | x' == forY -> A a $ Forall x' t 
-                | otherwise -> A a $ Forall x' (subst x forY t)
 
 -- | Check if an elem alpha comes before beta in a context
 before' :: Eq a => CtxElem a -> CtxElem a -> TyCtx a -> Bool
@@ -275,29 +287,35 @@ insertAt' at insertee into = do
 instL :: Eq a => Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat (asMonotype -> Just mty) = do
+  root $ "InstLSolve"
   (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
   pure (gam <+ ahat := mty <++ gam')
 instL ahat (A a ty) = 
   case ty of
     -- InstLReach
-    TExists bhat -> Exists ahat `before` Exists bhat >>= \case
-      True -> assign bhat (A a $ TExists ahat)
-      False -> otherErr $ "InstLReach"
+    TExists bhat -> do
+      root $ "InstLReach"
+      Exists ahat `before` Exists bhat >>= \case
+        True -> assign bhat (A a $ TExists ahat)
+        False -> otherErr $ "InstLReach"
 
     -- InstLArr
     t1 :->: t2 -> do
+      root $ "InstLArr"
       af1 <- freshName
       af2 <- freshName
       let ahat1 = exists af1
       let ahat2 = exists af2
       let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ t1 `instR` af1
+      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (t1 `instR` af1)
       substed <- substCtx omega t2
-      local (const omega) $ af2 `instL` substed
+      r <- local (const omega) $ branch (af2 `instL` substed)
+      pure r
     
     -- InstLAllR
     Forall beta bty -> do
-      ctx' <- local (\g -> g <+ uni beta) $ ahat `instL` bty
+      root $ "InstLAllR"
+      ctx' <- local (\g -> g <+ uni beta) $ branch (ahat `instL` bty)
       (delta, _, delta') <- splitCtx (uni beta) ctx'
       pure delta
     
@@ -306,31 +324,105 @@ instL ahat (A a ty) =
 instR :: Eq a => Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
 instR (asMonotype -> Just mty) ahat = do
+  root $ "InstRSolve"
   (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
   pure (gam <+ ahat := mty <++ gam')
 instR (A a ty) ahat = 
   case ty of
     -- InstRReach
-    TExists bhat -> Exists ahat `before` Exists bhat >>= \case
-      True -> assign bhat (A a $ TExists ahat)
-      False -> otherErr $ "InstLReach"
+    TExists bhat -> do 
+      root $ "InstRReach"
+      Exists ahat `before` Exists bhat >>= \case
+        True -> assign bhat (A a $ TExists ahat)
+        False -> otherErr $ "InstRReach"
 
     -- InstRArr
     t1 :->: t2 -> do
+      root $ "InstRArr"
       af1 <- freshName
       af2 <- freshName
       let ahat1 = exists af1
       let ahat2 = exists af2
       let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ af1 `instL` t1
+      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (af1 `instL` t1)
       substed <- substCtx omega t2
-      local (const omega) $ substed `instR` af2
+      r <- local (const omega) $ branch (substed `instR` af2)
+      pure r
     
-    -- InstRAllR
+    -- InstRAllL
     Forall beta bty -> do
+      root $ "InstRAllL"
       let substedB = subst (A a $ TExists beta) beta bty
-      ctx' <- local (\g -> g <+ marker beta <+ exists beta) $ substedB `instR` ahat
+      ctx' <- local (\g -> g <+ marker beta <+ exists beta) $ branch (substedB `instR` ahat)
       (delta, _, delta') <- splitCtx (marker beta) ctx'
       pure delta
     
     _ -> otherErr $ show (unannT' ty) ++ " not expected in instR"
+
+-- Under input context Γ, type A is a subtype of B, with output context ∆
+-- A is a subtype of B iff A is more polymorphic than B
+-- TODO: Consider how to avoid name capture (alpha renaming probably)
+subtypeOf :: Eq a => Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
+subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
+  -- <:Var
+  subtypeOf' (TFree x) (TFree x')
+        | x == x'    = root "<:Var" *> getCtx
+        | otherwise = tell (Extend [Root "<:Var" []]) *> cannotSubtype ty1 ty2
+  
+  -- <:Exvar
+  subtypeOf' (TExists a) (TExists a') =
+    root "<:Exvar" *> case () of
+      _ | a == a' -> do 
+          ctx <- getCtx
+          if Exists a `isInContext` ctx
+            then pure ctx
+            else nameNotFound a
+        | otherwise -> cannotSubtype ty1 ty2
+
+  -- <:->
+  subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
+    root "<:->"
+    ctx' <- branch (b1 `subtypeOf` a1)
+    a2' <- substCtx ctx' a2
+    b2' <- substCtx ctx' b2
+    r <- local (const ctx') $ branch (a2' `subtypeOf` b2')
+    pure r
+
+  -- <:\/R
+  subtypeOf' t1 (Forall a (A _ t2)) = do
+    root "<:\\/R"
+    ctx' <- local (\g -> g <+ uni a) $ branch (t1 `subtypeOf'` t2)
+    pure $ dropTil (uni a) ctx'
+
+  -- <:\/L
+  subtypeOf' (Forall nm (A at1 t1)) t2 = do
+    root "<:\\/L"
+    let A _ t1' = subst (A at1 $ TExists nm) nm (A at1 t1)
+    ctx' <- local (\g -> g <+ marker nm <+ exists nm) $ branch (t1' `subtypeOf'` t2)
+    pure $ dropTil (marker nm) ctx'
+  
+  -- <:InstantiateL
+  subtypeOf' (TExists ahat) _
+    | ahat `inFreeVars` ty2 = root "InstantiateL" *> occursIn ahat ty2
+    | otherwise = do 
+      ctx <- getCtx
+      if (Exists ahat) `isInContext` ctx 
+        then do 
+          root "InstantiateL"
+          r <- branch (ahat `instL` ty2)
+          pure r
+        else nameNotFound ahat
+
+  -- <:InstantiateR
+  subtypeOf' _ (TExists ahat)
+    | ahat `inFreeVars` ty1 = root "InstantiateR" *> occursIn ahat ty1
+    | otherwise = do 
+      ctx <- getCtx
+      if (Exists ahat) `isInContext` ctx 
+        then do 
+          root "InstantiateR"
+          r <- branch (ty1 `instR` ahat)
+          pure r
+        else nameNotFound ahat
+  
+  subtypeOf' t1 t2 = cannotSubtype ty1 ty2

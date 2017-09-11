@@ -116,30 +116,34 @@ polySpec = do
       insertAt' (exists "a") put ctx `shouldBe` Just (nil <+ marker "m" <++ put <+ uni "a")
 
   describe "subtypeOf" $ do
-    let shouldYield comp ctx = 
-          case comp of
-            Right (ctx', _, _) -> ctx' `shouldBe` ctx
-            Left err           -> failure (show err)
+    let shouldYield (res, st, tree) ctx = 
+          case res of
+            Right ctx' -> ctx' `shouldBe` ctx
+            Left err   -> failure (show err ++ ".\nProgres:\n" ++ show tree)
+    let shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
 
     it "is reflexive" $ do
       runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
       runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
       do let ctx = nil <+ exists "a"
          runSubtypeOf ctx (E.exists "a") (E.exists "a") `shouldYield` ctx
-         runSubtypeOf nil (E.exists "a") (E.exists "a") `shouldSatisfy` isLeft
+         shouldFail $ runSubtypeOf nil (E.exists "a") (E.exists "a") 
       do let t  = "Nat" @->: "Nat"
          let t' = "Nat" @->: "Bool"
          runSubtypeOf nil t t `shouldYield` nil
-         runSubtypeOf nil t t' `shouldSatisfy` isLeft
+         shouldFail $ runSubtypeOf nil t t' 
       do let t  = E.forAll ["a"] "Bool"
          let t' = E.forAll ["a"] "Nat"
          let t'' = E.forAll ["b"] "Bool"
          runSubtypeOf nil t t `shouldYield` nil
-         runSubtypeOf nil t t' `shouldSatisfy` isLeft
+         shouldFail $ runSubtypeOf nil t t' 
          runSubtypeOf nil t t'' `shouldYield` nil
     it "foralls are alpha equivalent" $ do
-      do let t  = E.forAll ["a"] "a"
-         let t' = E.forAll ["b"] "b"
+      -- do let t  = E.forAll ["a"] "a"
+      --    let t' = E.forAll ["b"] "b"
+      --    runSubtypeOf nil t t' `shouldYield` nil
+      do let t  = E.forAll ["a", "b"] ("a" @->: "b")
+         let t' = E.forAll ["x", "y"] ("x" @->: "y")
          runSubtypeOf nil t t' `shouldYield` nil
 
 
