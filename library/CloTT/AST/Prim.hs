@@ -10,4 +10,9 @@ data Prim
   = Unit
   | Bool (Pr.Bool)
   | Nat (Pr.Integer)
-  deriving (Show, Eq, Data, Typeable)
+  deriving (Eq, Data, Typeable)
+
+instance Show Prim where
+  show Unit = "()"
+  show (Bool x) = show x
+  show (Nat x)  = show x

@@ -28,6 +28,7 @@ import qualified Data.Set as S
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
 import qualified CloTT.AST.Prim as P
+import Data.Text.Prettyprint.Doc
 
 type Type a s = Annotated a (Type' a s)
 
@@ -40,10 +41,41 @@ data Type' :: * -> TySort -> * where
   (:->:)  :: Type a s    -> Type a s    -> Type' a s
   Forall :: Name        -> Type a Poly -> Type' a Poly
 
-deriving instance Show a     => Show (Type' a s)
 deriving instance Eq a       => Eq (Type' a s)
 deriving instance Data a     => Data (Type' a Poly)
 deriving instance Typeable a => Typeable (Type' a Poly)
+
+prettyT' :: Bool -> Type' a s -> Doc ann
+prettyT' pars = \case 
+  TFree n    -> fromString . show $ n
+  TExists n  -> "∃" <> fromString (show n)
+  TApp x y   -> parensIf $ prettyT False x <+> prettyT True y
+  x :->: y    -> parensIf $ prettyT True x  <+> "->" <+> prettyT False y
+
+  Forall n t -> 
+    let (ns, t') = collect t
+        bound = hsep $ map (fromString . show) (n:ns)
+    in  parensIf $ "∀" <> bound <> dot <+> prettyT False t'
+  where
+    collect :: Type a s -> ([Name], Type a s)
+    collect (A _ (Forall n t)) = 
+      let (ns, t') = collect t
+      in  (n:ns, t')
+    collect t                  = ([], t)
+
+    parensIf = if pars then parens else id
+
+prettyT :: Bool -> Type a s -> Doc ann
+prettyT n (A _ t) = prettyT' n t
+
+instance Pretty (Type' a s) where
+  pretty = prettyT' False
+
+instance Pretty (Type a s) where
+  pretty (A _ t) = prettyT' False t
+
+instance Show (Type' a s) where
+  show = show . pretty
   
 instance IsString (Type () s) where
   fromString = A () . TFree . UName
@@ -102,10 +134,42 @@ data Expr' a
   | Case (Expr a) [(Pat a, Expr a)]
   | Prim P.Prim
  
-deriving instance Show a     => Show (Expr' a)
 deriving instance Eq a       => Eq (Expr' a)
 deriving instance Data a     => Data (Expr' a)
 deriving instance Typeable a => Typeable (Expr' a)
+-- deriving instance Show a     => Show (Expr' a)
+
+prettyE' :: Bool -> Expr' a -> Doc ann
+prettyE' pars = \case 
+  Var nm -> pretty nm
+  Ann e t -> parensIf $ "the" <+> parens (pretty t) <+> prettyE False e
+  App e1 e2 -> parensIf $ prettyE False e1 <+> prettyE True e2
+
+  Lam nm mty e -> 
+    let tyann = maybe "" (\t -> space <> ":" <+> pretty t) mty
+    in  parensIf $ "λ" <> pretty nm <> tyann <+> "->" <+> prettyE False e
+
+  Tuple e1 e2 -> parens (prettyE False e1 <> comma <+> prettyE False e2)
+
+  Case e clauses ->
+    "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
+
+  Prim p -> fromString . show $ p
+  where
+    prettyC (p, e) = "|" <+> pretty p <+> "->" <+> pretty e
+    parensIf = if pars then parens else id
+
+prettyE :: Bool -> Expr a -> Doc ann
+prettyE n (A _ t) = prettyE' n t
+
+instance Pretty (Expr' a) where
+  pretty = prettyE' False
+
+instance Pretty (Expr a) where
+  pretty (A _ t) = prettyE' False t
+
+instance Show (Expr' a) where
+  show = show . pretty
 
 infixr 2 :->*:
 
@@ -114,7 +178,26 @@ type Pat a = Annotated a (Pat' a)
 data Pat' a  
   = Bind Name 
   | Match Name [Pat a]
-  deriving (Show, Eq, Data, Typeable)
+  deriving (Eq, Data, Typeable)
+
+prettyP :: Bool -> Pat a -> Doc ann
+prettyP n (A _ t) = prettyP' n t
+
+prettyP' :: Bool -> Pat' a -> Doc ann
+prettyP' pars = \case
+  Bind nm -> pretty nm
+  Match nm pats -> parensIf $ pretty nm <> hsep (map (prettyP False) pats)
+  where
+    parensIf = if pars then parens else id
+
+instance Pretty (Pat' a) where
+  pretty = prettyP' False
+
+instance Pretty (Pat a) where
+  pretty (A _ t) = prettyP' False t
+
+instance Show (Pat' a) where
+  show = show . pretty
 
 data Kind
   = Star
@@ -149,6 +232,9 @@ data Prog a = Prog [Decl a]
 
 var :: String -> Expr ()
 var = A () . Var . UName
+
+free :: Name -> Type () Poly
+free nm = A () $ TFree nm
 
 unit :: Expr ()
 unit = A () . Prim $ P.Unit

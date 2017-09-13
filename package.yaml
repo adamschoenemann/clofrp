@@ -64,3 +64,5 @@ version: '0.0.0'
 ghc-options: -Wall -Wno-unticked-promoted-constructors -fno-warn-unused-matches -fno-warn-unused-imports
 dependencies:
   - mtl
+  - prettyprinter
+  - text
