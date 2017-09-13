@@ -18,6 +18,7 @@ import Control.Monad.State
 import Data.List (break, intercalate, find)
 import Control.Monad (foldM)
 import Debug.Trace
+import CloTT.Pretty
 
 data CtxElem a
   = Uni Name -- ^ Universal
@@ -82,59 +83,28 @@ findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
   fn (nm' := ty) | nm == nm' = pure ty
   fn _                      = Nothing
 
-data BuildTree a
-  = Empty
-  | Root a [BuildTree a]
-  | Extend [BuildTree a]
+branch :: TypingM a r -> TypingM a r
+branch comp = do
+  i <- gets level
+  modify $ \s -> s { level = i + 1 }
+  r <- comp
+  modify $ \s -> s { level = i }
+  pure r
 
-branch :: MonadWriter (BuildTree a) m => m r -> m r
-branch = censor (Extend . (:[]))
+root :: String -> TypingM a ()
+root x = gets level >>= \l -> tell [(l,x)]
 
-root :: MonadWriter (BuildTree a) m => a -> m ()
-root x = tell (Root x [])
+data TypingState   = 
+  TS { names :: Integer -- |Just an integer for generating names
+     , level :: Integer
+     }
 
-extend :: MonadWriter (BuildTree a) m => a -> m ()
-extend x = tell (Extend [Root x []])
-
-instance Monoid (BuildTree a) where
-  mempty = Empty
-  mappend Empty y = y
-  mappend x Empty = x
-  mappend (Extend xs) (Extend ys) = Extend (xs ++ ys)
-  mappend (Root x xs) (Extend ys) = Root x (xs ++ ys)
-  mappend (Extend xs) (Root y ys) = Root y (xs ++ ys)
-  mappend (Root x xs) (Root y ys) = Extend [Root x xs, Root y ys]
-
-showTree :: Show a => Int -> BuildTree a -> String
-showTree i = \case 
-  Empty -> "Empty"
-  Root x [] -> show x
-  Root x xs -> show x ++ "\n" ++ (intercalate "\n" $ map ((indent ++) . showTree (i+1)) xs)
-  Extend xs -> "<no-root>\n" ++ (intercalate "\n" $ map ((indent ++) . showTree (i+1)) xs)
-  where
-    indent = replicate (i * 2) ' ' ++ "`-- "
-
-instance Show a => Show (BuildTree a) where
-  show = showTree 0
-
-testTree :: Int -> Writer (BuildTree Int) ()
-testTree 0 = root 0
-testTree i = do
-  root i
-  _ <- branch $ testTree (i-1)
-  branch $ testTree' (i-1)
-
-testTree' :: Int -> Writer (BuildTree Int) ()
-testTree' i 
-  | i <= 0 = root i
-  | otherwise = do
-    root (negate i)
-    _ <- branch $ testTree (i-1)
-    branch $ testTree' (i-1)
-
-type TypingState   = Integer -- |Just an integer for generating names
 type TypingRead a  = TyCtx a
-type TypingWrite a = BuildTree String
+type TypingWrite a = [(Integer, String)]
+
+showTree :: TypingWrite a -> String
+showTree [] = ""
+showTree ((i,s):xs) = replicate (fromIntegral i) ' ' ++ s ++ "\n" ++ showTree xs
 
 data TyExcept a
   = Type a Poly `CannotSubtype` Type a Poly
@@ -193,13 +163,15 @@ getCtx = ask
 
 freshName :: TypingM a Name
 freshName = do 
-  i <- get
-  modify (+ 1)
+  i <- gets names
+  modify $ \s -> s {names = names s + 1}
   pure $ MName i
 
+initState :: TypingState
+initState = TS 0 0
+
 runTypingM0 :: TypingM a r -> TypingRead a -> TypingMRes a r
-runTypingM0 tm r = runTypingM tm r initState where
-  initState = 0
+runTypingM0 tm r = runTypingM tm r initState
 
 -- runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
 -- runTypingM tm r s = runExcept $ runRWST (unTypingM tm) r s
@@ -208,7 +180,7 @@ runSubtypeOf0 :: Eq a => Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runSubtypeOf0 t1 t2 = runSubtypeOf emptyCtx t1 t2
 
 runSubtypeOf :: Eq a => TyCtx a -> Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
-runSubtypeOf ctx t1 t2 = runTypingM (t1 `subtypeOf` t2) ctx 0
+runSubtypeOf ctx t1 t2 = runTypingM (t1 `subtypeOf` t2) ctx initState
 
 
 substCtx :: Eq a => TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
@@ -395,8 +367,8 @@ subtypeOf :: Eq a => Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
   -- <:Var
   subtypeOf' (TFree x) (TFree x')
-        | x == x'    = root "<:Var" *> getCtx
-        | otherwise = extend "<:Var" *> cannotSubtype ty1 ty2
+        | x == x'    = root (pps ty1 ++ " <: " ++ pps ty2 ++ " [<:Var]") *> getCtx
+        | otherwise = root (pps ty1 ++ " <: " ++ pps ty2 ++ " [<:Var]") *> cannotSubtype ty1 ty2
   
   -- <:Exvar
   subtypeOf' (TExists a) (TExists a') =

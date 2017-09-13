@@ -16,7 +16,7 @@ import           CloTT.TestUtils
 
 -- import Fixtures
 
-
+import Control.Monad.State.Strict
 
 polySpec :: Spec
 polySpec = do
@@ -108,18 +108,18 @@ polySpec = do
   describe "insertAt'" $ do
     it "fails with context without elem" $ do
       let ctx = nil <+ uni "a" <+ exists "b"
-      let put = nil <+ uni "put"
-      insertAt' (exists "a") put ctx `shouldBe` Nothing
+      let p = nil <+ uni "p"
+      insertAt' (exists "a") p ctx `shouldBe` Nothing
     it "succeds in context with elem" $ do
       let ctx = nil <+ marker "m" <+ exists "a" <+ uni "a"
-      let put = nil <+ uni "put"
-      insertAt' (exists "a") put ctx `shouldBe` Just (nil <+ marker "m" <++ put <+ uni "a")
+      let p = nil <+ uni "p"
+      insertAt' (exists "a") p ctx `shouldBe` Just (nil <+ marker "m" <++ p <+ uni "a")
 
   describe "subtypeOf" $ do
     let shouldYield (res, st, tree) ctx = 
           case res of
             Right ctx' -> ctx' `shouldBe` ctx
-            Left err   -> failure $ show err ++ "\nProgress:\n" ++ show tree
+            Left err   -> failure $ show err ++ "\nProgress:\n" ++ showTree tree
     let shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
 
     it "is reflexive" $ do
@@ -143,7 +143,7 @@ polySpec = do
       do let t  = E.forAll ["a"] "a"
          let t' = E.forAll ["b"] "b"
          runSubtypeOf nil t t' `shouldYield` nil
-      do let t  = E.forAll ["a", "b"] ("a" @->: "b")
+      do let t  = E.forAll ["a", "b"] ("a" @->: "boo")
          let t' = E.forAll ["x", "y"] ("x" @->: "y")
          runSubtypeOf nil t t' `shouldYield` nil
       do let t  = E.forAll ["a", "b"] ("a" @->: "b" @->: "a")
