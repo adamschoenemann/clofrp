@@ -15,7 +15,7 @@ import Control.Monad.RWS.Strict
 import Control.Monad.Except
 import Control.Monad.Writer
 import Control.Monad.State
-import Data.List (break, intercalate)
+import Data.List (break, intercalate, find)
 import Control.Monad (foldM)
 import Debug.Trace
 
@@ -25,7 +25,15 @@ data CtxElem a
   | Name `HasType` Type a Poly -- ^ x : A
   | Name := Type a Mono -- ^ a = t
   | Marker Name -- ^ |>a
-  deriving (Show, Eq)
+  deriving Eq
+
+instance Show (CtxElem a) where
+  show = \case
+    Uni nm          -> show nm
+    Exists nm       -> "^" ++ show nm
+    nm `HasType` ty -> show nm ++ " : " ++ show (unannT ty)
+    nm := ty        -> show nm ++ " = " ++ show (unannT ty)
+    Marker nm       -> "▷" ++ show nm
 
 exists :: Name -> CtxElem a
 exists = Exists
@@ -37,7 +45,10 @@ uni :: Name -> CtxElem a
 uni = Uni
 
 newtype TyCtx a = Gamma { unGamma :: [CtxElem a] }
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show (TyCtx a) where
+  show (Gamma xs) = show $ reverse xs
 
 emptyCtx :: TyCtx a
 emptyCtx = Gamma []
@@ -59,6 +70,18 @@ Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 isInContext :: Eq a => CtxElem a -> TyCtx a -> Bool
 isInContext el (Gamma xs) = el `elem` xs
 
+findMap :: (a -> Maybe b) -> [a] -> Maybe b
+findMap fn = foldr fun Nothing where
+  fun x acc = 
+    case fn x of
+      Just x' -> Just x'
+      Nothing -> acc
+
+findAssigned :: Name -> TyCtx a -> Maybe (Type a Mono)
+findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
+  fn (nm' := ty) | nm == nm' = pure ty
+  fn _                      = Nothing
+
 data BuildTree a
   = Empty
   | Root a [BuildTree a]
@@ -69,6 +92,9 @@ branch = censor (Extend . (:[]))
 
 root :: MonadWriter (BuildTree a) m => a -> m ()
 root x = tell (Root x [])
+
+extend :: MonadWriter (BuildTree a) m => a -> m ()
+extend x = tell (Extend [Root x []])
 
 instance Monoid (BuildTree a) where
   mempty = Empty
@@ -186,26 +212,29 @@ runSubtypeOf ctx t1 t2 = runTypingM (t1 `subtypeOf` t2) ctx 0
 
 
 substCtx :: Eq a => TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
-substCtx ctx (A a ty) = A a <$> 
+substCtx ctx (A a ty) = 
   case ty of
-    TFree x -> pure $ TFree x
-    TExists x 
-      | Exists x `isInContext` ctx -> pure $ TFree x
-      | otherwise                  -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
+    TFree x -> pure $ A a $ TFree x
+    TExists x -> 
+      case findAssigned x ctx of
+        Just tau -> pure $ asPolytype tau
+        Nothing
+          | Exists x `isInContext` ctx -> pure $ A a $ TExists x
+          | otherwise                  -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
 
     t1 `TApp` t2 -> do
       t1' <- substCtx ctx t1
       t2' <- substCtx ctx t2
-      pure $ t1 `TApp` t2
+      pure $ A a $ t1 `TApp` t2
     
     t1 :->: t2 -> do
       t1' <- substCtx ctx t1
       t2' <- substCtx ctx t2
-      pure $ t1 :->: t2
+      pure $ A a $ t1 :->: t2
     
     Forall x t -> do
       t' <- substCtx ctx t
-      pure $ Forall x t'
+      pure $ A a $ Forall x t'
 
 -- | drop until an element `el` is encountered in the context. Also drops `el`
 dropTil :: Eq a => CtxElem a -> TyCtx a -> TyCtx a
@@ -367,7 +396,7 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
   -- <:Var
   subtypeOf' (TFree x) (TFree x')
         | x == x'    = root "<:Var" *> getCtx
-        | otherwise = tell (Extend [Root "<:Var" []]) *> cannotSubtype ty1 ty2
+        | otherwise = extend "<:Var" *> cannotSubtype ty1 ty2
   
   -- <:Exvar
   subtypeOf' (TExists a) (TExists a') =
@@ -381,7 +410,7 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
 
   -- <:->
   subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
-    root "<:->"
+    root $ "<:->"
     ctx' <- branch (b1 `subtypeOf` a1)
     a2' <- substCtx ctx' a2
     b2' <- substCtx ctx' b2

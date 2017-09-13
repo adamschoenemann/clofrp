@@ -119,7 +119,7 @@ polySpec = do
     let shouldYield (res, st, tree) ctx = 
           case res of
             Right ctx' -> ctx' `shouldBe` ctx
-            Left err   -> failure (show err ++ ".\nProgres:\n" ++ show tree)
+            Left err   -> failure $ show err ++ "\nProgress:\n" ++ show tree
     let shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
 
     it "is reflexive" $ do
@@ -138,13 +138,31 @@ polySpec = do
          runSubtypeOf nil t t `shouldYield` nil
          shouldFail $ runSubtypeOf nil t t' 
          runSubtypeOf nil t t'' `shouldYield` nil
+
     it "foralls are alpha equivalent" $ do
-      -- do let t  = E.forAll ["a"] "a"
-      --    let t' = E.forAll ["b"] "b"
-      --    runSubtypeOf nil t t' `shouldYield` nil
+      do let t  = E.forAll ["a"] "a"
+         let t' = E.forAll ["b"] "b"
+         runSubtypeOf nil t t' `shouldYield` nil
       do let t  = E.forAll ["a", "b"] ("a" @->: "b")
          let t' = E.forAll ["x", "y"] ("x" @->: "y")
          runSubtypeOf nil t t' `shouldYield` nil
+      do let t  = E.forAll ["a", "b"] ("a" @->: "b" @->: "a")
+         let t' = E.forAll ["x", "y"] ("x" @->: "y" @->: "x")
+         runSubtypeOf nil t t' `shouldYield` nil
+
+    it "universal variables are subtypes of everything" $ do
+      do let t  = E.forAll ["a"] "a"
+         let t' = ("x" @->: "y" @->: "x")
+         runSubtypeOf nil t t' `shouldYield` nil
+      do let t  = E.forAll ["a"] "a"
+         let t' = "Nat"
+         runSubtypeOf nil t t' `shouldYield` nil
+
+    it "works with example from paper (1 -> forall alpha. alpha <: 1 -> 1)" $ do
+      do let t  = "Unit" @->: E.forAll ["a"] "a"
+         let t' = "Unit" @->: "Unit"
+         runSubtypeOf nil t t' `shouldYield` nil
+
 
 
 
