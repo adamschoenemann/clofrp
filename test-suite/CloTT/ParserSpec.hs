@@ -19,71 +19,71 @@ parserSpec :: Spec
 parserSpec = do
   it "parses natural numbers" $ do
     do let Right e = parse P.expr "" "10"
-       E.unann e `shouldBe` E.nat 10
+       E.unannE e `shouldBe` E.nat 10
     do let r = parse P.expr "" "-1"
        r `shouldSatisfy` isLeft
   
   it "parses booleans (true)" $ do
-    let Right e = E.unann <$> parse P.expr "" "True"
+    let Right e = E.unannE <$> parse P.expr "" "True"
     e `shouldBe` E.true
   
   it "parses booleans (false)" $ do
-    let Right e = E.unann <$> parse P.expr "" "False"
+    let Right e = E.unannE <$> parse P.expr "" "False"
     e `shouldBe` E.false
   
   it "parses tuples" $ do
-    do let Right e = E.unann <$> parse P.expr "" "(10, False)"
+    do let Right e = E.unannE <$> parse P.expr "" "(10, False)"
        e `shouldBe` E.nat 10 @* E.false
-    do let Right e = E.unann <$> parse P.expr "" "(True, 5)"
+    do let Right e = E.unannE <$> parse P.expr "" "(True, 5)"
        e `shouldBe` E.true @* E.nat 5
   
   it "parses vars" $ do
-    do let Right e = E.unann <$> parse P.expr "" "x"
+    do let Right e = E.unannE <$> parse P.expr "" "x"
        e `shouldBe` "x"
-    do let Right e = E.unann <$> parse P.expr "" "truefalse"
+    do let Right e = E.unannE <$> parse P.expr "" "truefalse"
        e `shouldBe` "truefalse"
   
   it "parses lambdas" $ do
-    do let Right e = E.unann <$> parse P.expr "" "\\x -> x"
+    do let Right e = E.unannE <$> parse P.expr "" "\\x -> x"
        e `shouldBe` "x" @-> "x"
-    do let Right e = E.unann <$> parse P.expr "" "\\x -> (x, True)"
+    do let Right e = E.unannE <$> parse P.expr "" "\\x -> (x, True)"
        e `shouldBe` "x" @-> "x" @* E.true
-    do let Right e = E.unann <$> parse P.expr "" "\\x -> \\y -> x"
+    do let Right e = E.unannE <$> parse P.expr "" "\\x -> \\y -> x"
        e `shouldBe` "x" @-> "y" @-> "x"
-    case E.unann <$> parse P.expr "" "\\(x:Bool) -> \\(y:Int) -> x" of
+    case E.unannE <$> parse P.expr "" "\\(x:Bool) -> \\(y:Int) -> x" of
       Left e -> failure $ show e 
       Right e -> e `shouldBe` ("x", "Bool") @:-> ("y", "Int") @:-> "x"
   
   it "parses application" $ do
-    do let Right e = E.unann <$> parse P.expr "" "e1 e2"
+    do let Right e = E.unannE <$> parse P.expr "" "e1 e2"
        e `shouldBe` "e1" @@ "e2"
-    do let Right e = E.unann <$> parse P.expr "" "e1 e2 e3"
+    do let Right e = E.unannE <$> parse P.expr "" "e1 e2 e3"
        e `shouldBe` ("e1" @@ "e2" @@ "e3")
   
   it "parses annotations" $ do
-    case E.unann <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
+    case E.unannE <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
       Left e -> failure $ show e
       Right e -> e `shouldBe` ("x" @-> E.nat 10) @:: ("Bool" @->: "Int")
-    case E.unann <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
+    case E.unannE <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
       Left e -> failure $ show e
       Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: ("Bool" @->: "Int" @->: "Int")
   
   it "parses case statements" $ do
-    case E.unann <$> parse P.expr "" "case x of | y -> y" of
+    case E.unannE <$> parse P.expr "" "case x of | y -> y" of
       Right e -> e `shouldBe` E.caseof "x" [("y", "y")]
       Left e -> failure $ show e
-    case E.unann <$> parse P.expr "" "case x of | Tuple a b -> 10 | y -> y" of
+    case E.unannE <$> parse P.expr "" "case x of | Tuple a b -> 10 | y -> y" of
       Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" ["a", "b"], E.nat 10), ("y", "y")]
       Left e -> failure $ show e
-    case E.unann <$> parse P.expr "" "case x of | Tuple (Cons x y) b -> 10 | y -> y" of
+    case E.unannE <$> parse P.expr "" "case x of | Tuple (Cons x y) b -> 10 | y -> y" of
       Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" [E.match "Cons" ["x", "y"], "b"], E.nat 10), ("y", "y")]
       Left e -> failure $ show e
-    case E.unann <$> parse P.expr "" "case n of | Z -> n | S n' -> n'" of
+    case E.unannE <$> parse P.expr "" "case n of | Z -> n | S n' -> n'" of
       Right e -> e `shouldBe` E.caseof "n" [(E.match "Z" [], "n"), (E.match "S" ["n'"], "n'")]
       Left e -> failure $ show e
   
   it "parses compound expressions" $ 
-    do let Right e = E.unann <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
+    do let Right e = E.unannE <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
        e `shouldBe` "x" @-> ("y" @-> "x" @@ "y") @* "y" @@ (E.true @* "x")
   
   it "parses simple types" $ do

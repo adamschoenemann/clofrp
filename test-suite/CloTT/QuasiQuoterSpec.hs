@@ -12,7 +12,7 @@ import Fixtures
 quasiSpec :: Spec
 quasiSpec = do
   it "expression quoter works" $ do
-    E.unann expr01 `shouldBe` "x" @-> "y" @-> E.the "Nat" ("x" @@ "y" @@ E.true)
+    E.unannE expr01 `shouldBe` "x" @-> "y" @-> E.the "Nat" ("x" @@ "y" @@ E.true)
   it "decl quoter works" $ do
     E.unannD decl01 `shouldBe`
       E.datad "Tree" (Star :->*: Star) ["a"]

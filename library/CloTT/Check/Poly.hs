@@ -5,20 +5,26 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module CloTT.Check.Poly where
 
 import CloTT.AST.Name
 import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
-import Control.Monad.RWS.Strict
+import Control.Monad.RWS.Strict hiding ((<>))
 import Control.Monad.Except
-import Control.Monad.Writer
 import Control.Monad.State
 import Data.List (break, intercalate, find)
 import Control.Monad (foldM)
 import Debug.Trace
 import CloTT.Pretty
+import Data.Maybe (isJust)
+import Data.String (fromString)
+import Data.Text.Prettyprint.Doc
 
 data CtxElem a
   = Uni Name -- ^ Universal
@@ -28,6 +34,15 @@ data CtxElem a
   | Marker Name -- ^ |>a
   deriving Eq
 
+instance Unann (CtxElem a) (CtxElem ()) where
+  unann el = 
+    case el of
+      Uni nm          -> Uni nm
+      Exists nm       -> Exists nm
+      nm `HasType` ty -> nm `HasType` unann ty
+      nm := ty        -> nm := unann ty
+      Marker nm       -> Marker nm
+
 instance Show (CtxElem a) where
   show = \case
     Uni nm          -> show nm
@@ -35,6 +50,15 @@ instance Show (CtxElem a) where
     nm `HasType` ty -> show nm ++ " : " ++ show (unannT ty)
     nm := ty        -> show nm ++ " = " ++ show (unannT ty)
     Marker nm       -> "▷" ++ show nm
+
+instance Pretty (CtxElem a) where
+  pretty = \case
+    Uni nm          -> pretty nm
+    Exists nm       -> "^" <> pretty nm
+    nm `HasType` ty -> pretty nm <> " : " <> pretty (unann ty)
+    nm := ty        -> pretty nm <> " = " <> pretty (unann ty)
+    Marker nm       -> "▷" <> pretty nm
+
 
 exists :: Name -> CtxElem a
 exists = Exists
@@ -50,6 +74,12 @@ newtype TyCtx a = Gamma { unGamma :: [CtxElem a] }
 
 instance Show (TyCtx a) where
   show (Gamma xs) = show $ reverse xs
+
+instance Pretty (TyCtx a) where
+  pretty (Gamma xs) = hsep $ map pretty $ reverse xs
+
+instance Unann (TyCtx a) (TyCtx ()) where
+  unann (Gamma xs) = Gamma $ map unann xs
 
 emptyCtx :: TyCtx a
 emptyCtx = Gamma []
@@ -68,8 +98,8 @@ Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 -- FIXME: We don't want to depend on (Eq a) since we do not consider the annotations
 -- for equality. But I don't want to override the default Eq, because it is good
 -- for testing purposes
-isInContext :: Eq a => CtxElem a -> TyCtx a -> Bool
-isInContext el (Gamma xs) = el `elem` xs
+isInContext :: CtxElem a -> TyCtx a -> Bool
+isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs
 
 findMap :: (a -> Maybe b) -> [a] -> Maybe b
 findMap fn = foldr fun Nothing where
@@ -82,6 +112,11 @@ findAssigned :: Name -> TyCtx a -> Maybe (Type a Mono)
 findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
   fn (nm' := ty) | nm == nm' = pure ty
   fn _                      = Nothing
+
+hasTypeIn :: Name -> TyCtx a -> Maybe (Type a Poly)
+hasTypeIn nm (Gamma xs) = findMap fn xs where
+  fn (nm' `HasType` ty) | nm == nm' = pure ty
+  fn _                             = Nothing
 
 branch :: TypingM a r -> TypingM a r
 branch comp = do
@@ -101,6 +136,7 @@ data TypingState   =
 
 type TypingRead a  = TyCtx a
 type TypingWrite a = [(Integer, String)]
+type TypingErr a = (TyExcept a, TyCtx a)
 
 showTree :: TypingWrite a -> String
 showTree [] = ""
@@ -111,14 +147,37 @@ data TyExcept a
   | Name `OccursIn` Type a Poly
   | NameNotFound Name
   | CannotSplit (CtxElem a) (TyCtx a)
+  | CannotSynthesize (Expr a)
+  | CannotAppSynthesize (Type a Poly) (Expr a)
   | Other String
   deriving (Show, Eq)
 
+instance Unann (TyExcept a) (TyExcept ()) where
+  unann = \case
+    ty `CannotSubtype` ty'   -> unann ty `CannotSubtype` unann ty'
+    nm `OccursIn` ty         -> nm `OccursIn` unann ty
+    NameNotFound x           -> NameNotFound x
+    CannotSplit el ctx       -> CannotSplit (unann el) (unann ctx)
+    CannotSynthesize e       -> CannotSynthesize (unann e)
+    CannotAppSynthesize ty e -> CannotAppSynthesize (unann ty) (unann e)
+    Other s                  -> Other s
+
+instance Pretty (TyExcept a) where
+  pretty = fromString . show . unann
+
 tyExcept :: TyExcept a -> TypingM a r
-tyExcept = throwError
+tyExcept err = do 
+  ctx <- getCtx 
+  throwError (err, ctx)
 
 cannotSubtype :: Type a Poly -> Type a Poly -> TypingM a r
 cannotSubtype t1 t2 = tyExcept $ CannotSubtype t1 t2
+
+cannotSynthesize :: Expr a -> TypingM a r
+cannotSynthesize e = tyExcept $ CannotSynthesize e
+
+cannotAppSynthesize :: Type a Poly -> Expr a -> TypingM a r
+cannotAppSynthesize t e = tyExcept $ CannotAppSynthesize t e
 
 occursIn :: Name -> Type a Poly -> TypingM a r
 occursIn nm t = tyExcept $ OccursIn nm t
@@ -132,31 +191,20 @@ cannotSplit el ctx = tyExcept $ CannotSplit el ctx
 otherErr :: String -> TypingM a r
 otherErr s = tyExcept $ Other s
 
-newtype TypingM a r = Typ { unTypingM :: ExceptT (TyExcept a) (RWS (TypingRead a) (TypingWrite a) TypingState) r }
+newtype TypingM a r = Typ { unTypingM :: ExceptT (TypingErr a) (RWS (TypingRead a) (TypingWrite a) TypingState) r }
   deriving ( Functor
            , Applicative
            , Monad
-           , MonadError (TyExcept a)
+           , MonadError (TypingErr a)
            , MonadState TypingState
            , MonadWriter (TypingWrite a)
            , MonadReader (TypingRead a)
            )
 
-type TypingMRes a r = (Either (TyExcept a) r, TypingState, TypingWrite a)
+type TypingMRes a r = (Either (TypingErr a) r, TypingState, TypingWrite a)
 
 runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
 runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
-
--- -- the typing monad
--- newtype TypingM a r = TypingM { unTypingM :: RWST (TypingRead a) (TypingWrite a) TypingState (Except (TyExcept a)) r }
---   deriving ( Functor
---            , Applicative
---            , Monad
---            , MonadError (TyExcept a)
---            , MonadState TypingState
---            , MonadWriter (TypingWrite a)
---            , MonadReader (TypingRead a)
---            )
 
 getCtx :: TypingM a (TyCtx a)
 getCtx = ask
@@ -173,17 +221,20 @@ initState = TS 0 0
 runTypingM0 :: TypingM a r -> TypingRead a -> TypingMRes a r
 runTypingM0 tm r = runTypingM tm r initState
 
--- runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
--- runTypingM tm r s = runExcept $ runRWST (unTypingM tm) r s
-
-runSubtypeOf0 :: Eq a => Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
+runSubtypeOf0 :: Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runSubtypeOf0 t1 t2 = runSubtypeOf emptyCtx t1 t2
 
-runSubtypeOf :: Eq a => TyCtx a -> Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
+runSubtypeOf :: TyCtx a -> Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runSubtypeOf ctx t1 t2 = runTypingM (t1 `subtypeOf` t2) ctx initState
 
+runCheck0 :: Expr a -> Type a 'Poly -> TypingMRes a (TyCtx a)
+runCheck0 e t = runCheck emptyCtx e t
 
-substCtx :: Eq a => TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
+runCheck :: TyCtx a -> Expr a -> Type a 'Poly -> TypingMRes a (TyCtx a)
+runCheck ctx e t = runTypingM (check e t) ctx initState
+
+
+substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
 substCtx ctx (A a ty) = 
   case ty of
     TFree x -> pure $ A a $ TFree x
@@ -209,20 +260,20 @@ substCtx ctx (A a ty) =
       pure $ A a $ Forall x t'
 
 -- | drop until an element `el` is encountered in the context. Also drops `el`
-dropTil :: Eq a => CtxElem a -> TyCtx a -> TyCtx a
-dropTil el (Gamma xs) = Gamma $ tl $ dropWhile (/= el) xs where
+dropTil :: CtxElem a -> TyCtx a -> TyCtx a
+dropTil el (Gamma xs) = Gamma $ tl $ dropWhile ((unann el /=) . unann) xs where
   tl []     = []
   tl (_:ys) = ys
 
 -- again, since contexts are "reversed" notationally, this does not yield 
 -- we switch ys and zs in the definition
-splitCtx' :: Eq a => CtxElem a -> TyCtx a -> Maybe (TyCtx a, CtxElem a, TyCtx a)
+splitCtx' :: CtxElem a -> TyCtx a -> Maybe (TyCtx a, CtxElem a, TyCtx a)
 splitCtx' el ctx@(Gamma xs) =
-  case break (== el) xs of
+  case break ((unann el ==) . unann) xs of
     (_, [])    -> Nothing
     (ys, z:zs) -> pure (Gamma zs, z, Gamma ys)
 
-splitCtx :: Eq a => CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
+splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
   case splitCtx' el ctx of
     Nothing -> cannotSplit el ctx
@@ -246,20 +297,20 @@ subst x forY (A a inTy) =
     
 
 -- | Check if an elem alpha comes before beta in a context
-before' :: Eq a => CtxElem a -> CtxElem a -> TyCtx a -> Bool
+before' :: CtxElem a -> CtxElem a -> TyCtx a -> Bool
 before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False where
   comesBefore x y [] xr yr = yr
   comesBefore x y (a:as) False False
-    | x == a     = comesBefore x y as True False
-    | y == a     = False
+    | x =%= a     = comesBefore x y as True False
+    | y =%= a     = False
     | otherwise = comesBefore x y as False False
   comesBefore x y (a:as) True False
-    | x == a = False
-    | y == a = True
+    | x =%= a = False
+    | y =%= a = True
     | otherwise = comesBefore x y as True False
   comesBefore _ _ _ _ _ = False
 
-before :: Eq a => CtxElem a -> CtxElem a -> TypingM a Bool
+before :: CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
 assign' :: Name -> Type a Mono -> TyCtx a -> Maybe (TyCtx a)
@@ -278,14 +329,20 @@ assign nm ty = do
     Nothing  -> nameNotFound nm
     Just ctx' -> pure ctx'
 
-insertAt' :: Eq a => CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
+insertAt' :: CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
 insertAt' at insertee into = do
   (l, _, r) <- splitCtx' at into
   pure $ l <++ insertee <++ r
 
+insertAt :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a)
+insertAt at insertee = do
+  ctx <- getCtx
+  case insertAt' at insertee ctx of
+    Nothing   -> otherErr $ "Cannot insert into context " ++ show ctx ++ " at " ++ show at
+    Just ctx' -> pure ctx'
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
-instL :: Eq a => Name -> Type a Poly -> TypingM a (TyCtx a)
+instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat (asMonotype -> Just mty) = do
   root $ "InstLSolve"
@@ -322,7 +379,7 @@ instL ahat (A a ty) =
     
     _ -> otherErr $ show (unannT' ty) ++ " not expected in instL"
 
-instR :: Eq a => Type a Poly -> Name -> TypingM a (TyCtx a)
+instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
 instR (asMonotype -> Just mty) ahat = do
   root $ "InstRSolve"
@@ -363,7 +420,7 @@ instR (A a ty) ahat =
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- A is a subtype of B iff A is more polymorphic than B
 -- TODO: Consider how to avoid name capture (alpha renaming probably)
-subtypeOf :: Eq a => Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
+subtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
   -- <:Var
   subtypeOf' (TFree x) (TFree x')
@@ -427,3 +484,113 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
         else nameNotFound ahat
   
   subtypeOf' t1 t2 = cannotSubtype ty1 ty2
+
+check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
+check e@(A eann e') ty@(A tann ty') = check' e' ty' where
+  -- 1I (PrimI)
+  check' (Prim p) _ = do
+    root "PrimI"
+    let pty = A eann $ inferPrim p
+    _ <- branch $ ty `subtypeOf` pty
+    getCtx
+  
+  -- ∀I
+  check' _ (Forall alpha aty) = do
+    root "∀I"
+    (delta, _, _) <- splitCtx (Exists alpha) =<< local (\g -> g <+ Exists alpha) (branch $ check e aty)
+    pure delta
+  
+  -- ->I
+  check' (Lam x Nothing e2) (aty :->: bty) = do
+    root "->I"
+    let c = x `HasType` aty
+    (delta, _, _) <- splitCtx c =<< local (\g -> g <+ c) (branch $ check e2 bty)
+    pure delta
+
+  -- Sub
+  check' _ _ = do
+    root "Sub"
+    (aty, theta) <- branch $ synthesize e
+    atysubst <- substCtx theta aty
+    btysubst <- substCtx theta ty
+    branch $ atysubst `subtypeOf` btysubst
+
+
+
+synthesize :: Expr a -> TypingM a (Type a Poly, TyCtx a)
+synthesize expr@(A ann expr') = synthesize' expr' where
+  -- Var
+  synthesize' (Var nm) = do
+    root "Var"
+    ctx <- getCtx
+    case nm `hasTypeIn` ctx of
+      Just ty -> pure (ty, ctx)
+      Nothing -> nameNotFound nm
+  
+  -- Anno
+  synthesize' (Ann e ty) = do
+    root "Anno"
+    _ <- branch $ check e ty
+    (ty, ) <$> getCtx
+  
+  -- ->I=>
+  synthesize' (Lam x Nothing e) = do
+    root "->I=>"
+    alpha <- freshName
+    beta <- freshName
+    let alphac = Exists alpha 
+        betac  = Exists beta
+        alphat = A ann $ TExists alpha 
+        betat  = A ann $ TExists beta
+    ctx' <- (\g -> g <+ alphac <+ betac <+ x `HasType` alphat) <$> getCtx
+    (delta, _, theta) <- splitCtx (x `HasType` alphat) =<< (branch $ check e betat)
+    pure (A ann $ alphat :->: betat, delta)
+  
+  -- ->E
+  synthesize' (App e1 e2) = do
+    (ty1, theta) <- branch $ synthesize e1
+    ty1subst <- substCtx theta ty1
+    local (const theta) $ branch $ applysynth ty1subst e2 
+
+  -- Prim
+  synthesize' (Prim p) = root "->Prim" *> ((A ann $ inferPrim p, ) <$> getCtx)
+
+  synthesize' _ = cannotSynthesize expr
+
+inferPrim :: Prim -> Type' a Poly
+inferPrim p = TFree $ UName $ case p of
+  Unit   -> "Unit"
+  Bool _ -> "Bool"
+  Nat _  -> "Nat"
+
+applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)
+applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
+  -- ∀App
+  applysynth' (Forall alpha aty) = do
+    root $ "∀App " ++ pps ty
+    let atysubst = subst (A tann $ TExists alpha) alpha aty
+    local (\g -> g <+ Exists alpha) $ branch $ applysynth atysubst e
+  
+  -- ^alpha App
+  applysynth' (TExists alpha) = do
+    root "̂αApp"
+    ctx <- getCtx
+    if Exists alpha `isInContext` ctx
+      then do
+        a1 <- freshName
+        a2 <- freshName
+        let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
+        ctx' <- insertAt (Exists alpha) (emptyCtx <+ Exists a2 <+ Exists a1 <+ alpha := a1toa2)
+        delta <- branch $ check e (A tann $ TExists a1)
+        pure (A tann $ TExists a2, delta)
+      else
+        nameNotFound alpha
+  
+  -- ->App
+  applysynth' (aty :->: cty) = do
+    root "->App"
+    delta <- branch $ check e aty
+    pure (cty, delta)
+  
+  applysynth' _ = cannotAppSynthesize ty e
+

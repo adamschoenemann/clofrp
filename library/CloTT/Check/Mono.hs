@@ -114,7 +114,7 @@ check ctx annce@(A _ cexpr) (A _ annty) = check' cexpr annty where
   check' (Lam nm (Just ta') bd) (ta :->: tb) 
     | unannT ta' == ta = check (addT nm ta ctx) bd tb
     | otherwise       = tyErr $ "parameter annotated with " ++ show (unannT ta') ++ " does not match expected " ++ show ta
-  check' (Lam _ _ _) typ = tyErr $ show (unann annce) ++ " cannot check against " ++ show typ
+  check' (Lam _ _ _) typ = tyErr $ show (unannE annce) ++ " cannot check against " ++ show typ
 
   check' (Tuple (A _ e1) (A _ e2))  (viewTupleT -> Just (t1, t2)) =
     check' e1 t1 *> check' e2 t2 *> pure ()

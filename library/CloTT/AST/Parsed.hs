@@ -16,12 +16,13 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 module CloTT.AST.Parsed ( 
-  module CloTT.AST.Parsed,
-  module CloTT.AST.Name,
-  P.Prim(..)
+    module CloTT.AST.Parsed
+  , module CloTT.AST.Name
+  , P.Prim(..)
+  , Unann(..)
 ) where
 
-import CloTT.Annotated (Annotated(..))
+import CloTT.Annotated 
 import CloTT.AST.Name
 import Data.String (IsString(..))
 import qualified Data.Set as S
@@ -317,8 +318,14 @@ conv fn (A a e) = fn a e
 conv' :: (a -> c) -> (t a -> t c) -> Annotated a (t a) -> Annotated c (t c)
 conv' an fn (A a e) = A (an a) (fn e)
 
+instance Unann (Type a s) (Type () s) where
+  unann = unannT
+
 unannT :: Type a s -> Type () s
 unannT (A _ t) = A () $ unannT' t
+
+instance Unann (Type' a s) (Type' () s) where
+  unann = unannT'
 
 unannT' :: Type' a s -> Type' () s
 unannT' = \case 
@@ -328,42 +335,60 @@ unannT' = \case
   t1 :->: t2 -> unannT t1 :->: unannT t2
   Forall ts tau -> Forall ts (unannT tau)
 
+instance Unann (Decl a) (Decl ()) where
+  unann = unannD
+  
 unannD :: Decl a -> Decl ()
 unannD = help go where
   help = conv' (const ())
   go = \case 
-    FunD nm c -> FunD nm (unann c) 
+    FunD nm c -> FunD nm (unannE c) 
     DataD nm k b cstrs -> DataD nm k b (map unannConstr cstrs)
     SigD nm t  -> SigD nm (unannT t)
 
+instance Unann (Prog a) (Prog ()) where
+  unann = unannP
+
 unannP :: Prog a -> Prog ()
 unannP (Prog ds) = Prog (map unannD ds)
+
+instance Unann (Constr a) (Constr ()) where
+  unann = unannConstr
 
 unannConstr :: Constr a -> Constr ()
 unannConstr (A _ c) =
   case c of
     Constr nm ts -> A () $ Constr nm (map unannT ts)
 
-unannI :: Expr a -> Expr ()
-unannI (A _ expr0) = A () (unannI' expr0)
+instance Unann (Expr a) (Expr ()) where
+  unann = unannE
 
-unannI' :: Expr' a -> Expr' ()
-unannI' = \case
+unannE :: Expr a -> Expr ()
+unannE (A _ expr0) = A () (unannE' expr0)
+
+instance Unann (Expr' a) (Expr' ()) where
+  unann = unannE'
+
+unannE' :: Expr' a -> Expr' ()
+unannE' = \case
   Var nm -> Var nm
-  Ann e t -> Ann (unann e) (unannT t)
-  App e1 e2 -> App (unannI e1) (unann e2)
-  Lam nm mty e -> Lam nm (unannT <$> mty) (unannI e)
-  Tuple e1 e2 -> Tuple (unann e1) (unann e2)
-  Case e clauses -> Case (unann e) $ map (\(p,c) -> (unannPat p, unann c)) clauses
+  Ann e t -> Ann (unannE e) (unannT t)
+  App e1 e2 -> App (unannE e1) (unannE e2)
+  Lam nm mty e -> Lam nm (unannT <$> mty) (unannE e)
+  Tuple e1 e2 -> Tuple (unannE e1) (unannE e2)
+  Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
   Prim p -> Prim p
     
+instance Unann (Pat a) (Pat ()) where
+  unann = unannPat
+
 unannPat :: Pat a -> Pat ()
 unannPat (A _ p) = A () $ unannPat' p
+
+instance Unann (Pat' a) (Pat' ()) where
+  unann = unannPat'
 
 unannPat' :: Pat' a -> Pat' ()
 unannPat' p = case p of
   Bind nm -> Bind nm
   Match nm ps ->  Match nm (map unannPat ps)
-
-unann :: Expr a -> Expr ()
-unann = unannI
