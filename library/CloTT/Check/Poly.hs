@@ -76,7 +76,7 @@ instance Show (TyCtx a) where
   show (Gamma xs) = show $ reverse xs
 
 instance Pretty (TyCtx a) where
-  pretty (Gamma xs) = hsep $ map pretty $ reverse xs
+  pretty (Gamma xs) = encloseSep "[" "]" ", " $ map pretty $ reverse xs
 
 instance Unann (TyCtx a) (TyCtx ()) where
   unann (Gamma xs) = Gamma $ map unann xs
@@ -140,7 +140,7 @@ type TypingErr a = (TyExcept a, TyCtx a)
 
 showTree :: TypingWrite a -> String
 showTree [] = ""
-showTree ((i,s):xs) = replicate (fromIntegral i) ' ' ++ s ++ "\n" ++ showTree xs
+showTree ((i,s):xs) = replicate (fromIntegral (i * 4)) ' ' ++ s ++ "\n" ++ showTree xs
 
 data TyExcept a
   = Type a Poly `CannotSubtype` Type a Poly
@@ -276,7 +276,7 @@ splitCtx' el ctx@(Gamma xs) =
 splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
   case splitCtx' el ctx of
-    Nothing -> cannotSplit el ctx
+    Nothing -> root "splitCtx" *> cannotSplit el ctx
     Just x  -> pure x
 
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
@@ -326,7 +326,7 @@ assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
   ctx <- getCtx
   case assign' nm ty ctx of
-    Nothing  -> nameNotFound nm
+    Nothing  -> root "assign" *> nameNotFound nm
     Just ctx' -> pure ctx'
 
 insertAt' :: CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
@@ -345,7 +345,8 @@ insertAt at insertee = do
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat (asMonotype -> Just mty) = do
-  root $ "InstLSolve"
+  ctx <- getCtx
+  root $ "[InstLSolve] " ++ pps ahat ++ " = " ++ pps mty ++ " in " ++ pps ctx
   (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
   pure (gam <+ ahat := mty <++ gam')
 instL ahat (A a ty) = 
@@ -461,15 +462,18 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
   
   -- <:InstantiateL
   subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = root "InstantiateL" *> occursIn ahat ty2
+    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do 
       ctx <- getCtx
       if (Exists ahat) `isInContext` ctx 
         then do 
-          root "InstantiateL"
+          root $ "[InstantiateL] " ++ pps ahat ++ " :<= " ++ pps ty2 ++ " in " ++ pps ctx
           r <- branch (ahat `instL` ty2)
           pure r
-        else nameNotFound ahat
+        else do
+          root $ "[InstantiateL] " ++ pps ahat ++ " :<= " ++ pps ty2 ++ " |- NameNotFound "
+                 ++ pps ahat ++ " in " ++ pps ctx
+          nameNotFound ahat
 
   -- <:InstantiateR
   subtypeOf' _ (TExists ahat)
@@ -489,7 +493,8 @@ check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
 check e@(A eann e') ty@(A tann ty') = check' e' ty' where
   -- 1I (PrimI)
   check' (Prim p) _ = do
-    root "PrimI"
+    ctx <- getCtx
+    root $ "[PrimI] " ++ pps p ++ " <= " ++ pps ty ++ " in " ++ pps ctx
     let pty = A eann $ inferPrim p
     _ <- branch $ ty `subtypeOf` pty
     getCtx
@@ -513,7 +518,7 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     (aty, theta) <- branch $ synthesize e
     atysubst <- substCtx theta aty
     btysubst <- substCtx theta ty
-    branch $ atysubst `subtypeOf` btysubst
+    local (const theta) $ branch $ atysubst `subtypeOf` btysubst
 
 
 
@@ -548,6 +553,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   
   -- ->E
   synthesize' (App e1 e2) = do
+    root "->E"
     (ty1, theta) <- branch $ synthesize e1
     ty1subst <- substCtx theta ty1
     local (const theta) $ branch $ applysynth ty1subst e2 
@@ -588,7 +594,8 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   
   -- ->App
   applysynth' (aty :->: cty) = do
-    root "->App"
+    ctx <- getCtx
+    root $ "[->App] " ++ pps ty ++ " in " ++ pps ctx
     delta <- branch $ check e aty
     pure (cty, delta)
   

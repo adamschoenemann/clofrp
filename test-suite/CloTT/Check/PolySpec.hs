@@ -36,6 +36,7 @@ shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
 polySpec :: Spec
 polySpec = do
   let nil = emptyCtx @()
+  let (.:) = HasType
 
   describe "splitCtx" $ do
     it "fails for empty context" $ do
@@ -61,6 +62,9 @@ polySpec = do
          let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
          let ctx = xs <+ uni "b" <++ ys
          splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", ys)
+      do let id' = "x" .: E.forAll ["a"] ("a" @->: "a")
+         let ctx = nil <+ id' <+ exists "a"
+         splitCtx' (exists "a") ctx `shouldBe` Just (nil <+ id', exists "a", nil)
     specify "if splitCtx' alpha ctx == (xs, alpha, ys) then ctx == xs <+ alpha <++ ys" $ do
       let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
       let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
@@ -97,15 +101,19 @@ polySpec = do
     it "fails for empty context" $ do
       let ctx = nil
       assign' "a" "Unit" ctx `shouldBe` Nothing
+
     it "fails for singleton context without 'a^'" $ do
       let ctx = nil <+ exists "b"
       assign' "a" "Unit" ctx `shouldBe` Nothing
+
     it "fails for singleton context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a"
       assign' "a" "Unit" ctx `shouldBe` Nothing
+
     it "fails for context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a" <+ exists "b" <+ marker "c"
       assign' "a" "Unit" ctx `shouldBe` Nothing
+
     it "works for context with 'a^'" $ do
       do let t   = nil <+ uni "a" <+ exists "b"
          let t'  = nil <+ marker "c"
@@ -125,13 +133,13 @@ polySpec = do
       let ctx = nil <+ uni "a" <+ exists "b"
       let p = nil <+ uni "p"
       insertAt' (exists "a") p ctx `shouldBe` Nothing
+
     it "succeds in context with elem" $ do
       let ctx = nil <+ marker "m" <+ exists "a" <+ uni "a"
       let p = nil <+ uni "p"
       insertAt' (exists "a") p ctx `shouldBe` Just (nil <+ marker "m" <++ p <+ uni "a")
 
   describe "subtypeOf" $ do
-
     it "is reflexive" $ do
       runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
       runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
@@ -174,7 +182,6 @@ polySpec = do
          runSubtypeOf nil t t' `shouldYield` nil
   
   describe "check" $ do
-    let (.:) = HasType
 
     it "checks primitives" $ do
       runCheck0 (E.nat 10) "Nat" `shouldYield` nil
@@ -221,8 +228,11 @@ polySpec = do
          shouldFail $ runCheck ctx ("x" @@ ("y" @-> "y")) ("Bool") 
 
     it "checks applications (poly)" $ do
+      -- Hmm, here the context is polluted with "a" := "Nat". Olle's implementation
+      -- does the same... I wonder if that is supposed to happen?
+      -- Seems kinda wrong
       do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a")
-         runCheck ctx ("id" @@ E.nat 10) "Nat" `shouldYield` ctx
+         runCheck ctx ("id" @@ E.nat 10) "Nat" `shouldYield` (ctx <+ "a" := "Nat")
       -- do let ctx = nil <+ "x" .: (E.forAll ["a"] $ "a" @->: "a")
       --    runCheck ctx ("x" @@ E.true) "Bool" `shouldYield` ctx
 
