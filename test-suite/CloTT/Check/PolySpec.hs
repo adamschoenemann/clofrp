@@ -138,6 +138,13 @@ polySpec = do
       let ctx = nil <+ marker "m" <+ exists "a" <+ uni "a"
       let p = nil <+ uni "p"
       insertAt' (exists "a") p ctx `shouldBe` Just (nil <+ marker "m" <++ p <+ uni "a")
+  
+  describe "substCtx'" $ do
+    it "subst existentials with their solutions" $ do
+      do let ctx = nil <+ "a" := "Nat"
+         substCtx' ctx (E.exists "a") `shouldBe` Right "Nat"
+      do let ctx = nil <+ "a" := "Nat"
+         substCtx' ctx (E.exists "a" @->: E.exists "a") `shouldBe` Right ("Nat" @->: "Nat")
 
   describe "subtypeOf" $ do
     it "is reflexive" $ do
@@ -232,7 +239,26 @@ polySpec = do
       -- does the same... I wonder if that is supposed to happen?
       -- Seems kinda wrong
       do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a")
-         runCheck ctx ("id" @@ E.nat 10) "Nat" `shouldYield` (ctx <+ "a" := "Nat")
+         runCheck ctx ("id" @@ E.nat 10) "Nat" `shouldYield` (ctx <+ E.mname 0 := "Nat")
+      do let ctx = nil <+ "foo" .: (E.forAll ["a"] $ "a" @->: "a" @->: "a")
+         runCheck ctx ("foo" @@ E.nat 10) ("Nat" @->: "Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
+      do let ctx = nil <+ "foo" .: (E.forAll ["a"] $ "a" @->: "a" @->: "a")
+         runCheck ctx ("foo" @@ E.nat 10 @@ E.nat 9) ("Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
+      do let ctx = nil <+ "foo" .: (E.forAll ["a"] $ "a" @->: "a" @->: "a")
+         shouldFail $ runCheck ctx ("foo" @@ E.nat 10 @@ E.true) ("Bool") 
+    
+    it "succeds with apply same function twice to same type param" $ do
+      do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a") 
+                <+ "foo" .: ("Nat" @->: "Nat" @->: "Unit")
+         runCheck ctx ("foo" @@ ("id" @@ E.nat 10) @@ ("id" @@ E.nat 10)) ("Unit")
+           `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Nat")
+
+    it "succeds with apply same function twice to different type params" $ do
+      do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a") 
+                <+ "foo" .: ("Nat" @->: "Bool" @->: "Unit")
+         runCheck ctx ("foo" @@ ("id" @@ E.nat 10) @@ ("id" @@ E.true)) ("Unit")
+           `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Bool")
+
       -- do let ctx = nil <+ "x" .: (E.forAll ["a"] $ "a" @->: "a")
       --    runCheck ctx ("x" @@ E.true) "Bool" `shouldYield` ctx
 

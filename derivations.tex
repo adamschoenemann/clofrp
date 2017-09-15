@@ -1,0 +1,49 @@
+\documentclass{article}
+\usepackage{mathpartir}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\usepackage{unicode-math}
+\usepackage{booktabs}
+\usepackage{minted}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{cite}
+\usepackage[toc,page]{appendix}
+\usepackage{xspace}
+\usepackage{pdfpages}
+\usepackage{lastpage}
+\usepackage{fancyhdr}
+\usepackage[a4paper,left=0.5cm,right=0.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+\usepackage[cm]{sfmath}
+
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\idty}[0]{∀α.\ α → α}
+\newcommand{\dblArr}[0]{⇒\mkern-9mu⇒}
+\newcommand{\ahat}[0]{\hat{α}}
+
+\newcommand{\Sub}[0]{\quad \textsc{[Sub]}}
+\newcommand{\Var}[0]{\quad \textsc{[Var]}}
+\newcommand{\arrE}[0]{\quad \textsc{[→E]}}
+
+\begin{document}
+
+
+\section{Check $⋅, id : \idty ⊢ x\ () ⇐ \code{1}$}
+Let $Γ = ⋅, id : \idty$
+\begin{mathpar}
+\inferrule* [right=Sub] {
+  \inferrule* [right=→E] {
+    \inferrule* [right=Var] { }{Γ ⊢ x ⇒ \idty ⊣ Γ} \\
+    \inferrule* [right=$∀$App] {
+      \inferrule* [right=→App] {
+        \inferrule* [right=Sub] { } {Γ, \ahat ⊢ () ⇐ \ahat ⊢ Γ, \ahat = ()}
+      } {Γ, \ahat ⊢ \ahat → \ahat ∙ () \dblArr () ⊣ Γ, \ahat = ()}
+    } {Γ ⊢ (\idty) ∙ () \dblArr () ⊣ Γ, \ahat = ()}
+  } {Γ ⊢ x\ () ⇒ A ⊣ Γ, \ahat = ()} \\
+  Θ ⊢ [Θ]A <: [Θ]1 ⊣ Γ, \ahat = ()
+} {Γ ⊢ x\ () ⇐ 1 ⊣ Γ, \ahat = ()}
+\end{mathpar}
+\end{document}

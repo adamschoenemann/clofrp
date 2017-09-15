@@ -2,3 +2,7 @@
 /.stack-work/
 # Stack generates the Cabal file from `package.yaml` through hpack.
 /*.cabal
+**/*.aux
+**/*.log
+**/*.pdf
+**/*.synctex.gz

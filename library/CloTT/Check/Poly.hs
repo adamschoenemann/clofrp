@@ -56,7 +56,7 @@ instance Pretty (CtxElem a) where
     Uni nm          -> pretty nm
     Exists nm       -> "^" <> pretty nm
     nm `HasType` ty -> pretty nm <> " : " <> pretty (unann ty)
-    nm := ty        -> pretty nm <> " = " <> pretty (unann ty)
+    nm := ty        -> "^" <> pretty nm <> " = " <> pretty (unann ty)
     Marker nm       -> "▷" <> pretty nm
 
 
@@ -73,7 +73,7 @@ newtype TyCtx a = Gamma { unGamma :: [CtxElem a] }
   deriving (Eq)
 
 instance Show (TyCtx a) where
-  show (Gamma xs) = show $ reverse xs
+  show gamma = "\n" ++ pps gamma 
 
 instance Pretty (TyCtx a) where
   pretty (Gamma xs) = encloseSep "[" "]" ", " $ map pretty $ reverse xs
@@ -95,11 +95,34 @@ infixl 4 <++
 (<++) :: TyCtx a -> TyCtx a -> TyCtx a
 Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 
--- FIXME: We don't want to depend on (Eq a) since we do not consider the annotations
--- for equality. But I don't want to override the default Eq, because it is good
--- for testing purposes
 isInContext :: CtxElem a -> TyCtx a -> Bool
 isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs
+
+-- A type is wellformed
+-- TODO: Deal with free types
+isWfTypeIn' :: Type a Poly -> TyCtx a -> Bool
+isWfTypeIn' (A _ ty) ctx =
+  case ty of
+    -- UvarWF
+    TFree x -> isJust $ ctxFind (freePred x) ctx
+    -- EvarWF and SolvedEvarWF
+    TExists alpha -> isJust $ ctxFind (expred $ alpha) ctx
+    -- ArrowWF
+    t1 :->: t2 -> isWfTypeIn' t1 ctx && isWfTypeIn' t2 ctx
+    -- ForallWF
+    Forall x t -> isWfTypeIn' t (ctx <+ Uni x)
+    -- TAppWF. TODO: Use kind-ctx to make sure kinds are correct
+    TApp t1 t2 -> isWfTypeIn' t1 ctx && isWfTypeIn' t2 ctx
+  where 
+    expred alpha = \case
+      Exists alpha' -> alpha == alpha'
+      alpha' := _   -> alpha == alpha' 
+      _         -> False
+
+    freePred x = \case
+      Uni x' -> x == x'
+      _      -> False
+
 
 findMap :: (a -> Maybe b) -> [a] -> Maybe b
 findMap fn = foldr fun Nothing where
@@ -107,6 +130,9 @@ findMap fn = foldr fun Nothing where
     case fn x of
       Just x' -> Just x'
       Nothing -> acc
+
+ctxFind :: (CtxElem a -> Bool) -> TyCtx a -> Maybe (CtxElem a)
+ctxFind p (Gamma xs) = find p xs
 
 findAssigned :: Name -> TyCtx a -> Maybe (Type a Mono)
 findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
@@ -140,7 +166,8 @@ type TypingErr a = (TyExcept a, TyCtx a)
 
 showTree :: TypingWrite a -> String
 showTree [] = ""
-showTree ((i,s):xs) = replicate (fromIntegral (i * 4)) ' ' ++ s ++ "\n" ++ showTree xs
+showTree ((i,s):xs) = indented  ++ showTree xs where
+  indented = unlines $ map (replicate (fromIntegral (i * 4)) ' ' ++) $ lines s
 
 data TyExcept a
   = Type a Poly `CannotSubtype` Type a Poly
@@ -163,7 +190,14 @@ instance Unann (TyExcept a) (TyExcept ()) where
     Other s                  -> Other s
 
 instance Pretty (TyExcept a) where
-  pretty = fromString . show . unann
+  pretty = \case
+    ty `CannotSubtype` ty'   -> pretty ty <+> "cannot subtype" <+> pretty ty'
+    nm `OccursIn` ty         -> pretty nm <+> "occurs in" <+> pretty ty
+    NameNotFound x           -> "Cannot find name" <+> pretty x
+    CannotSplit el ctx       -> "Cannot split" <+> pretty ctx <+> "at" <+> pretty el
+    CannotSynthesize e       -> "Cannot synthesize" <+> pretty e
+    CannotAppSynthesize ty e -> "Cannot app_synthesize" <+> pretty ty <+> "•" <+> pretty e
+    Other s                  -> "Other error:" <+> fromString s
 
 tyExcept :: TyExcept a -> TypingM a r
 tyExcept err = do 
@@ -234,8 +268,8 @@ runCheck :: TyCtx a -> Expr a -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runCheck ctx e t = runTypingM (check e t) ctx initState
 
 
-substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
-substCtx ctx (A a ty) = 
+substCtx' :: TyCtx a -> Type a Poly -> Either Name (Type a Poly)
+substCtx' ctx (A a ty) = 
   case ty of
     TFree x -> pure $ A a $ TFree x
     TExists x -> 
@@ -243,21 +277,27 @@ substCtx ctx (A a ty) =
         Just tau -> pure $ asPolytype tau
         Nothing
           | Exists x `isInContext` ctx -> pure $ A a $ TExists x
-          | otherwise                  -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
+          | otherwise                  -> Left x
 
     t1 `TApp` t2 -> do
-      t1' <- substCtx ctx t1
-      t2' <- substCtx ctx t2
-      pure $ A a $ t1 `TApp` t2
+      t1' <- substCtx' ctx t1
+      t2' <- substCtx' ctx t2
+      pure $ A a $ t1' `TApp` t2'
     
     t1 :->: t2 -> do
-      t1' <- substCtx ctx t1
-      t2' <- substCtx ctx t2
-      pure $ A a $ t1 :->: t2
+      t1' <- substCtx' ctx t1
+      t2' <- substCtx' ctx t2
+      pure $ A a $ t1' :->: t2'
     
     Forall x t -> do
-      t' <- substCtx ctx t
+      t' <- substCtx' ctx t
       pure $ A a $ Forall x t'
+
+substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
+substCtx ctx ty = 
+  case substCtx' ctx ty of
+    Left x -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
+    Right ctx' -> pure ctx'
 
 -- | drop until an element `el` is encountered in the context. Also drops `el`
 dropTil :: CtxElem a -> TyCtx a -> TyCtx a
@@ -383,7 +423,7 @@ instL ahat (A a ty) =
 instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
 instR (asMonotype -> Just mty) ahat = do
-  root $ "InstRSolve"
+  root $ "[InstRSolve] " ++ pps mty ++ " =<: " ++ pps ahat
   (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
   pure (gam <+ ahat := mty <++ gam')
 instR (A a ty) ahat = 
@@ -422,7 +462,7 @@ instR (A a ty) ahat =
 -- A is a subtype of B iff A is more polymorphic than B
 -- TODO: Consider how to avoid name capture (alpha renaming probably)
 subtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
-subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
+subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:Var
   subtypeOf' (TFree x) (TFree x')
         | x == x'    = root (pps ty1 ++ " <: " ++ pps ty2 ++ " [<:Var]") *> getCtx
@@ -435,12 +475,12 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
           ctx <- getCtx
           if Exists a `isInContext` ctx
             then pure ctx
-            else nameNotFound a
-        | otherwise -> cannotSubtype ty1 ty2
+            else branch $ nameNotFound a
+        | otherwise -> branch $ cannotSubtype ty1 ty2
 
   -- <:->
   subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
-    root $ "<:->"
+    root $ "[<:->] " ++ pps ty1 ++ " <: " ++ pps ty2
     ctx' <- branch (b1 `subtypeOf` a1)
     a2' <- substCtx ctx' a2
     b2' <- substCtx ctx' b2
@@ -465,7 +505,7 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
     | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do 
       ctx <- getCtx
-      if (Exists ahat) `isInContext` ctx 
+      if (A ann1 $ TExists ahat) `isWfTypeIn'` ctx 
         then do 
           root $ "[InstantiateL] " ++ pps ahat ++ " :<= " ++ pps ty2 ++ " in " ++ pps ctx
           r <- branch (ahat `instL` ty2)
@@ -480,24 +520,29 @@ subtypeOf ty1@(A _ typ1) ty2@(A _ typ2) = subtypeOf' typ1 typ2 where
     | ahat `inFreeVars` ty1 = root "InstantiateR" *> occursIn ahat ty1
     | otherwise = do 
       ctx <- getCtx
-      if (Exists ahat) `isInContext` ctx 
+      if (A ann2 $ TExists ahat) `isWfTypeIn'` ctx 
         then do 
-          root "InstantiateR"
+          root $ "[InstantiateR] " ++ pps ty1 ++ " =<: " ++ pps ahat
           r <- branch (ty1 `instR` ahat)
           pure r
-        else nameNotFound ahat
+        else do
+          root $ "[InstantiateR] " ++ pps ty1 ++ " =<: " ++ pps ahat ++ " |- NameNotFound "
+                 ++ pps ahat ++ " in " ++ pps ctx
+          nameNotFound ahat
   
   subtypeOf' t1 t2 = cannotSubtype ty1 ty2
 
 check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
 check e@(A eann e') ty@(A tann ty') = check' e' ty' where
   -- 1I (PrimI)
-  check' (Prim p) _ = do
-    ctx <- getCtx
-    root $ "[PrimI] " ++ pps p ++ " <= " ++ pps ty ++ " in " ++ pps ctx
-    let pty = A eann $ inferPrim p
-    _ <- branch $ ty `subtypeOf` pty
-    getCtx
+  check' (Prim p) _ 
+    | ty' =%= inferPrim p = root "[PrimI]" *> ask
+  -- check' (Prim p) _ = do
+  --   ctx <- getCtx
+  --   root $ "[PrimI] " ++ pps p ++ " <= " ++ pps ty ++ " in " ++ pps ctx
+  --   let pty = A eann $ inferPrim p
+  --   _ <- branch $ ty `subtypeOf` pty
+  --   getCtx
   
   -- ∀I
   check' _ (Forall alpha aty) = do
@@ -517,6 +562,7 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     root "Sub"
     (aty, theta) <- branch $ synthesize e
     atysubst <- substCtx theta aty
+    -- traceM $ "atysubst: " ++ pps atysubst
     btysubst <- substCtx theta ty
     local (const theta) $ branch $ atysubst `subtypeOf` btysubst
 
@@ -538,9 +584,9 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     _ <- branch $ check e ty
     (ty, ) <$> getCtx
   
-  -- ->I=>
+  -- ->L=>
   synthesize' (Lam x Nothing e) = do
-    root "->I=>"
+    root "->L=>"
     alpha <- freshName
     beta <- freshName
     let alphac = Exists alpha 
@@ -558,8 +604,8 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     ty1subst <- substCtx theta ty1
     local (const theta) $ branch $ applysynth ty1subst e2 
 
-  -- Prim
-  synthesize' (Prim p) = root "->Prim" *> ((A ann $ inferPrim p, ) <$> getCtx)
+  -- Prim=>
+  synthesize' (Prim p) = root "Prim=>" *> ((A ann $ inferPrim p, ) <$> getCtx)
 
   synthesize' _ = cannotSynthesize expr
 
@@ -574,8 +620,10 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ∀App
   applysynth' (Forall alpha aty) = do
     root $ "∀App " ++ pps ty
-    let atysubst = subst (A tann $ TExists alpha) alpha aty
-    local (\g -> g <+ Exists alpha) $ branch $ applysynth atysubst e
+    -- fresh name to avoid clashes
+    alpha' <- freshName
+    let atysubst = subst (A tann $ TExists alpha') alpha aty
+    local (\g -> g <+ Exists alpha') $ branch $ applysynth atysubst e
   
   -- ^alpha App
   applysynth' (TExists alpha) = do
@@ -595,7 +643,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ->App
   applysynth' (aty :->: cty) = do
     ctx <- getCtx
-    root $ "[->App] " ++ pps ty ++ " in " ++ pps ctx
+    root $ showW 80 $ "[->App]" <+> pretty ty <+> "in" <+> group (pretty ctx)
     delta <- branch $ check e aty
     pure (cty, delta)
   

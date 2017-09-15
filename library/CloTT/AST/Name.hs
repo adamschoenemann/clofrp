@@ -30,3 +30,6 @@ intToString i = (chars !! (fromIntegral $ i `mod` chrlen)) : suffix where
 
 instance IsString Name where
   fromString = UName
+
+mname :: Integer -> Name
+mname = MName

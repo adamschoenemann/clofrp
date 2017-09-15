@@ -12,7 +12,11 @@ ppln = putDocW 80 . pretty
 pps :: Pretty a => a -> String
 pps = show . pretty
 
-ppsw :: Pretty a => Int -> a -> Text
-ppsw w x = renderStrict (layoutPretty layoutOptions (unAnnotate (pretty x)))
+ppsw :: Pretty a => Int -> a -> String
+ppsw w x = showW w (pretty x)
+
+showW :: Int -> Doc a -> String
+showW w x = unpack $ renderStrict (layoutPretty layoutOptions (unAnnotate x))
   where
     layoutOptions = LayoutOptions { layoutPageWidth = AvailablePerLine w 1 }
+
