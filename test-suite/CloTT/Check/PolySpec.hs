@@ -8,6 +8,7 @@ module CloTT.Check.PolySpec where
 import Test.Tasty.Hspec
 import Data.Either (isLeft)
 import Data.Text.Prettyprint.Doc (Pretty)
+import Data.String (fromString)
 
 import qualified CloTT.AST.Parsed  as E
 import           CloTT.Check.Poly
@@ -20,8 +21,11 @@ import           CloTT.Pretty (pps)
 -- import Fixtures
 
 
--- foo :: forall a. ()
--- foo = ()
+foo :: (forall a. a -> a) -> (forall b. b -> b)
+foo f = f
+
+foo' :: forall b. b -> b
+foo' = foo id
 
 shouldYield :: (Show a1, Pretty a1, Show a2, Eq a2) 
             => (Either a1 a2, t, TypingWrite a) -> a2 -> Expectation
@@ -247,17 +251,55 @@ polySpec = do
       do let ctx = nil <+ "foo" .: (E.forAll ["a"] $ "a" @->: "a" @->: "a")
          shouldFail $ runCheck ctx ("foo" @@ E.nat 10 @@ E.true) ("Bool") 
     
-    it "succeds with apply same function twice to same type param" $ do
+    it "succeeds when applying same function twice to same type param" $ do
       do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a") 
                 <+ "foo" .: ("Nat" @->: "Nat" @->: "Unit")
          runCheck ctx ("foo" @@ ("id" @@ E.nat 10) @@ ("id" @@ E.nat 10)) ("Unit")
            `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Nat")
 
-    it "succeds with apply same function twice to different type params" $ do
+    it "succeeds when applying same function twice to different type params" $ do
       do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a") 
                 <+ "foo" .: ("Nat" @->: "Bool" @->: "Unit")
          runCheck ctx ("foo" @@ ("id" @@ E.nat 10) @@ ("id" @@ E.true)) ("Unit")
            `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Bool")
+    
+    it "works with rank-2 types" $ do
+      do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: "Unit") 
+         runCheck ctx ("r2" @@ ("x" @-> "x")) ("Unit")
+           `shouldYield` (ctx)
+      do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: (E.forAll ["b"] $ "b" @->: "b")) 
+         runCheck ctx ("r2" @@ ("x" @-> "x")) (E.forAll ["b"] $ "b" @->: "b")
+           `shouldYield` (ctx)
+      do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: (E.forAll ["b"] $ "b" @->: "b")) 
+         runCheck ctx ("r2" @@ ("x" @-> "x")) (E.forAll ["a"] $ "a" @->: "a")
+           `shouldYield` (ctx)
+      do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: (E.forAll ["b"] $ "b" @->: "b")) 
+         runCheck ctx ("r2" @@ ("x" @-> "x")) ("Nat" @->: "Nat")
+           `shouldYield` (ctx)
+    
+    it "works with church-encoded lists" $ do
+      do let clist r a = 
+              let r' = fromString r
+                  a' = fromString a
+              in E.forAll [fromString r] $ (a' @->: r' @->: r') @->: r' @->: r' 
+         -- nil
+         runCheck nil ("k" @-> "z" @-> "z") (E.forAll ["a"] $ clist "r" "a") `shouldYield` nil
+         -- cons
+         runCheck nil ("x" @-> "xs" @-> "k" @-> "z" @-> "z") (E.forAll ["a"] $ "a" @->: clist "r" "a" @->: clist "r" "a") `shouldYield` nil
+         -- append
+         let append   = "xs" @-> "ys" @-> "k" @-> "z" @-> "xs" @@ "k" @@ ("ys" @@ "k" @@ "z")
+             appendty = E.forAll ["a"] $ clist "r" "a" @->: clist "r" "a" @->: clist "r" "a"
+         runCheck nil append appendty `shouldYield` nil
+         -- singleton
+         let sing   = "x" @-> "k" @-> "z" @-> "k" @@ "x" @@ "z"
+             singty = E.forAll ["a"] $ "a" @->: clist "r" "a"
+         runCheck nil sing singty `shouldYield` nil
+    
+    it "`r2 double` fails when r2 : (∀a. a) -> (), double : Nat -> Nat" $ do
+      do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: "Unit") <+ "double" .: ("Nat" @->: "Nat")
+         shouldFail $ runCheck ctx ("r2" @@ "double") ("Unit")
+           
+
 
       -- do let ctx = nil <+ "x" .: (E.forAll ["a"] $ "a" @->: "a")
       --    runCheck ctx ("x" @@ E.true) "Bool" `shouldYield` ctx

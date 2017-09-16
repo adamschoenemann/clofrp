@@ -465,8 +465,8 @@ subtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:Var
   subtypeOf' (TFree x) (TFree x')
-        | x == x'    = root (pps ty1 ++ " <: " ++ pps ty2 ++ " [<:Var]") *> getCtx
-        | otherwise = root (pps ty1 ++ " <: " ++ pps ty2 ++ " [<:Var]") *> cannotSubtype ty1 ty2
+        | x == x'    = root ("[<:Var] " ++ pps ty1 ++ " <: " ++ pps ty2) *> getCtx
+        | otherwise = root ("[<:Var] " ++ pps ty1 ++ " <: " ++ pps ty2) *> cannotSubtype ty1 ty2
   
   -- <:Exvar
   subtypeOf' (TExists a) (TExists a') =
@@ -517,7 +517,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
 
   -- <:InstantiateR
   subtypeOf' _ (TExists ahat)
-    | ahat `inFreeVars` ty1 = root "InstantiateR" *> occursIn ahat ty1
+    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in " ++ pps ty1 ++ " >=: " ++ pps ty2) *> occursIn ahat ty1
     | otherwise = do 
       ctx <- getCtx
       if (A ann2 $ TExists ahat) `isWfTypeIn'` ctx 
@@ -537,17 +537,13 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
   -- 1I (PrimI)
   check' (Prim p) _ 
     | ty' =%= inferPrim p = root "[PrimI]" *> ask
-  -- check' (Prim p) _ = do
-  --   ctx <- getCtx
-  --   root $ "[PrimI] " ++ pps p ++ " <= " ++ pps ty ++ " in " ++ pps ctx
-  --   let pty = A eann $ inferPrim p
-  --   _ <- branch $ ty `subtypeOf` pty
-  --   getCtx
   
   -- ∀I
   check' _ (Forall alpha aty) = do
     root "∀I"
-    (delta, _, _) <- splitCtx (Exists alpha) =<< local (\g -> g <+ Exists alpha) (branch $ check e aty)
+    alpha' <- freshName
+    let aty' = subst (A tann $ TFree alpha') alpha aty
+    (delta, _, _) <- splitCtx (Exists alpha') =<< local (\g -> g <+ Exists alpha') (branch $ check e aty')
     pure delta
   
   -- ->I
@@ -562,7 +558,6 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     root "Sub"
     (aty, theta) <- branch $ synthesize e
     atysubst <- substCtx theta aty
-    -- traceM $ "atysubst: " ++ pps atysubst
     btysubst <- substCtx theta ty
     local (const theta) $ branch $ atysubst `subtypeOf` btysubst
 
