@@ -1,5 +1,10 @@
 
-module CloTT.Pretty where
+module CloTT.Pretty (
+    module Data.Text.Prettyprint.Doc
+  , module Data.Text.Prettyprint.Doc.Util
+  , module Data.Text.Prettyprint.Doc.Render.Text
+  , ppln, pps, ppsw, showW
+) where
 
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util

@@ -7,7 +7,7 @@ module CloTT.Check.PolySpec where
 
 import Test.Tasty.Hspec
 import Data.Either (isLeft)
-import Data.Text.Prettyprint.Doc (Pretty)
+import CloTT.Pretty
 import Data.String (fromString)
 
 import qualified CloTT.AST.Parsed  as E
@@ -16,7 +16,7 @@ import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
 import           CloTT.TestUtils
 import           CloTT.QuasiQuoter
-import           CloTT.Pretty (pps)
+import           CloTT.Pretty 
 
 -- import Fixtures
 
@@ -32,7 +32,7 @@ shouldYield :: (Show a1, Pretty a1, Show a2, Eq a2)
 shouldYield (res, st, tree) ctx = 
   case res of
     Right ctx' -> ctx' `shouldBe` ctx
-    Left err   -> failure $ pps err ++ "\nProgress:\n" ++ showTree tree
+    Left err   -> failure $ (showW 80 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
 
 shouldFail :: (Show a, Show b) => (Either a b, t1, t) -> Expectation
 shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
@@ -295,9 +295,34 @@ polySpec = do
              singty = E.forAll ["a"] $ "a" @->: clist "r" "a"
          runCheck nil sing singty `shouldYield` nil
     
+    it "checks id against (∃a -> ∃b)" $ do
+      -- this results in wrong order of solved existentials
+      runCheck (nil <+ exists "a" <+ exists "b") ("x" @-> "x") (E.exists "a" @->: E.exists "b")
+        `shouldYield` (nil <+ exists "a" <+ ("b" := E.exists "a"))
+
+    -- it "`apply id` checks when apply : ∀a b. (a -> b) -> a -> b" $ do
+    --   let ctx = nil <+ "apply" .: (E.forAll ["a", "b"] $ ("a" @->: "b") @->: "a" @->: "b")
+    --   runCheck ctx ("apply" @@ ("x" @-> "x")) (E.forAll ["a"] $ "a" @->: "a") `shouldYield` ctx
+    
     it "`r2 double` fails when r2 : (∀a. a) -> (), double : Nat -> Nat" $ do
       do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: "Unit") <+ "double" .: ("Nat" @->: "Nat")
          shouldFail $ runCheck ctx ("r2" @@ "double") ("Unit")
+    
+    -- it "works with type constructors" $ do
+    --   do let ctx = nil <+ "xs" .: ("List" @@: "Nat") <+ "hd" .: (E.forAll ["a"] $ "List" @@: "a" @->: "a")
+    --      runCheck ctx ("hd" @@ "xs") "Nat" `shouldYield` (ctx <+ E.mname 0 := "Nat")
+
+    -- it "checks map applied to a list" $ do
+    --   let map' = "map" .: (E.forAll ["a", "b"] $ ("a" @->: "b") @->: "List" @@: "a" @->: "List" @@: "b")
+    --   let ctx = nil <+ "xs" .: ("List" @@: "Nat") <+ map'
+
+    --   runCheck ctx ("map" @@ ("x" @-> "x") @@ "xs") ("List" @@: "Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
+      -- runCheck ctx ("map" @@ ("x" @-> E.true) @@ "xs") ("List" @@: "Bool") `shouldYield` (ctx <+ E.mname 0 := "Nat")
+
+    -- it "works with runST" $ do
+    --   let runST = "runST" .: (E.forAll ["a"] $ (E.forAll ["s"] $ "ST" @@: "s" @@: "a") @->: "a")
+    --   let ctx = nil <+ "c" .: ("ST" @@: "s" @@: "Nat") <+ runST
+    --   runCheck ctx ("runST" @@ "c") "Nat" `shouldYield` nil
            
 
 

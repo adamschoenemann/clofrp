@@ -51,7 +51,7 @@ prettyT' pars = \case
   TFree n    -> fromString . show $ n
   TExists n  -> "∃" <> fromString (show n)
   TApp x y   -> parensIf $ prettyT False x <+> prettyT True y
-  x :->: y    -> parensIf $ prettyT True x  <+> "->" <+> prettyT False y
+  x :->: y    -> parensIf $ prettyT True x  <> softline <> "->" <+> prettyT False y
 
   Forall n t -> 
     let (ns, t') = collect t
@@ -65,6 +65,7 @@ prettyT' pars = \case
     collect t                  = ([], t)
 
     parensIf = if pars then parens else id
+
 
 prettyT :: Bool -> Type a s -> Doc ann
 prettyT n (A _ t) = prettyT' n t
@@ -271,7 +272,7 @@ forAll :: [String] -> Type () Poly -> Type () Poly
 forAll nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Forall nm acc
 
-exists :: Name -> Type () Poly
+exists :: Name -> Type () a
 exists nm = A () $ TExists nm
 
 caseof :: Expr () -> [(Pat (), Expr ())] -> Expr ()
