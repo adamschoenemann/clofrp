@@ -31,7 +31,9 @@ shouldYield :: (Show a1, Pretty a1, Show a2, Eq a2)
             => (Either a1 a2, t, TypingWrite a) -> a2 -> Expectation
 shouldYield (res, st, tree) ctx = 
   case res of
-    Right ctx' -> ctx' `shouldBe` ctx
+    Right ctx' -> do 
+      failure (showTree tree)
+      ctx' `shouldBe` ctx
     Left err   -> failure $ (showW 80 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
 
 shouldFail :: (Show a, Show b) => (Either a b, t1, t) -> Expectation
@@ -41,7 +43,12 @@ polySpec :: Spec
 polySpec = do
   let nil = emptyCtx @()
   let (.:) = HasType
-
+  
+  describe "<++" $ do
+    it "should work" $ do
+      let ctx = nil <+ exists "a" <+ exists "b" <+ "a" := "Nat" <+ "b" := "Unit"
+      let ctx' = nil <++ (nil <+ exists "a") <++ (nil <+ exists "b" <+ "a" := "Nat" <+ "b" := "Unit")
+      ctx' `shouldBe` ctx
   describe "splitCtx" $ do
     it "fails for empty context" $ do
       let ctx = nil
@@ -59,16 +66,16 @@ polySpec = do
       do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
          let ctx = nil <+ uni "b" <++ xs
          splitCtx' (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", xs)
-      do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
-         let ctx = xs <+ uni "b"
-         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", emptyCtx)
-      do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
-         let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
-         let ctx = xs <+ uni "b" <++ ys
-         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", ys)
-      do let id' = "x" .: E.forAll ["a"] ("a" @->: "a")
-         let ctx = nil <+ id' <+ exists "a"
-         splitCtx' (exists "a") ctx `shouldBe` Just (nil <+ id', exists "a", nil)
+      -- do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+      --    let ctx = xs <+ uni "b"
+      --    splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", emptyCtx)
+      -- do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+      --    let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
+      --    let ctx = xs <+ uni "b" <++ ys
+      --    splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", ys)
+      -- do let id' = "x" .: E.forAll ["a"] ("a" @->: "a")
+      --    let ctx = nil <+ id' <+ exists "a"
+      --    splitCtx' (exists "a") ctx `shouldBe` Just (nil <+ id', exists "a", nil)
     specify "if splitCtx' alpha ctx == (xs, alpha, ys) then ctx == xs <+ alpha <++ ys" $ do
       let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
       let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"

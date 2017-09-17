@@ -325,7 +325,9 @@ splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
   case splitCtx' el ctx of
     Nothing -> root "splitCtx" *> cannotSplit el ctx
-    Just x  -> pure x
+    Just x  -> do 
+      -- traceM $ "splitCtx " ++ show el ++ ":  " ++ show ctx ++ " ---> " ++ show x
+      pure x
 
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
@@ -361,21 +363,26 @@ before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False wher
 before :: CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
-assign' :: Name -> Type a Mono -> TyCtx a -> Maybe (TyCtx a)
-assign' nm ty (Gamma ctx) = 
+-- assign an unsolved variable to a type in a context
+-- TODO: Check if context is well-formed after assignment
+assign' :: Name -> Type a Poly -> TyCtx a -> Maybe (TyCtx a)
+assign' nm (asMonotype -> Just ty) (Gamma ctx) =
   case foldr fn ([], False) ctx of
     (_, False) -> Nothing
     (xs, True) -> Just (Gamma xs)
   where
     fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
     fn x (xs, b)                       = (x : xs, b)
+assign' nm _ _ = Nothing
 
-assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
+assign :: Name -> Type a Poly -> TypingM a (TyCtx a)
 assign nm ty = do
   ctx <- getCtx
   case assign' nm ty ctx of
     Nothing  -> root "assign" *> nameNotFound nm
-    Just ctx' -> pure ctx'
+    Just ctx' -> do 
+      traceM $ showW 80 $ "assign" <+> pretty nm <+> pretty ty <+> pretty ctx <+> "---->" <+> pretty ctx'
+      pure ctx'
 
 insertAt' :: CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
 insertAt' at insertee into = do
@@ -392,79 +399,81 @@ insertAt at insertee = do
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
-instL ahat (asMonotype -> Just mty) = do
+instL ahat ty@(A a ty') = do 
   ctx <- getCtx
-  root $ "[InstLSolve] " <+> pretty ahat <+> "=" <+> pretty mty <+> "in" <+> pretty ctx
-  (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
-  pure (gam <+ ahat := mty <++ gam')
-instL ahat (A a ty) = 
-  case ty of
-    -- InstLReach
-    TExists bhat -> do
-      root $ "InstLReach"
-      Exists ahat `before` Exists bhat >>= \case
-        True -> assign bhat (A a $ TExists ahat)
-        False -> otherErr $ "InstLReach"
+  case assign' ahat ty ctx of 
+    Just ctx' -> do 
+      root $ "[InstLSolve] " <+> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
+      pure ctx'
+    Nothing  -> case ty' of
+      -- InstLReach
+      TExists bhat -> do
+        root $ "InstLReach"
+        Exists ahat `before` Exists bhat >>= \case
+          True -> assign bhat (A a $ TExists ahat)
+          False -> otherErr $ "InstLReach"
 
-    -- InstLArr
-    t1 :->: t2 -> do
-      root $ "InstLArr"
-      af1 <- freshName
-      af2 <- freshName
-      let ahat1 = exists af1
-      let ahat2 = exists af2
-      let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (t1 `instR` af1)
-      substed <- substCtx omega t2
-      r <- local (const omega) $ branch (af2 `instL` substed)
-      pure r
-    
-    -- InstLAllR
-    Forall beta bty -> do
-      root $ "InstLAllR"
-      ctx' <- local (\g -> g <+ uni beta) $ branch (ahat `instL` bty)
-      (delta, _, delta') <- splitCtx (uni beta) ctx'
-      pure delta
-    
-    _ -> otherErr $ show (unannT' ty) ++ " not expected in instL"
+      -- InstLArr
+      t1 :->: t2 -> do
+        root $ "InstLArr"
+        af1 <- freshName
+        af2 <- freshName
+        let ahat1 = exists af1
+        let ahat2 = exists af2
+        let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
+        omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (t1 `instR` af1)
+        substed <- substCtx omega t2
+        r <- local (const omega) $ branch (af2 `instL` substed)
+        pure r
+      
+      -- InstLAllR
+      Forall beta bty -> do
+        root $ "InstLAllR"
+        ctx' <- local (\g -> g <+ uni beta) $ branch (ahat `instL` bty)
+        (delta, _, delta') <- splitCtx (uni beta) ctx'
+        pure delta
+      
+      _ -> otherErr $ show (unannT ty) ++ " not expected in instL"
 
 instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
-instR (asMonotype -> Just mty) ahat = do
-  root $ "[InstRSolve]" <+> pretty mty <+> "=<:" <+> pretty ahat
-  (gam, _, gam') <- splitCtx (Exists ahat) =<< getCtx
-  pure (gam <+ ahat := mty <++ gam')
-instR (A a ty) ahat = 
-  case ty of
-    -- InstRReach
-    TExists bhat -> do 
-      root $ "InstRReach"
-      Exists ahat `before` Exists bhat >>= \case
-        True -> assign bhat (A a $ TExists ahat)
-        False -> otherErr $ "InstRReach"
+instR typ@(A a ty) ahat = do
+  ctx <- getCtx
+  case assign' ahat typ ctx of
+    Just ctx' -> do
+      root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
+      pure ctx'
+      
+    Nothing -> case ty of
+      -- InstRReach
+      TExists bhat -> do 
+        root $ "InstRReach"
+        Exists ahat `before` Exists bhat >>= \case
+          True -> assign bhat (A a $ TExists ahat)
+          False -> otherErr $ "InstRReach"
 
-    -- InstRArr
-    t1 :->: t2 -> do
-      root $ "InstRArr"
-      af1 <- freshName
-      af2 <- freshName
-      let ahat1 = exists af1
-      let ahat2 = exists af2
-      let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-      omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (af1 `instL` t1)
-      substed <- substCtx omega t2
-      r <- local (const omega) $ branch (substed `instR` af2)
-      pure r
-    
-    -- InstRAllL
-    Forall beta bty -> do
-      root $ "InstRAllL"
-      let substedB = subst (A a $ TExists beta) beta bty
-      ctx' <- local (\g -> g <+ marker beta <+ exists beta) $ branch (substedB `instR` ahat)
-      (delta, _, delta') <- splitCtx (marker beta) ctx'
-      pure delta
-    
-    _ -> otherErr $ show (unannT' ty) ++ " not expected in instR"
+      -- InstRArr
+      t1 :->: t2 -> do
+        root $ "InstRArr"
+        af1 <- freshName
+        af2 <- freshName
+        let ahat1 = exists af1
+        let ahat2 = exists af2
+        let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
+        omega <- local (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (af1 `instL` t1)
+        substed <- substCtx omega t2
+        r <- local (const omega) $ branch (substed `instR` af2)
+        pure r
+      
+      -- InstRAllL
+      Forall beta bty -> do
+        root $ "InstRAllL"
+        let substedB = subst (A a $ TExists beta) beta bty
+        ctx' <- local (\g -> g <+ marker beta <+ exists beta) $ branch (substedB `instR` ahat)
+        (delta, _, delta') <- splitCtx (marker beta) ctx'
+        pure delta
+      
+      _ -> otherErr $ show (unannT' ty) ++ " not expected in instR"
 
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- A is a subtype of B iff A is more polymorphic than B
@@ -500,9 +509,9 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     ctx' <- local (\g -> g <+ uni a) $ branch (t1 `subtypeOf'` t2)
     pure $ dropTil (uni a) ctx'
 
-  -- <:\/L
+  -- <:∀L
   subtypeOf' (Forall nm (A at1 t1)) t2 = do
-    root "<:\\/L"
+    root "<:∀L"
     let A _ t1' = subst (A at1 $ TExists nm) nm (A at1 t1)
     ctx' <- local (\g -> g <+ marker nm <+ exists nm) $ branch (t1' `subtypeOf'` t2)
     pure $ dropTil (marker nm) ctx'
