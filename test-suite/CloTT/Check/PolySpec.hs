@@ -32,7 +32,7 @@ shouldYield :: (Show a1, Pretty a1, Show a2, Eq a2)
 shouldYield (res, st, tree) ctx = 
   case res of
     Right ctx' -> do 
-      failure (showTree tree)
+      -- failure (showTree tree)
       ctx' `shouldBe` ctx
     Left err   -> failure $ (showW 80 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
 
@@ -44,11 +44,42 @@ polySpec = do
   let nil = emptyCtx @()
   let (.:) = HasType
   
+  describe "wfContext" $ do
+    specify "nil is well-formed" $ do
+      wfContext nil `shouldBe` True
+    specify "nil <+ a is well-formed" $ do
+      wfContext (nil <+ uni "a") `shouldBe` True
+      wfContext (nil <+ exists "a") `shouldBe` True
+    specify "nil <+ a := ty is well-formed" $ do
+      wfContext (nil <+ "a" := "Unit") `shouldBe` True
+    specify "nil <+ a : ty is well-formed" $ do
+      wfContext (nil <+ "a" .: "Unit") `shouldBe` True
+    specify "nil <+ a <+ x : a is well-formed" $ do
+      wfContext (nil <+ uni "a" <+ "x" .: "a") `shouldBe` True
+    specify "nil <+ ^a <+ x : ^a is well-formed" $ do
+      wfContext (nil <+ exists "a" <+ "x" .: E.exists "a") `shouldBe` True
+    specify "nil <+ ^a <+ ^b = ^a is well-formed" $ do
+      wfContext (nil <+ exists "a" <+ "b" := E.exists "a") `shouldBe` True
+
+    specify "nil <+ a <+ a is not well-formed" $ do
+      wfContext (nil <+ exists "a" <+ exists "a") `shouldBe` False
+      wfContext (nil <+ exists "a" <+ uni "a") `shouldBe` False
+      wfContext (nil <+ uni "a" <+ exists "a") `shouldBe` False
+      wfContext (nil <+ uni "a" <+ uni "a") `shouldBe` False
+    specify "nil <+ a <+ a : ty is not well-formed" $ do
+      wfContext (nil <+ exists "a" <+ "a" .: "Unit") `shouldBe` False
+      wfContext (nil <+ uni "a" <+ "a" .: "Unit") `shouldBe` False
+    specify "nil <+ ^a = ^b is not well-formed" $ do
+      wfContext (nil <+ "a" := E.exists "b") `shouldBe` False
+    specify "nil <+ ^a = b is not well-formed" $ do
+      wfContext (nil <+ "a" := "b") `shouldBe` False
+
   describe "<++" $ do
     it "should work" $ do
       let ctx = nil <+ exists "a" <+ exists "b" <+ "a" := "Nat" <+ "b" := "Unit"
       let ctx' = nil <++ (nil <+ exists "a") <++ (nil <+ exists "b" <+ "a" := "Nat" <+ "b" := "Unit")
       ctx' `shouldBe` ctx
+
   describe "splitCtx" $ do
     it "fails for empty context" $ do
       let ctx = nil
@@ -126,7 +157,7 @@ polySpec = do
       assign' "a" "Unit" ctx `shouldBe` Nothing
 
     it "works for context with 'a^'" $ do
-      do let t   = nil <+ uni "a" <+ exists "b"
+      do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
          assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
@@ -134,7 +165,7 @@ polySpec = do
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
          assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
-      do let t   = nil <+ uni "a" <+ exists "b"
+      do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil 
          let ctx = t <+ exists "a" <++ t'
          assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
@@ -179,16 +210,16 @@ polySpec = do
       do let t  = E.forAll ["a"] "a"
          let t' = E.forAll ["b"] "b"
          runSubtypeOf nil t t' `shouldYield` nil
-      do let t  = E.forAll ["a", "b"] ("a" @->: "b")
-         let t' = E.forAll ["x", "y"] ("x" @->: "y")
-         runSubtypeOf nil t t' `shouldYield` nil
-      do let t  = E.forAll ["a", "b"] ("a" @->: "b" @->: "a")
-         let t' = E.forAll ["x", "y"] ("x" @->: "y" @->: "x")
-         runSubtypeOf nil t t' `shouldYield` nil
+      -- do let t  = E.forAll ["a", "b"] ("a" @->: "b")
+      --    let t' = E.forAll ["x", "y"] ("x" @->: "y")
+      --    runSubtypeOf nil t t' `shouldYield` nil
+      -- do let t  = E.forAll ["a", "b"] ("a" @->: "b" @->: "a")
+      --    let t' = E.forAll ["x", "y"] ("x" @->: "y" @->: "x")
+      --    runSubtypeOf nil t t' `shouldYield` nil
 
     it "universal variables are subtypes of everything" $ do
       do let t  = E.forAll ["a"] "a"
-         let t' = ("x" @->: "y" @->: "x")
+         let t' = ("Nat" @->: "Bool" @->: "Unit")
          runSubtypeOf nil t t' `shouldYield` nil
       do let t  = E.forAll ["a"] "a"
          let t' = "Nat"
@@ -301,15 +332,23 @@ polySpec = do
          let sing   = "x" @-> "k" @-> "z" @-> "k" @@ "x" @@ "z"
              singty = E.forAll ["a"] $ "a" @->: clist "r" "a"
          runCheck nil sing singty `shouldYield` nil
+         -- map
+         let map   = "f" @-> "xs" @-> "k" @-> "z" @-> ("xs" @@ ("x" @-> "k" @@ ("f" @@ "x")) @@ "z")
+             mapty = E.forAll ["a", "b"] $ ("a" @->: "b") @->: clist "r" "a" @->: clist "r" "b"
+         runCheck nil map mapty `shouldYield` nil
     
     it "checks id against (∃a -> ∃b)" $ do
       -- this results in wrong order of solved existentials
       runCheck (nil <+ exists "a" <+ exists "b") ("x" @-> "x") (E.exists "a" @->: E.exists "b")
         `shouldYield` (nil <+ exists "a" <+ ("b" := E.exists "a"))
 
-    -- it "`apply id` checks when apply : ∀a b. (a -> b) -> a -> b" $ do
-    --   let ctx = nil <+ "apply" .: (E.forAll ["a", "b"] $ ("a" @->: "b") @->: "a" @->: "b")
-    --   runCheck ctx ("apply" @@ ("x" @-> "x")) (E.forAll ["a"] $ "a" @->: "a") `shouldYield` ctx
+    it "`apply id <= (∀a. a -> a)` when apply : ∀a b. (a -> b) -> a -> b" $ do
+      let ctx = nil <+ "apply" .: (E.forAll ["a", "b"] $ ("a" @->: "b") @->: "a" @->: "b")
+      runCheck ctx ("apply" @@ ("x" @-> "x")) (E.forAll ["a"] $ "a" @->: "a") `shouldYield` ctx
+
+    it "`apply id x <= a` when apply : ∀a b. (a -> b) -> a -> b" $ do
+      let ctx = nil <+ "apply" .: (E.forAll ["a", "b"] $ ("a" @->: "b") @->: "a" @->: "b")
+      runCheck ctx ("apply" @@ ("x" @-> "x") @@ E.true) ("Bool") `shouldYield` (ctx <+ E.mname 0 := "Bool" <+ E.mname 1 := E.exists (E.mname 0))
     
     it "`r2 double` fails when r2 : (∀a. a) -> (), double : Nat -> Nat" $ do
       do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: "Unit") <+ "double" .: ("Nat" @->: "Nat")
