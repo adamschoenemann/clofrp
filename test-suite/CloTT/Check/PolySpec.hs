@@ -189,14 +189,13 @@ polySpec = do
 
   describe "subtypeOf" $ do
     it "is reflexive" $ do
-      runSubtypeOf0 @() "a" "a" `shouldYield` emptyCtx
-      runSubtypeOf0 @() "a" "a" `shouldYield` emptyCtx
+      do let ctx = nil <+ uni "a"
+         runSubtypeOf ctx "a" "a" `shouldYield` ctx
       do let ctx = nil <+ exists "a"
          runSubtypeOf ctx (E.exists "a") (E.exists "a") `shouldYield` ctx
          shouldFail $ runSubtypeOf nil (E.exists "a") (E.exists "a") 
       do let t  = "Nat" @->: "Nat"
          let t' = "Nat" @->: "Bool"
-         runSubtypeOf nil t t `shouldYield` nil
          shouldFail $ runSubtypeOf nil t t' 
       do let t  = E.forAll ["a"] "Bool"
          let t' = E.forAll ["a"] "Nat"
