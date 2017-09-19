@@ -97,16 +97,16 @@ polySpec = do
       do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
          let ctx = nil <+ uni "b" <++ xs
          splitCtx' (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", xs)
-      -- do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
-      --    let ctx = xs <+ uni "b"
-      --    splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", emptyCtx)
-      -- do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
-      --    let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
-      --    let ctx = xs <+ uni "b" <++ ys
-      --    splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", ys)
-      -- do let id' = "x" .: E.forAll ["a"] ("a" @->: "a")
-      --    let ctx = nil <+ id' <+ exists "a"
-      --    splitCtx' (exists "a") ctx `shouldBe` Just (nil <+ id', exists "a", nil)
+      do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+         let ctx = xs <+ uni "b"
+         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", emptyCtx)
+      do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
+         let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
+         let ctx = xs <+ uni "b" <++ ys
+         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", ys)
+      do let id' = "x" .: E.forAll ["a"] ("a" @->: "a")
+         let ctx = nil <+ id' <+ exists "a"
+         splitCtx' (exists "a") ctx `shouldBe` Just (nil <+ id', exists "a", nil)
     specify "if splitCtx' alpha ctx == (xs, alpha, ys) then ctx == xs <+ alpha <++ ys" $ do
       let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
       let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
@@ -316,30 +316,29 @@ polySpec = do
            `shouldYield` (ctx)
     
     it "works with church-encoded lists" $ do
-      do -- List a := forall r. (a -> r -> r) -> r -> r
-         let clist r a = 
-              let r' = fromString r
+      do -- clist a := forall r. (a -> r -> r) -> r -> r
+         let clist a = 
+              let r' = fromString "r"
                   a' = fromString a
-              in E.forAll [fromString r] $ (a' @->: r' @->: r') @->: r' @->: r' 
+              in E.forAll [fromString "r"] $ (a' @->: r' @->: r') @->: r' @->: r' 
          -- nil = \k -> \z -> z
-         runCheck nil ("k" @-> "z" @-> "z") (E.forAll ["a"] $ clist "r" "a") `shouldYield` nil
+         runCheck nil ("k" @-> "z" @-> "z") (E.forAll ["a"] $ clist "a") `shouldYield` nil
          -- cons = \x xs -> k z -> x
          runCheck nil ("x" @-> "xs" @-> "k" @-> "z" @-> ("k" @@ "x" @@ ("xs" @@ "k" @@ "z")))
-                  (E.forAll ["a"] $ "a" @->: clist "r" "a" @->: clist "r" "a")
+                  (E.forAll ["a"] $ "a" @->: clist "a" @->: clist "a")
                   `shouldYield` nil
-         -- append : List a -> List a -> List a
-         -- append : clist a r -> clist a r -> clist a r
+         -- append : forall a. clist a -> clist a -> clist a
          let append   = "xs" @-> "ys" @-> "k" @-> "z" @-> "xs" @@ "k" @@ ("ys" @@ "k" @@ "z")
-             appendty = E.forAll ["a"] $ clist "r" "a" @->: clist "r" "a" @->: clist "r" "a"
+             appendty = E.forAll ["a"] $ clist "a" @->: clist "a" @->: clist "a"
          runCheck nil append appendty `shouldYield` nil
 
          -- singleton
          let sing   = "x" @-> "k" @-> "z" @-> "k" @@ "x" @@ "z"
-             singty = E.forAll ["a"] $ "a" @->: clist "r" "a"
+             singty = E.forAll ["a"] $ "a" @->: clist "a"
          runCheck nil sing singty `shouldYield` nil
          -- map
          let map   = "f" @-> "xs" @-> "k" @-> "z" @-> ("xs" @@ ("x" @-> "k" @@ ("f" @@ "x")) @@ "z")
-             mapty = E.forAll ["a", "b"] $ ("a" @->: "b") @->: clist "r" "a" @->: clist "r" "b"
+             mapty = E.forAll ["a", "b"] $ ("a" @->: "b") @->: clist "a" @->: clist "b"
          runCheck nil map mapty `shouldYield` nil
     
     it "checks id against (∃a -> ∃b)" $ do
@@ -359,32 +358,29 @@ polySpec = do
       do let ctx = nil <+ "r2" .: ((E.forAll ["a"] $ "a" @->: "a") @->: "Unit") <+ "double" .: ("Nat" @->: "Nat")
          shouldFail $ runCheck ctx ("r2" @@ "double") ("Unit")
     
-    -- it "works with type constructors" $ do
-    --   do let ctx = nil <+ "xs" .: ("List" @@: "Nat") <+ "hd" .: (E.forAll ["a"] $ "List" @@: "a" @->: "a")
-    --      runCheck ctx ("hd" @@ "xs") "Nat" `shouldYield` (ctx <+ E.mname 0 := "Nat")
+    it "works with type constructors" $ do
+      do let ctx = nil <+ "xs" .: ("List" @@: "Nat") <+ "hd" .: (E.forAll ["a"] $ "List" @@: "a" @->: "a")
+         runCheck ctx ("hd" @@ "xs") "Nat" `shouldYield` (ctx <+ E.mname 0 := "Nat")
 
-    -- it "checks map applied to a list" $ do
-    --   let map' = "map" .: (E.forAll ["a", "b"] $ ("a" @->: "b") @->: "List" @@: "a" @->: "List" @@: "b")
-    --   let ctx = nil <+ "xs" .: ("List" @@: "Nat") <+ map'
+    it "checks map applied to a list" $ do
+      let map' = "map" .: (E.forAll ["a", "b"] $ ("a" @->: "b") @->: "List" @@: "a" @->: "List" @@: "b")
+      let ctx = nil <+ "xs" .: ("List" @@: "Nat") <+ map'
+      runCheck ctx ("map" @@ ("x" @-> "x") @@ "xs") ("List" @@: "Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := E.exists (E.mname 0))
+      runCheck ctx ("map" @@ ("x" @-> E.true) @@ "xs") ("List" @@: "Bool") `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Bool")
 
-    --   runCheck ctx ("map" @@ ("x" @-> "x") @@ "xs") ("List" @@: "Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
-      -- runCheck ctx ("map" @@ ("x" @-> E.true) @@ "xs") ("List" @@: "Bool") `shouldYield` (ctx <+ E.mname 0 := "Nat")
-
-    -- it "works with runST" $ do
-    --   let runST = "runST" .: (E.forAll ["a"] $ (E.forAll ["s"] $ "ST" @@: "s" @@: "a") @->: "a")
-    --   let ctx = nil <+ "c" .: ("ST" @@: "s" @@: "Nat") <+ runST
-    --   runCheck ctx ("runST" @@ "c") "Nat" `shouldYield` nil
+    it "works with runST" $ do
+      let runST = "runST" .: (E.forAll ["a"] $ (E.forAll ["s"] $ "ST" @@: "s" @@: "a") @->: "a")
+      let ctx = nil <+ "c" .: (E.forAll ["s"] $ "ST" @@: "s" @@: "Nat") <+ runST
+      runCheck ctx ("runST" @@ "c") "Nat" `shouldYield` (ctx <+ E.mname 0 := "Nat")
            
-
-
-      -- do let ctx = nil <+ "x" .: (E.forAll ["a"] $ "a" @->: "a")
-      --    runCheck ctx ("x" @@ E.true) "Bool" `shouldYield` ctx
-
-      -- do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
-      --    runCheck ctx ("x" @@ E.nat 10) ("Bool" @->: "Nat") `shouldYield` ctx
-      -- do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
-      --    runCheck ctx ("x" @@ E.nat 10 @@ E.true) ("Nat") `shouldYield` ctx
-      -- do let ctx = nil <+ "x" .: (("Nat" @->: "Bool") @->: "Bool")
-      --    runCheck ctx ("x" @@ ("y" @-> E.true)) ("Bool") `shouldYield` ctx
+    it "works with some lambdas and stuff" $ do
+      do let ctx = nil <+ "x" .: (E.forAll ["a"] $ "a" @->: "a")
+         runCheck ctx ("x" @@ E.true) "Bool" `shouldYield` (ctx <+ E.mname 0 := "Bool")
+      do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
+         runCheck ctx ("x" @@ E.nat 10) ("Bool" @->: "Nat") `shouldYield` ctx
+      do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
+         runCheck ctx ("x" @@ E.nat 10 @@ E.true) ("Nat") `shouldYield` ctx
+      do let ctx = nil <+ "x" .: (("Nat" @->: "Bool") @->: "Bool")
+         runCheck ctx ("x" @@ ("y" @-> E.true)) ("Bool") `shouldYield` ctx
 
 

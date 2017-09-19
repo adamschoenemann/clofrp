@@ -373,10 +373,10 @@ before alpha beta = before' alpha beta <$> getCtx
 wfContext :: TyCtx a -> Bool
 wfContext (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
   fn :: CtxElem a -> Maybe [CtxElem a] -> Maybe [CtxElem a]
-  fn el accM = accM >>= (\acc -> if check acc el then Just (el : acc) else Nothing)
+  fn el accM = accM >>= (\acc -> if checkIt acc el then Just (el : acc) else Nothing)
 
   elem' f xs = isJust $ find (\x -> f (unann x)) xs
-  check acc = \case
+  checkIt acc = \case
     Uni nm          -> notInDom nm
     Exists nm       -> notInDom nm
     nm `HasType` ty -> notInDom nm && (asPolytype ty) `isWfTypeIn'` (Gamma acc)
@@ -388,17 +388,16 @@ wfContext (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
 
 -- assign an unsolved variable to a type in a context
 -- TODO: Optimize 
-assign' :: Name -> Type a Poly -> TyCtx a -> Maybe (TyCtx a)
-assign' nm (asMonotype -> Just ty) (Gamma ctx) =
+assign' :: Name -> Type a Mono -> TyCtx a -> Maybe (TyCtx a)
+assign' nm ty (Gamma ctx) =
   case foldr fn ([], False) ctx of
     (xs, True) | wfContext (Gamma xs) -> Just (Gamma xs)
     _                                 -> Nothing
   where
     fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
     fn x (xs, b)                        = (x : xs, b)
-assign' nm _ _ = Nothing
 
-assign :: Name -> Type a Poly -> TypingM a (TyCtx a)
+assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
   ctx <- getCtx
   case assign' nm ty ctx of
@@ -424,7 +423,7 @@ instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat ty@(A a ty') = do 
   ctx <- getCtx
-  case assign' ahat ty ctx of 
+  case (flip (assign' ahat) ctx) =<< asMonotype ty of 
     Just ctx' -> do 
       root $ "[InstLSolve] " <+> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
       pure ctx'
@@ -466,7 +465,7 @@ instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
 instR typ@(A a ty) ahat = do
   ctx <- getCtx
-  case assign' ahat typ ctx of
+  case (flip (assign' ahat) ctx) =<< asMonotype typ of
     Just ctx' -> do
       root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
       pure ctx'
@@ -550,7 +549,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   
   -- <:InstantiateL
   subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
+    | ahat `inFreeVars` ty2 = root "[InstantiateL] ItOccursError!" *> occursIn ahat ty2
     | otherwise = do 
       ctx <- getCtx
       if (A ann1 $ TExists ahat) `isWfTypeIn'` ctx  -- also check if ahat is in free vars of ty2

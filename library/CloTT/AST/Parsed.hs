@@ -36,11 +36,12 @@ type Type a s = Annotated a (Type' a s)
 data TySort = Mono | Poly deriving (Show, Eq)
 
 data Type' :: * -> TySort -> * where
-  TFree  :: Name                      -> Type' a s
+  TFree   :: Name                       -> Type' a s
+  -- TVar    :: Name                       -> Type' a s
   TExists :: Name  -> Type' a s
-  TApp   :: Type a Poly -> Type a s    -> Type' a s
+  TApp    :: Type a s    -> Type a s    -> Type' a s
   (:->:)  :: Type a s    -> Type a s    -> Type' a s
-  Forall :: Name        -> Type a Poly -> Type' a Poly
+  Forall  :: Name        -> Type a Poly -> Type' a Poly
 
 deriving instance Eq a       => Eq (Type' a s)
 deriving instance Data a     => Data (Type' a Poly)
@@ -118,7 +119,7 @@ asMonotype (A a ty) =
 
     TExists x -> pure (A a $ TExists x)
 
-    t1 `TApp` t2 -> (\x y -> A a $ TApp x y) <$> pure (asPolytype t1) <*> asMonotype t2
+    t1 `TApp` t2 -> (\x y -> A a $ TApp x y) <$> asMonotype t1 <*> asMonotype t2
     
     t1 :->: t2 -> (\x y -> A a (x :->: y)) <$> asMonotype t1 <*> asMonotype t2
     
