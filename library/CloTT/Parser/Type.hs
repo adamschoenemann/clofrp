@@ -14,21 +14,24 @@ import           CloTT.AST.Name
 type Type = E.Type SourcePos E.Poly
 
 free :: Parser Type
-free = ann <*> (E.TFree . UName <$> identifier)
+free = ann <*> (E.TFree . UName <$> uidentifier) <?> "free"
+
+tvar :: Parser Type
+tvar = ann <*> (E.TVar . UName <$> lidentifier) <?> "tvar"
 
 arr :: Parser (Type -> Type -> Type)
-arr = pure (\p a b -> A.A p $ a E.:->: b) <*> getPosition
+arr = pure (\p a b -> A.A p $ a E.:->: b) <*> getPosition <?> "arr"
 
 forAll :: Parser Type
-forAll = p where
+forAll = p <?> "forall" where
   p = do
-    nms <- reserved "forall" *> (map UName <$> many identifier) <* reservedOp "."
+    nms <- reserved "forall" *> (map UName <$> many1 lidentifier) <* reservedOp "."
     ty <- typep
     foldrM fn ty nms
   fn nm t = (\p -> A.A p $ E.Forall nm t) <$> getPosition
 
 typeexpr :: Parser Type
-typeexpr = free <|> forAll <|> parens typep
+typeexpr = tvar <|> free <|> forAll <|> parens typep
 
 typep :: Parser Type
 typep = buildExpressionParser table typeexpr where

@@ -108,10 +108,10 @@ isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs
 isWfTypeIn' :: Type a Poly -> TyCtx a -> Bool
 isWfTypeIn' (A _ ty) ctx =
   case ty of
-    -- FIXME: Nasty hack! We should distinguish type-variables and free names
-    TFree (UName (c:cs)) | isUpper c -> True
+    -- FIXME: Nasty hack! We should look up free variables in a separate context
+    TFree x -> True
     -- UvarWF
-    TFree x -> isJust $ ctxFind (freePred x) ctx
+    TVar x -> isJust $ ctxFind (freePred x) ctx
     -- EvarWF and SolvedEvarWF
     TExists alpha -> isJust $ ctxFind (expred $ alpha) ctx
     -- ArrowWF
@@ -287,6 +287,7 @@ substCtx' :: TyCtx a -> Type a Poly -> Either Name (Type a Poly)
 substCtx' ctx (A a ty) = 
   case ty of
     TFree x -> pure $ A a $ TFree x
+    TVar x  -> pure $ A a $ TVar  x
     TExists x -> 
       case findAssigned x ctx of
         Just tau -> pure $ asPolytype tau
@@ -341,6 +342,9 @@ subst x forY (A a inTy) =
   case inTy of
     TFree y     | y == forY  -> x
                 | otherwise -> A a $ TFree y
+
+    TVar y      | y == forY  -> x
+                | otherwise -> A a $ TVar y
 
     TExists y   | y == forY  -> x
                 | otherwise -> A a $ TExists y
@@ -507,9 +511,19 @@ instR typ@(A a ty) ahat = do
 -- TODO: Consider how to avoid name capture (alpha renaming probably)
 subtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
-  -- <:Var
+  -- <:Free
+  -- TODO: Check that free is in global context
   subtypeOf' (TFree x) (TFree x')
-        | x == x'    = root ("[<:Var]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> getCtx
+        | x == x'   = root ("[<:Free]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> getCtx
+        | otherwise = root ("[<:Free]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> cannotSubtype ty1 ty2
+
+  -- <:Var
+  subtypeOf' (TVar x) (TVar x')
+        | x == x'   = do
+          ctx <- getCtx 
+          if Uni x `isInContext` ctx
+            then root ("[<:Var]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> getCtx
+            else root ("[<:Var]") *> otherErr ("universal variable " ++ show x ++ " not found.")
         | otherwise = root ("[<:Var]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> cannotSubtype ty1 ty2
   
   -- <:Exvar

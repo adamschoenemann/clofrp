@@ -129,7 +129,6 @@ polySpec = do
       let t' = nil <+ uni "x'" <+ exists "z'" 
       let t'' = nil <+ uni "x''" <+ exists "z''" 
       let ctx = t <+ exists "a" <++ t' <+ exists "b" <++ t''
-      putStrLn . show $ ctx
       before' (exists "a") (exists "b") ctx `shouldBe` True
     it "before' a b (.,b,a) == False" $ do
       let ctx = nil <+ exists "b" <+ exists "a"
@@ -190,8 +189,8 @@ polySpec = do
 
   describe "subtypeOf" $ do
     it "is reflexive" $ do
-      runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
-      runSubtypeOf0 @() "a"   "a" `shouldYield`   emptyCtx
+      runSubtypeOf0 @() "a" "a" `shouldYield` emptyCtx
+      runSubtypeOf0 @() "a" "a" `shouldYield` emptyCtx
       do let ctx = nil <+ exists "a"
          runSubtypeOf ctx (E.exists "a") (E.exists "a") `shouldYield` ctx
          shouldFail $ runSubtypeOf nil (E.exists "a") (E.exists "a") 
@@ -337,9 +336,9 @@ polySpec = do
              singty = E.forAll ["a"] $ "a" @->: clist "a"
          runCheck nil sing singty `shouldYield` nil
          -- map
-         let map   = "f" @-> "xs" @-> "k" @-> "z" @-> ("xs" @@ ("x" @-> "k" @@ ("f" @@ "x")) @@ "z")
-             mapty = E.forAll ["a", "b"] $ ("a" @->: "b") @->: clist "a" @->: clist "b"
-         runCheck nil map mapty `shouldYield` nil
+         let cmap   = "f" @-> "xs" @-> "k" @-> "z" @-> ("xs" @@ ("x" @-> "k" @@ ("f" @@ "x")) @@ "z")
+             cmapty = E.forAll ["a", "b"] $ ("a" @->: "b") @->: clist "a" @->: clist "b"
+         runCheck nil cmap cmapty `shouldYield` nil
     
     it "checks id against (∃a -> ∃b)" $ do
       -- this results in wrong order of solved existentials

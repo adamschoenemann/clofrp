@@ -73,6 +73,8 @@ kindOf :: KiCtx -> PolyType () -> Result Kind
 kindOf ctx (A _ t) =
   case t of
     TFree v -> maybe (notFound v) pure $ M.lookup v ctx
+    -- actually wrong, but we'll re-implement this in poly
+    TVar  v -> maybe (notFound v) pure $ M.lookup v ctx
 
     TApp t1 t2 -> do
       k1 <- kindOf ctx t1

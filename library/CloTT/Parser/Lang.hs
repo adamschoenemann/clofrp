@@ -17,6 +17,7 @@ import Text.Parsec.String
 import Text.Parsec
 import Text.Parsec.Expr
 import Data.Char (isUpper, isLower)
+import Control.Monad (guard)
 import qualified Text.Parsec.Token as Tok
 
 -- instance Pretty SourcePos where
@@ -28,6 +29,36 @@ opNames    = [ "+", "-", "*", "/", "=", "==", "&&", "||"
              , "<", ">", "<=", ">=", "\\", "->", "|", ":", "."
              ]
 
+reservedNames :: [String]
+reservedNames = [ "if"
+                , "then"
+                , "else"
+                , "cons"
+                , "let"
+                , "in"
+                , "delay"
+                , "stable"
+                , "promote"
+                , "fst"
+                , "snd"
+                , "promote"
+                , "inl"
+                , "inr"
+                , "case"
+                , "of"
+                , "out"
+                , "into"
+                , "alloc"
+                , "fix"
+                , "mu"
+                , "()"
+                , "undefined"
+                , "import"
+                , "the"
+                , "data"
+                , "forall"
+                ]
+
 languageDef :: Tok.LanguageDef ()
 languageDef = Tok.LanguageDef
   { Tok.commentStart    = "{-"
@@ -38,34 +69,7 @@ languageDef = Tok.LanguageDef
   , Tok.identLetter     = alphaNum <|> oneOf "_'"
   , Tok.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
   , Tok.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
-  , Tok.reservedNames   = [ "if"
-                          , "then"
-                          , "else"
-                          , "cons"
-                          , "let"
-                          , "in"
-                          , "delay"
-                          , "stable"
-                          , "promote"
-                          , "fst"
-                          , "snd"
-                          , "promote"
-                          , "inl"
-                          , "inr"
-                          , "case"
-                          , "of"
-                          , "out"
-                          , "into"
-                          , "alloc"
-                          , "fix"
-                          , "mu"
-                          , "()"
-                          , "undefined"
-                          , "import"
-                          , "the"
-                          , "data"
-                          , "forall"
-                          ]
+  , Tok.reservedNames   = reservedNames
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True
   }
@@ -87,12 +91,27 @@ satisfies predicate err p = do
     then pure r
     else unexpected (err r)
 
-inIdent = many $ alphaNum <|> oneOf ['\'', '_']
-uidentifier = lexeme $ (:) <$> upper <*> inIdent
-lidentifier = lexeme $ (:) <$> lower <*> inIdent
+uidentifier = mkident isUpper
+lidentifier = mkident isLower
 
--- uidentifier = satisfies (isUpper . head) (\ident -> ident ++ " must start with an upper-case character") identifier
--- lidentifier = satisfies (isLower . head) (\ident -> ident ++ " must start with a lower-case character")  identifier
+-- annoyingly we have to re-implement this stuff
+mkident p = lexeme $ try $ do
+  name <- identp p
+  if (isReservedName name)
+    then unexpected ("reserved word " ++ show name)
+    else return name
+  where isReservedName nm = nm `elem` reservedNames
+
+-- annoyingly we have to re-implement this stuff
+identp p = do
+  c <- Tok.identStart languageDef
+  guard (p c)
+  cs <- many (Tok.identLetter languageDef)
+  return (c:cs) 
+ 
+
+-- uidentifier = try $ satisfies (isUpper . head) (\ident -> ident ++ " must start with an upper-case character") identifier
+-- lidentifier = try $ satisfies (isLower . head) (\ident -> ident ++ " must start with a lower-case character")  identifier
 
 reserved   = Tok.reserved   lexer -- parses a reserved name
 reservedOp = Tok.reservedOp lexer -- parses an operator

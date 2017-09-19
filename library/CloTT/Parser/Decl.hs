@@ -24,6 +24,7 @@ decl = datad <|> p where
     let p' = case op of
               '=' -> E.FunD (UName nm) <$> P.expr
               ':' -> E.SigD (UName nm) <$> P.typep
+              _   -> error "the impossible happened"
     ann <*> p' <* reservedOp "."
 
 -- sigd :: Parser Decl
@@ -49,6 +50,6 @@ constr :: Parser (E.Constr SourcePos)
 constr = ann <*> (E.Constr <$> (UName <$> uidentifier) <*> args) where
   -- to achieve the "space-separation" of constructor args, we have to do this instead of
   -- just `many P.typep`
-  args = many (ann <*> (E.TFree . UName <$> identifier) <|> parens P.typep)
+  args = many ((P.tvar <|> P.free) <|> parens P.typep)
 
 
