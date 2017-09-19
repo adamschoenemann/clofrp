@@ -51,7 +51,7 @@ instance Unann (CtxElem a) (CtxElem ()) where
 instance Show (CtxElem a) where
   show = \case
     Uni nm          -> show nm
-    Exists nm       -> "^" ++ show nm
+    Exists nm       -> "̂" ++ show nm
     nm `HasType` ty -> show nm ++ " : " ++ show (unannT ty)
     nm := ty        -> show nm ++ " = " ++ show (unannT ty)
     Marker nm       -> "▷" ++ show nm

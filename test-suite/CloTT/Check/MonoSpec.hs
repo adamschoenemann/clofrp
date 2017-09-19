@@ -261,8 +261,6 @@ monoSpec = do
     E.checkProg prog `shouldBe` Right ()
 
   -- FIXME: We still don't support polymorphism, so this will fail.
-  it "works with some polymorphic examples" $ do
-    pending
     -- let prog = [unsafeProg|
     --   data N      = Z | S N.
     --   data List a = Nil | Cons a (List a).

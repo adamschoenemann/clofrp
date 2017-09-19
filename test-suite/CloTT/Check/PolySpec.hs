@@ -210,12 +210,12 @@ polySpec = do
       do let t  = E.forAll ["a"] "a"
          let t' = E.forAll ["b"] "b"
          runSubtypeOf nil t t' `shouldYield` nil
-      -- do let t  = E.forAll ["a", "b"] ("a" @->: "b")
-      --    let t' = E.forAll ["x", "y"] ("x" @->: "y")
-      --    runSubtypeOf nil t t' `shouldYield` nil
-      -- do let t  = E.forAll ["a", "b"] ("a" @->: "b" @->: "a")
-      --    let t' = E.forAll ["x", "y"] ("x" @->: "y" @->: "x")
-      --    runSubtypeOf nil t t' `shouldYield` nil
+      do let t  = E.forAll ["a", "b"] ("a" @->: "b")
+         let t' = E.forAll ["x", "y"] ("x" @->: "y")
+         runSubtypeOf nil t t' `shouldYield` nil
+      do let t  = E.forAll ["a", "b"] ("a" @->: "b" @->: "a")
+         let t' = E.forAll ["x", "y"] ("x" @->: "y" @->: "x")
+         runSubtypeOf nil t t' `shouldYield` nil
 
     it "universal variables are subtypes of everything" $ do
       do let t  = E.forAll ["a"] "a"
@@ -316,18 +316,23 @@ polySpec = do
            `shouldYield` (ctx)
     
     it "works with church-encoded lists" $ do
-      do let clist r a = 
+      do -- List a := forall r. (a -> r -> r) -> r -> r
+         let clist r a = 
               let r' = fromString r
                   a' = fromString a
               in E.forAll [fromString r] $ (a' @->: r' @->: r') @->: r' @->: r' 
-         -- nil
+         -- nil = \k -> \z -> z
          runCheck nil ("k" @-> "z" @-> "z") (E.forAll ["a"] $ clist "r" "a") `shouldYield` nil
-         -- cons
-         runCheck nil ("x" @-> "xs" @-> "k" @-> "z" @-> "z") (E.forAll ["a"] $ "a" @->: clist "r" "a" @->: clist "r" "a") `shouldYield` nil
-         -- append
+         -- cons = \x xs -> k z -> x
+         runCheck nil ("x" @-> "xs" @-> "k" @-> "z" @-> ("k" @@ "x" @@ ("xs" @@ "k" @@ "z")))
+                  (E.forAll ["a"] $ "a" @->: clist "r" "a" @->: clist "r" "a")
+                  `shouldYield` nil
+         -- append : List a -> List a -> List a
+         -- append : clist a r -> clist a r -> clist a r
          let append   = "xs" @-> "ys" @-> "k" @-> "z" @-> "xs" @@ "k" @@ ("ys" @@ "k" @@ "z")
              appendty = E.forAll ["a"] $ clist "r" "a" @->: clist "r" "a" @->: clist "r" "a"
          runCheck nil append appendty `shouldYield` nil
+
          -- singleton
          let sing   = "x" @-> "k" @-> "z" @-> "k" @@ "x" @@ "z"
              singty = E.forAll ["a"] $ "a" @->: clist "r" "a"
