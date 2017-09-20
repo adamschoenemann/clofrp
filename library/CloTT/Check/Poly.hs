@@ -745,7 +745,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   synthesize' _ = cannotSynthesize expr
 
 inferPrim :: Prim -> Type' a Poly
-inferPrim p = TVar $ UName $ case p of
+inferPrim p = TFree $ UName $ case p of
   Unit   -> "Unit"
   Bool _ -> "Bool"
   Nat _  -> "Nat"

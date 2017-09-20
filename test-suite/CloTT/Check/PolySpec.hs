@@ -244,14 +244,18 @@ polySpec = do
     it "checks primitives" $ do
       let ctx = rd' ["Nat" |-> Star, "Bool" |-> Star, "Unit" |-> Star] nil
       runCheck ctx (E.nat 10) "Nat" `shouldYield` nil
-      -- runCheck ctx E.unit "Unit" `shouldYield` nil
-      -- runCheck ctx E.true "Bool" `shouldYield` nil
-      -- runCheck ctx E.true (E.forAll ["a"] "Bool") `shouldYield` nil
-      -- shouldFail $ runCheck ctx E.true (E.forAll ["a"] "Nat")
+      runCheck ctx E.unit "Unit" `shouldYield` nil
+      runCheck ctx E.true "Bool" `shouldYield` nil
+      runCheck ctx E.true (E.forAll ["a"] "Bool") `shouldYield` nil
+      shouldFail $ runCheck ctx E.true (E.forAll ["a"] "Nat")
     
-  --   it "checks variables" $ do
-  --     let ctx = nil <+ "x" .: "Nat"
-  --     runCheck ctx "x" "Nat" `shouldYield` ctx
+    it "checks variables" $ do
+      do let tctx = nil <+ "x" .: "Nat"
+         let ctx = rd' ["Nat" |-> Star] tctx
+         runCheck ctx "x" "Nat" `shouldYield` tctx
+      do let tctx = nil
+         let ctx = rd ["x" |-> "Nat"] ["Nat" |-> Star] tctx
+         runCheck ctx "x" "Nat" `shouldYield` tctx
 
   --   it "checks lambdas with mono-types" $ do
   --     runCheck0 ("x" @-> "x") ("Nat" @->: "Nat") `shouldYield` nil
