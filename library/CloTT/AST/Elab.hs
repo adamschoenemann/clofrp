@@ -15,6 +15,7 @@ module CloTT.AST.Elab where
 
 import qualified Data.Map.Strict as M
 import Data.Data (Data, Typeable)
+import Data.String (fromString)
 
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Parsed
@@ -90,7 +91,7 @@ data Destr a = Destr
 elabCs :: Name -> [Name] -> [Constr a] -> (M.Map Name (Type () Poly), M.Map Name (Destr ()))
 elabCs tyname bound cs = (M.fromList $ map toFn cs, M.fromList $ map toDestr cs) where
   -- | The fully applied type e.g. Maybe a
-  fullyApplied = foldl (@@: ) (A () $ TFree tyname) $ map (A () . TFree) bound
+  fullyApplied = foldl (@@: ) (A () $ TFree tyname) $ map (A () . nameToType') bound
   -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
   quantify     = if length bound > 0 then (\t -> foldr (\nm t' -> A () $ Forall nm t') t bound) else id
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`

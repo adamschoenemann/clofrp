@@ -42,7 +42,7 @@ elabSpec = do
     prog `shouldElabTo`
             ( E.ctxk [("Maybe", Star :->*: Star)]
             , E.tymap  [ ("Just", E.forAll ["a"] $ "a" @->: "Maybe" @@: "a")
-                     , ("Nothing", E.forAll ["a"] $ "Maybe" @@: "a")
+                       , ("Nothing", E.forAll ["a"] $ "Maybe" @@: "a")
                      ]
             )
   

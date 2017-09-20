@@ -82,6 +82,11 @@ instance Pretty (Type a s) where
 --   show = show . pretty
 
 deriving instance Show a => Show (Type' a s)
+
+nameToType' :: Name -> Type' a s
+nameToType' nm@(UName (c:cs)) | isUpper c = TFree nm
+nameToType' nm = TVar nm
+
   
 instance IsString (Type () s) where
   fromString [] = error "empty string not expected" 
