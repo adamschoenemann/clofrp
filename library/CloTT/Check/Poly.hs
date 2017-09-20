@@ -25,6 +25,7 @@ import Debug.Trace
 import Data.Maybe (isJust)
 import Data.Char (isUpper)
 import Data.String (fromString)
+import Control.Applicative ((<|>))
 import Data.Text.Prettyprint.Doc
 import Control.Monad (foldM)
 import GHC.Exts (IsList(..))
@@ -95,6 +96,7 @@ instance (IsList (KindCtx a)) where
   fromList xs = KindCtx $ M.fromList xs
   toList (KindCtx m) = M.toList m
 
+infix 1 |->
 (|->) :: a -> b -> (a,b)
 x |-> y = (x,y)
 
@@ -180,10 +182,13 @@ findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
   fn (nm' := ty) | nm == nm' = pure ty
   fn _                      = Nothing
 
-hasTypeIn :: Name -> TyCtx a -> Maybe (Type a Poly)
-hasTypeIn nm (Gamma xs) = findMap fn xs where
+hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a Poly)
+hasTypeInCtx nm (Gamma xs) = findMap fn xs where
   fn (nm' `HasType` ty) | nm == nm' = pure ty
   fn _                             = Nothing
+
+hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a Poly)
+hasTypeInFCtx nm (FreeCtx m) = M.lookup nm m
 
 branch :: TypingM a r -> TypingM a r
 branch comp = do
@@ -707,11 +712,13 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- Var
   synthesize' (Var nm) = do
     ctx <- getCtx
-    case nm `hasTypeIn` ctx of
+    fctx <- getFCtx
+    case (nm `hasTypeInCtx` ctx <|> nm `hasTypeInFCtx` fctx) of
       Just ty -> do 
         root $ "[Var]" <+> pretty expr <+> "=>" <+> pretty ty
         pure (ty, ctx)
       Nothing -> nameNotFound nm
+
   
   -- Anno
   synthesize' (Ann e ty) = do
