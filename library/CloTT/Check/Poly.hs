@@ -745,7 +745,8 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     branch $ a2 `subtypeOf` b2
 
   subtypeOf' t1 t2 = do
-    root $ "[Error!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
+    root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
+    -- root $ "[Error!]" <+> pretty t1 <+> "<:" <+> pretty t2
     cannotSubtype ty1 ty2
 
 check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
@@ -804,21 +805,22 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   
   -- Anno
   synthesize' (Ann e ty) = do
-    root "[Anno]"
+    root $ "[Anno]" <+> pretty e <+> ":" <+> pretty ty
     _ <- branch $ check e ty
     (ty, ) <$> getCtx
   
   -- ->L=>
   synthesize' (Lam x Nothing e) = do
-    root "[->L=>]"
+    root $ "[->L=>]" <+> pretty expr
     alpha <- freshName
     beta <- freshName
     let alphac = Exists alpha 
         betac  = Exists beta
         alphat = A ann $ TExists alpha 
         betat  = A ann $ TExists beta
-    ctx' <- (\g -> g <+ alphac <+ betac <+ x `HasType` alphat) <$> getCtx
-    (delta, _, theta) <- splitCtx (x `HasType` alphat) =<< (branch $ check e betat)
+    ctx' <- withCtx (\g -> g <+ alphac <+ betac <+ x `HasType` alphat) $
+                    branch (check e betat)
+    (delta, _, theta) <- splitCtx (x `HasType` alphat) ctx'
     pure (A ann $ alphat :->: betat, delta)
   
   -- ->E
@@ -830,7 +832,11 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     withCtx (const theta) $ branch $ applysynth ty1subst e2 
 
   -- Prim=>
-  synthesize' (Prim p) = root "[Prim=>]" *> ((A ann $ inferPrim p, ) <$> getCtx)
+  synthesize' (Prim p) = do
+    let pt = inferPrim p
+    root $ "[Prim=>]" <+> pretty expr <+> "=>" <+> pretty pt
+    ctx <- getCtx
+    pure (A ann $ pt, ctx)
 
   synthesize' _ = cannotSynthesize expr
 

@@ -260,6 +260,24 @@ polySpec = do
       let tctx = nil <+ "x" .: "Nat"
       runSynth (rd' ["Nat" |-> Star] tctx) "x" `shouldYield` ("Nat", tctx)
 
+    it "synthesizes annotated expressions" $ do
+      let mk = rd' ["Nat" |-> Star, "Bool" |-> Star]
+      do let tctx = nil <+ "x" .: "Nat"
+         runSynth (mk tctx) (E.the "Nat" "x") `shouldYield` ("Nat", tctx)
+      runSynth (mk nil) (E.the "Nat" (E.nat 10)) `shouldYield` ("Nat", nil)
+      shouldFail $ runSynth (mk nil) (E.the "Bool" (E.nat 10))
+      runSynth (mk nil) (E.the "Bool" (E.true)) `shouldYield` ("Bool", nil)
+      runSynth (mk nil) (E.the ("Bool" @->: "Nat") ("x" @-> E.nat 10)) `shouldYield` ("Bool" @->: "Nat", nil)
+      shouldFail $ runSynth (mk nil) (E.the ("Bool" @->: "Nat") ("x" @-> "x")) 
+      runSynth (mk nil) (E.the ("Bool" @->: "Bool") ("x" @-> "x")) `shouldYield` ("Bool" @->: "Bool", nil)
+      shouldFail $ runSynth (mk nil) (E.the (E.forAll ["a"] "Bool" @->: "a") ("x" @-> "x")) 
+
+      do let t = E.forAll ["a"] $ "a" @->: "Bool"
+         runSynth (mk nil) (E.the t ("x" @-> E.true)) `shouldYield` (t, nil)
+
+      do let ctx = rd ["id" |-> E.forAll ["a"] ("a" @->: "a")] ["Nat" |-> Star] nil
+         runSynth ctx (E.the ("Nat" @->: "Nat") "id") `shouldYield` ("Nat" @->: "Nat", nil)
+
   describe "check" $ do
 
     it "checks primitives" $ do
