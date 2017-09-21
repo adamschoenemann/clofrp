@@ -221,6 +221,16 @@ data Kind
   | Kind :->*: Kind
   deriving (Show, Eq, Data, Typeable)
 
+instance Pretty Kind where
+  pretty = rndr False where
+    rndr p = \case 
+      Star -> "*"
+      k1 :->*: k2 -> parensIf $ rndr True k1 <+> "->" <+> rndr False k2
+      where
+        parensIf = if p then parens else id
+    
+
+
 type Decl a = Annotated a (Decl' a)
 data Decl' a
   = FunD Name (Expr a)

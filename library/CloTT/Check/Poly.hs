@@ -13,6 +13,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module CloTT.Check.Poly where
 
@@ -86,6 +87,10 @@ newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
 newtype KindCtx a = KindCtx { unKundCtx :: M.Map Name Kind }
   deriving (Monoid)
 
+instance Pretty (KindCtx a) where
+  pretty (KindCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
+    fn (k, v) = pretty k <+> "↦" <+> pretty v 
+
 instance (IsList (FreeCtx a)) where
   type Item (FreeCtx a) = (Name, Type a Poly)
   fromList xs = FreeCtx $ M.fromList xs
@@ -138,21 +143,23 @@ isInKContext el (KindCtx m) = el `M.member` m
 
 -- A type is wellformed
 -- TODO: Deal with free types
-isWfTypeIn' :: Type a Poly -> TyCtx a -> Bool
-isWfTypeIn' (A _ ty) ctx =
+-- this one, validType and kindOf should probably be merged somehow...
+isWfTypeIn' :: Type a Poly -> KindCtx a -> TyCtx a -> Bool
+isWfTypeIn' (A ann ty) kctx ctx =
+  -- trace ("isWfTypeIn'" ++ (show $ unann ty)) $
   case ty of
-    -- FIXME: Nasty hack! We should look up free variables in a separate context
-    TFree x -> True
+    -- UFreeWF
+    TFree x -> x `isInKContext` kctx
     -- UvarWF
     TVar x -> isJust $ ctxFind (freePred x) ctx
     -- EvarWF and SolvedEvarWF
     TExists alpha -> isJust $ ctxFind (expred $ alpha) ctx
     -- ArrowWF
-    t1 :->: t2 -> isWfTypeIn' t1 ctx && isWfTypeIn' t2 ctx
+    t1 :->: t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
     -- ForallWF
-    Forall x t -> isWfTypeIn' t (ctx <+ Uni x)
+    Forall x t -> isWfTypeIn' t kctx (ctx <+ Uni x)
     -- TAppWF. TODO: Use kind-ctx to make sure kinds are correct
-    TApp t1 t2 -> isWfTypeIn' t1 ctx && isWfTypeIn' t2 ctx
+    TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
   where 
     expred alpha = \case
       Exists alpha' -> alpha == alpha'
@@ -180,7 +187,7 @@ elemBy fn = isJust . find fn
 findAssigned :: Name -> TyCtx a -> Maybe (Type a Mono)
 findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
   fn (nm' := ty) | nm == nm' = pure ty
-  fn _                      = Nothing
+  fn _                       = Nothing
 
 hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a Poly)
 hasTypeInCtx nm (Gamma xs) = findMap fn xs where
@@ -189,6 +196,12 @@ hasTypeInCtx nm (Gamma xs) = findMap fn xs where
 
 hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a Poly)
 hasTypeInFCtx nm (FreeCtx m) = M.lookup nm m
+
+lookupKind :: Name -> KindCtx a -> Maybe (Kind)
+lookupKind nm (KindCtx m) = M.lookup nm m
+
+addK :: Name -> Kind -> KindCtx a -> KindCtx a
+addK nm k (KindCtx m) = KindCtx $ M.insert nm k m
 
 branch :: TypingM a r -> TypingM a r
 branch comp = do
@@ -238,6 +251,7 @@ data TyExcept a
   | CannotSplit (CtxElem a) (TyCtx a)
   | CannotSynthesize (Expr a)
   | CannotAppSynthesize (Type a Poly) (Expr a)
+  | NotWfType (Type a Poly)
   | Other String
   deriving (Show, Eq)
 
@@ -249,6 +263,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     CannotSplit el ctx       -> CannotSplit (unann el) (unann ctx)
     CannotSynthesize e       -> CannotSynthesize (unann e)
     CannotAppSynthesize ty e -> CannotAppSynthesize (unann ty) (unann e)
+    NotWfType ty             -> NotWfType (unann ty)
     Other s                  -> Other s
 
 instance Pretty (TyExcept a) where
@@ -259,6 +274,7 @@ instance Pretty (TyExcept a) where
     CannotSplit el ctx       -> "Cannot split" <+> pretty ctx <+> "at" <+> pretty el
     CannotSynthesize e       -> "Cannot synthesize" <+> pretty e
     CannotAppSynthesize ty e -> "Cannot app_synthesize" <+> pretty ty <+> "•" <+> pretty e
+    NotWfType ty             -> pretty ty <+> "is not well-formed"
     Other s                  -> "Other error:" <+> fromString s
 
 tyExcept :: TyExcept a -> TypingM a r
@@ -280,6 +296,9 @@ occursIn nm t = tyExcept $ OccursIn nm t
 
 nameNotFound :: Name -> TypingM a r
 nameNotFound nm = tyExcept $ NameNotFound nm
+
+notWfType :: Type a Poly -> TypingM a r
+notWfType ty = tyExcept $ NotWfType ty
 
 cannotSplit :: CtxElem a -> TyCtx a -> TypingM a r
 cannotSplit el ctx = tyExcept $ CannotSplit el ctx
@@ -318,6 +337,10 @@ withCtx :: (TyCtx a -> TyCtx a) -> TypingM a r -> TypingM a r
 withCtx fn = local fn' where
   fn' rd = rd { trCtx = fn (trCtx rd) }
 
+withKCtx :: (KindCtx a -> KindCtx a) -> TypingM a r -> TypingM a r
+withKCtx fn = local fn' where
+  fn' rd = rd { trKinds = fn (trKinds rd) }
+
 freshName :: TypingM a Name
 freshName = do 
   i <- gets names
@@ -341,6 +364,9 @@ runCheck0 e t = runCheck initRead e t
 
 runCheck :: TypingRead a -> Expr a -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runCheck rd e t = runTypingM (check e t) rd initState
+
+runSynth :: TypingRead a -> Expr a -> TypingMRes a (Type a Poly, TyCtx a)
+runSynth rd e = runTypingM (synthesize e) rd initState
 
 
 substCtx' :: TyCtx a -> Type a Poly -> Either Name (Type a Poly)
@@ -434,8 +460,9 @@ before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False wher
 before :: CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
-wfContext :: TyCtx a -> Bool
-wfContext (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
+-- Check if a context is well-formed
+wfContext :: forall a. KindCtx a -> TyCtx a -> Bool
+wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
   fn :: CtxElem a -> Maybe [CtxElem a] -> Maybe [CtxElem a]
   fn el accM = accM >>= (\acc -> if checkIt acc el then Just (el : acc) else Nothing)
 
@@ -443,8 +470,8 @@ wfContext (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
   checkIt acc = \case
     Uni nm          -> notInDom nm
     Exists nm       -> notInDom nm
-    nm `HasType` ty -> notInDom nm && (asPolytype ty) `isWfTypeIn'` (Gamma acc)
-    nm := ty        -> notInDom nm && (asPolytype ty) `isWfTypeIn'` (Gamma acc)
+    nm `HasType` ty -> notInDom nm && ((asPolytype ty `isWfTypeIn'` kctx) (Gamma acc))
+    nm := ty        -> notInDom nm && ((asPolytype ty `isWfTypeIn'` kctx) (Gamma acc))
     Marker nm       -> notInDom nm && not ((\x -> Marker nm == x) `elem'` acc)
     where
       notInDom nm = not $ (\x -> Uni nm == x || Exists nm == x) `elem'` acc
@@ -452,10 +479,10 @@ wfContext (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
 
 -- assign an unsolved variable to a type in a context
 -- TODO: Optimize 
-assign' :: Name -> Type a Mono -> TyCtx a -> Maybe (TyCtx a)
-assign' nm ty (Gamma ctx) =
+assign' :: Name -> Type a Mono -> KindCtx a -> TyCtx a -> Maybe (TyCtx a)
+assign' nm ty kctx (Gamma ctx) =
   case foldr fn ([], False) ctx of
-    (xs, True) | wfContext (Gamma xs) -> Just (Gamma xs)
+    (xs, True) | wfContext kctx (Gamma xs) -> Just (Gamma xs)
     _                                 -> Nothing
   where
     fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
@@ -464,7 +491,8 @@ assign' nm ty (Gamma ctx) =
 assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
   ctx <- getCtx
-  case assign' nm ty ctx of
+  kctx <- getKCtx
+  case assign' nm ty kctx ctx of
     Nothing  -> root "assign" *> nameNotFound nm
     Just ctx' -> do 
       -- traceM $ showW 80 $ "assign" <+> pretty nm <+> pretty ty <+> pretty ctx <+> "---->" <+> pretty ctx'
@@ -482,12 +510,56 @@ insertAt at insertee = do
     Nothing   -> otherErr $ "Cannot insert into context " ++ show ctx ++ " at " ++ show at
     Just ctx' -> pure ctx'
 
+-- Infer the kind of a type expression
+kindOf' :: KindCtx a -> Type a Poly -> Either String Kind
+kindOf' kctx (A _ t) =
+  case t of
+    TFree v -> maybe (notFound v) pure $ lookupKind v kctx
+    
+    -- should look up kind in local kctx
+    TVar  v -> maybe (notFound v) pure $ lookupKind v kctx
+
+    -- should look up kind in local kctx
+    TExists  v -> maybe (notFound v) pure $ lookupKind v kctx
+
+    TApp t1 t2 -> do
+      k1 <- kindOf' kctx t1
+      k2 <- kindOf' kctx t2
+      case (k1, k2) of
+        (k11 :->*: k12, k2')
+          | k11 == k2' -> pure k12
+          | otherwise  -> 
+              Left $ "Expected " ++ pps t2 ++ " to have kind " ++ pps k11
+        (_k1', _) -> Left $ "Expected " ++ pps t1 ++ " to be a type constructor"
+
+    t1 :->: t2 -> do
+      k1 <- kindOf' kctx t1
+      k2 <- kindOf' kctx t2
+      case (k1, k2) of
+        (Star, Star) -> pure Star
+        (k1', k2')   -> Left $ "Both operands in arrow types must have kind *, but had " 
+                     ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
+    
+    Forall v tau -> kindOf' (addK v Star kctx) tau
+  where
+    notFound v = Left $ "Type " ++ pps v ++ " not found in context."
+
+-- Types are only valid if they have kind *
+validType' :: KindCtx a -> Type a Poly -> Bool
+validType' kctx t = do
+  case kindOf' kctx t of
+    Right Star -> True
+    Right k    -> trace ((show $ unann t) ++ " is not valid") $ False
+    Left  err  -> trace err $ False
+    _          -> False
+
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat ty@(A a ty') = do 
   ctx <- getCtx
-  case (flip (assign' ahat) ctx) =<< asMonotype ty of 
+  kctx <- getKCtx
+  case (\t -> assign' ahat t kctx ctx) =<< asMonotype ty of 
     Just ctx' -> do 
       root $ "[InstLSolve] " <+> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
       pure ctx'
@@ -529,7 +601,8 @@ instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
 instR typ@(A a ty) ahat = do
   ctx <- getCtx
-  case (flip (assign' ahat) ctx) =<< asMonotype typ of
+  kctx <- getKCtx
+  case (\t -> assign' ahat t kctx ctx) =<< asMonotype typ of
     Just ctx' -> do
       root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
       pure ctx'
@@ -573,11 +646,11 @@ subtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:Free
   subtypeOf' (TFree x) (TFree x') = do
-    fctx <- getKCtx
+    kctx <- getKCtx
     case () of
-      _ | not (x `isInKContext` fctx) ->
+      _ | not (x `isInKContext` kctx) ->
             root ("[<:Free]") *> nameNotFound x
-        | not (x' `isInKContext` fctx) ->
+        | not (x' `isInKContext` kctx) ->
             root ("[<:Free]") *> nameNotFound x'
         | x == x' ->
             root ("[<:Free]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> getCtx
@@ -632,10 +705,11 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   
   -- <:InstantiateL
   subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = root "[InstantiateL] ItOccursError!" *> occursIn ahat ty2
+    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do 
       ctx <- getCtx
-      if (A ann1 $ TExists ahat) `isWfTypeIn'` ctx  -- also check if ahat is in free vars of ty2
+      kctx <- getKCtx
+      if ((A ann1 $ TExists ahat) `isWfTypeIn'` kctx) ctx  -- also check if ahat is in free vars of ty2
         then do 
           root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2 <+> "in" <+> pretty ctx
           r <- branch (ahat `instL` ty2)
@@ -650,7 +724,8 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
     | otherwise = do 
       ctx <- getCtx
-      if (A ann2 $ TExists ahat) `isWfTypeIn'` ctx 
+      kctx <- getKCtx
+      if ((A ann2 $ TExists ahat) `isWfTypeIn'` kctx) ctx 
         then do 
           root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
           r <- branch (ty1 `instR` ahat)
@@ -713,11 +788,18 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   synthesize' (Var nm) = do
     ctx <- getCtx
     fctx <- getFCtx
+    kctx <- getKCtx
     case (nm `hasTypeInCtx` ctx <|> nm `hasTypeInFCtx` fctx) of
-      Just ty -> do 
-        root $ "[Var]" <+> pretty expr <+> "=>" <+> pretty ty
-        pure (ty, ctx)
-      Nothing -> nameNotFound nm
+      Just ty 
+        | (ty `isWfTypeIn'` kctx) ctx -> do 
+            root $ "[Var]" <+> pretty expr <+> "=>" <+> pretty ty
+            pure (ty, ctx)
+        | otherwise -> do
+            root $ "[Var]" <+> pretty nm <+> ":" <+> pretty ty <+> "is not wellformed"
+                   <+> "in kctx: " <+> pretty kctx
+            notWfType ty
+
+      Nothing -> root "[Var]" *> nameNotFound nm
 
   
   -- Anno
@@ -741,7 +823,8 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   
   -- ->E
   synthesize' (App e1 e2) = do
-    root "[->E]"
+    ctx <- getCtx
+    root $ "[->E]" <+> pretty expr <+> "in" <+> pretty ctx
     (ty1, theta) <- branch $ synthesize e1
     ty1subst <- substCtx theta ty1
     withCtx (const theta) $ branch $ applysynth ty1subst e2 

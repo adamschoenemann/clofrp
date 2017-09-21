@@ -47,36 +47,43 @@ polySpec = do
   let rd'  = rd mempty 
   let rd'' = rd mempty mempty
   let (.:) = HasType
+  let stdkinds = 
+        [ "Nat" |-> Star, "Unit" |-> Star, "Bool" |-> Star, "Int" |-> Star
+        , "List" |-> Star :->*: Star, "Maybe" |-> Star :->*: Star
+        ]
+
   
   describe "wfContext" $ do
     specify "nil is well-formed" $ do
-      wfContext nil `shouldBe` True
+      wfContext mempty nil `shouldBe` True
     specify "nil <+ a is well-formed" $ do
-      wfContext (nil <+ uni "a") `shouldBe` True
-      wfContext (nil <+ exists "a") `shouldBe` True
+      wfContext mempty (nil <+ uni "a") `shouldBe` True
+      wfContext mempty (nil <+ exists "a") `shouldBe` True
     specify "nil <+ a := ty is well-formed" $ do
-      wfContext (nil <+ "a" := "Unit") `shouldBe` True
+      wfContext stdkinds (nil <+ "a" := "Unit") `shouldBe` True
+      wfContext mempty (nil <+ "a" := "Unit") `shouldBe` False
     specify "nil <+ a : ty is well-formed" $ do
-      wfContext (nil <+ "a" .: "Unit") `shouldBe` True
+      wfContext stdkinds (nil <+ "a" .: "Unit") `shouldBe` True
+      wfContext mempty (nil <+ "a" .: "Unit") `shouldBe` False
     specify "nil <+ a <+ x : a is well-formed" $ do
-      wfContext (nil <+ uni "a" <+ "x" .: "a") `shouldBe` True
+      wfContext mempty (nil <+ uni "a" <+ "x" .: "a") `shouldBe` True
     specify "nil <+ ^a <+ x : ^a is well-formed" $ do
-      wfContext (nil <+ exists "a" <+ "x" .: E.exists "a") `shouldBe` True
+      wfContext mempty (nil <+ exists "a" <+ "x" .: E.exists "a") `shouldBe` True
     specify "nil <+ ^a <+ ^b = ^a is well-formed" $ do
-      wfContext (nil <+ exists "a" <+ "b" := E.exists "a") `shouldBe` True
+      wfContext mempty (nil <+ exists "a" <+ "b" := E.exists "a") `shouldBe` True
 
     specify "nil <+ a <+ a is not well-formed" $ do
-      wfContext (nil <+ exists "a" <+ exists "a") `shouldBe` False
-      wfContext (nil <+ exists "a" <+ uni "a") `shouldBe` False
-      wfContext (nil <+ uni "a" <+ exists "a") `shouldBe` False
-      wfContext (nil <+ uni "a" <+ uni "a") `shouldBe` False
+      wfContext mempty (nil <+ exists "a" <+ exists "a") `shouldBe` False
+      wfContext mempty (nil <+ exists "a" <+ uni "a") `shouldBe` False
+      wfContext mempty (nil <+ uni "a" <+ exists "a") `shouldBe` False
+      wfContext mempty (nil <+ uni "a" <+ uni "a") `shouldBe` False
     specify "nil <+ a <+ a : ty is not well-formed" $ do
-      wfContext (nil <+ exists "a" <+ "a" .: "Unit") `shouldBe` False
-      wfContext (nil <+ uni "a" <+ "a" .: "Unit") `shouldBe` False
+      wfContext mempty (nil <+ exists "a" <+ "a" .: "Unit") `shouldBe` False
+      wfContext mempty (nil <+ uni "a" <+ "a" .: "Unit") `shouldBe` False
     specify "nil <+ ^a = ^b is not well-formed" $ do
-      wfContext (nil <+ "a" := E.exists "b") `shouldBe` False
+      wfContext mempty (nil <+ "a" := E.exists "b") `shouldBe` False
     specify "nil <+ ^a = b is not well-formed" $ do
-      wfContext (nil <+ "a" := "b") `shouldBe` False
+      wfContext mempty (nil <+ "a" := "b") `shouldBe` False
 
   describe "<++" $ do
     it "should work" $ do
@@ -143,35 +150,36 @@ polySpec = do
       before' (exists "a") (exists "b") ctx `shouldBe` False
 
   describe "assign'" $ do
+    let kctx = ["Unit" |-> Star]
     it "fails for empty context" $ do
       let ctx = nil
-      assign' "a" "Unit" ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
 
     it "fails for singleton context without 'a^'" $ do
       let ctx = nil <+ exists "b"
-      assign' "a" "Unit" ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
 
     it "fails for singleton context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a"
-      assign' "a" "Unit" ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
 
     it "fails for context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a" <+ exists "b" <+ marker "c"
-      assign' "a" "Unit" ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
 
     it "works for context with 'a^'" $ do
       do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+         assign' "a" "Unit" kctx ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
       do let t   = nil 
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+         assign' "a" "Unit" kctx ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
       do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil 
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+         assign' "a" "Unit" kctx ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
          
   describe "insertAt'" $ do
     it "fails with context without elem" $ do
@@ -194,20 +202,21 @@ polySpec = do
   -- TODO: Add tests with type constructors
   describe "subtypeOf" $ do
     it "is reflexive" $ do
+      let mk = rd' ["Nat" |-> Star, "Bool" |-> Star]
       do let ctx = nil <+ uni "a"
          runSubtypeOf (rd'' ctx) "a" "a" `shouldYield` ctx
          shouldFail $ runSubtypeOf (rd'' nil) "Nat" "Nat" 
-         runSubtypeOf (rd' [("Nat", Star)] nil) "Nat" "Nat" `shouldYield` nil
+         runSubtypeOf (mk nil) "Nat" "Nat" `shouldYield` nil
       do let ctx = nil <+ exists "a"
          runSubtypeOf (rd'' ctx) (E.exists "a") (E.exists "a") `shouldYield` ctx
          shouldFail $ runSubtypeOf (rd'' nil) (E.exists "a") (E.exists "a") 
       do let t  = "Nat" @->: "Nat"
          let t' = "Nat" @->: "Bool"
-         shouldFail $ runSubtypeOf (rd'' nil) t t' 
+         shouldFail $ runSubtypeOf (mk nil) t t' 
       do let t  = E.forAll ["a"] "Bool"
          let t' = E.forAll ["a"] "Nat"
          let t'' = E.forAll ["b"] "Bool"
-         let ctx = rd' ["Bool" |-> Star, "Nat" |-> Star] nil
+         let ctx = mk nil
          runSubtypeOf ctx t t `shouldYield` nil
          shouldFail $ runSubtypeOf ctx t t' 
          runSubtypeOf ctx t t'' `shouldYield` nil
@@ -226,7 +235,7 @@ polySpec = do
     it "universal variables are subtypes of everything" $ do
       do let t  = E.forAll ["a"] "a"
          let t' = ("Nat" @->: "Bool" @->: "Unit")
-         let ctx = rd' ["Nat" |-> Star, "Bool" |-> Star] nil
+         let ctx = rd' ["Nat" |-> Star, "Bool" |-> Star, "Unit" |-> Star] nil
          runSubtypeOf ctx t t' `shouldYield` nil
       do let t  = E.forAll ["a"] "a"
          let t' = "Nat"
@@ -239,6 +248,18 @@ polySpec = do
          let ctx = rd' ["Unit" |-> Star] nil
          runSubtypeOf ctx t t' `shouldYield` nil
   
+  describe "synthesize" $ do
+    
+    it "synthesizes primitives" $ do
+      runSynth (rd'' nil) (E.nat 10) `shouldYield` ("Nat",  nil)
+      runSynth (rd'' nil) (E.true)   `shouldYield` ("Bool", nil)
+      runSynth (rd'' nil) (E.false)  `shouldYield` ("Bool", nil)
+      runSynth (rd'' nil) (E.unit)   `shouldYield` ("Unit", nil)
+    
+    it "synthesizes variables" $ do
+      let tctx = nil <+ "x" .: "Nat"
+      runSynth (rd' ["Nat" |-> Star] tctx) "x" `shouldYield` ("Nat", tctx)
+
   describe "check" $ do
 
     it "checks primitives" $ do
@@ -413,5 +434,45 @@ polySpec = do
          runCheck (mk ctx) ("x" @@ E.nat 10 @@ E.true) ("Nat") `shouldYield` ctx
       do let ctx = nil <+ "x" .: (("Nat" @->: "Bool") @->: "Bool")
          runCheck (mk ctx) ("x" @@ ("y" @-> E.true)) ("Bool") `shouldYield` ctx
+
+  describe "kindOf'" $ do
+    let kinds = [ ("List"  |-> Star :->*: Star)
+                , ("Tuple" |-> Star :->*: Star :->*: Star)
+                , ("Nat"   |-> Star)
+                , ("a"     |-> Star)
+                , ("b"     |-> Star)
+                ]
+    -- let [listK, tupK, natK, aK, bK] = kinds
+
+    it "looks up kinds" $ do
+      kindOf' kinds "Nat" `shouldBe` Right Star
+
+    it "infers arrow types to be kind *" $ do
+      kindOf' kinds ("Nat" @->: "Nat") `shouldBe` Right Star
+      kindOf' kinds ("List" @@: "Nat" @->: "List" @@: "Nat") `shouldBe` Right Star
+
+    it "fails when type not found in ctx" $ do
+      kindOf' @() [] "Nat" `shouldSatisfy` isLeft
+    
+    it "fails with partially applied types in arrows" $ do
+      kindOf' kinds ("List" @->: "a") `shouldSatisfy` isLeft
+
+    it "infers lists" $ do
+      kindOf' kinds ("List" @@: "a") `shouldBe` Right Star
+
+    it "infers tuples (curried)" $ do
+      kindOf' kinds ("Tuple" @@: "a") `shouldBe` Right (Star :->*: Star)
+
+    it "infers tuples" $ do
+      kindOf' kinds ("Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+
+    it "infers tuples of lists" $ do
+      kindOf' kinds ("Tuple" @@: ("List" @@: "a") @@: "b") `shouldBe` Right Star
+
+    it "infers foralls" $ do
+      kindOf' kinds (E.forAll ["a"] $ "List" @@: "a") `shouldBe` Right Star
+      kindOf' kinds  (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+      kindOf' kinds  (E.forAll ["a"] "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
+      kindOf' kinds  (E.forAll ["a"] "List" @@: "a" @->: "a") `shouldBe` Right Star
 
 
