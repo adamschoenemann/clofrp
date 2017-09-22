@@ -13,7 +13,7 @@ import Data.String (fromString)
 
 import qualified CloTT.AST.Parsed  as E
 import           CloTT.Check.Poly
-import           CloTT.Check.Poly.Elab
+import           CloTT.Check.Poly.Prog
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
 import           CloTT.TestUtils
@@ -44,7 +44,7 @@ shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
 polySpec :: Spec
 polySpec = do
   let nil = emptyCtx @()
-  let rd fctx kctx ctx = TR ctx fctx kctx
+  let rd fctx kctx ctx = TR ctx fctx kctx mempty
   let rd'  = rd mempty 
   let rd'' = rd mempty mempty
   let (.:) = HasType
@@ -493,5 +493,33 @@ polySpec = do
       kindOf' kinds  (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
       kindOf' kinds  (E.forAll ["a"] "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
       kindOf' kinds  (E.forAll ["a"] "List" @@: "a" @->: "a") `shouldBe` Right Star
+
+  describe "checkProg" $ do
+  it "fails programs with invalid types (1)" $ do
+    let prog = [unsafeProg|
+      data Foo a = MkFoo a.
+      foo : Foo -> Nat.
+      foo = \x -> x.
+    |]
+    checkProg prog `shouldSatisfy` isLeft
+
+  it "fails programs with invalid types (2)" $ do
+    let prog = [unsafeProg|
+      data List a = Nil | Cons a (List a a).
+    |]
+    checkProg prog `shouldSatisfy` isLeft
+
+  it "fails programs with invalid types (3)" $ do
+    let prog = [unsafeProg|
+      data List = Nil | Cons a (List a).
+    |]
+    checkProg prog `shouldSatisfy` isLeft
+
+  it "succeeds for mono-types" $ do
+    let prog = [unsafeProg|
+      data Int = .
+      data IntList = Nil | Cons Int IntList.
+    |]
+    checkProg prog `shouldBe` Right ()
 
 

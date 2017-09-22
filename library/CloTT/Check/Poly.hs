@@ -83,15 +83,27 @@ marker = Marker
 uni :: Name -> CtxElem a
 uni = Uni
 
+-- A destructor which is elaborated from a pattern
+data Destr a = Destr
+  { name   :: Name
+  , typ    :: Type a Poly
+  , args   :: [Type a Poly]
+  } deriving (Show, Eq, Data, Typeable)
+
 -- Free contexts contains "global" mappings from names to types
 newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
   deriving (Show, Eq, Monoid, Data)
+
+instance (IsList (FreeCtx a)) where
+  type Item (FreeCtx a) = (Name, Type a Poly)
+  fromList xs = FreeCtx $ M.fromList xs
+  toList (FreeCtx m) = M.toList m
 
 instance Context (FreeCtx a) where
   type Elem (FreeCtx a) = Type a Poly
   type Key (FreeCtx a)  = Name
   extend nm ty (FreeCtx m) = FreeCtx $ M.insert nm ty m
-  hasKey nm (FreeCtx m) = M.member nm m
+  isMemberOf nm (FreeCtx m) = M.member nm m
 
 -- Kind context contains "global" mappings from type-names to kinds
 newtype KindCtx a = KindCtx { unKundCtx :: M.Map Name Kind }
@@ -101,21 +113,38 @@ instance Context (KindCtx a) where
   type Elem (KindCtx a) = Kind
   type Key (KindCtx a)  = Name
   extend nm ty (KindCtx m) = KindCtx $ M.insert nm ty m
-  hasKey nm (KindCtx m) = M.member nm m
-
-instance Pretty (KindCtx a) where
-  pretty (KindCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
-    fn (k, v) = pretty k <+> "↦" <+> pretty v 
-
-instance (IsList (FreeCtx a)) where
-  type Item (FreeCtx a) = (Name, Type a Poly)
-  fromList xs = FreeCtx $ M.fromList xs
-  toList (FreeCtx m) = M.toList m
+  isMemberOf nm (KindCtx m) = M.member nm m
 
 instance (IsList (KindCtx a)) where
   type Item (KindCtx a) = (Name, Kind)
   fromList xs = KindCtx $ M.fromList xs
   toList (KindCtx m) = M.toList m
+
+instance Pretty (KindCtx a) where
+  pretty (KindCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
+    fn (k, v) = pretty k <+> "↦" <+> pretty v 
+
+
+-- context of destructors 
+newtype DestrCtx a = DestrCtx { unDestrCtx :: M.Map Name (Destr a) }
+  deriving (Show, Eq, Monoid, Data)
+
+instance Context (DestrCtx a) where
+  type Elem (DestrCtx a) = Destr a
+  type Key (DestrCtx a)  = Name
+  extend nm ty (DestrCtx m) = DestrCtx $ M.insert nm ty m
+  isMemberOf nm (DestrCtx m) = M.member nm m
+
+instance (IsList (DestrCtx a)) where
+  type Item (DestrCtx a) = (Name, Destr a)
+  fromList xs = DestrCtx $ M.fromList xs
+  toList (DestrCtx m) = M.toList m
+
+-- instance Pretty (DestrCtx a) where
+--   pretty (DestrCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
+--     fn (k, v) = pretty k <+> "↦" <+> pretty v 
+
+
 
 infix 1 |->
 (|->) :: a -> b -> (a,b)
@@ -152,20 +181,19 @@ isInContext :: CtxElem a -> TyCtx a -> Bool
 isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs
 
 isInFContext :: Name -> FreeCtx a -> Bool
-isInFContext el (FreeCtx m) = el `M.member` m
+isInFContext = isMemberOf
 
 isInKContext :: Name -> KindCtx a -> Bool
-isInKContext el (KindCtx m) = el `M.member` m
+isInKContext = isMemberOf
 
 -- A type is wellformed
--- TODO: Deal with free types
 -- this one, validType and kindOf should probably be merged somehow...
 isWfTypeIn' :: Type a Poly -> KindCtx a -> TyCtx a -> Bool
 isWfTypeIn' (A ann ty) kctx ctx =
   -- trace ("isWfTypeIn'" ++ (show $ unann ty)) $
   case ty of
     -- UFreeWF
-    TFree x -> x `isInKContext` kctx
+    TFree x -> x `isMemberOf` kctx
     -- UvarWF
     TVar x -> isJust $ ctxFind (freePred x) ctx
     -- EvarWF and SolvedEvarWF
@@ -239,6 +267,7 @@ data TypingRead a  =
   TR { trCtx :: TyCtx a
      , trFree :: FreeCtx a
      , trKinds :: KindCtx a
+     , trDestrs :: DestrCtx a
      }
   
 emptyFCtx :: FreeCtx a
@@ -338,7 +367,7 @@ runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
 runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
 
 initRead :: TypingRead a 
-initRead = TR { trFree = emptyFCtx, trCtx = emptyCtx, trKinds = emptyKCtx }
+initRead = TR { trFree = emptyFCtx, trCtx = emptyCtx, trKinds = emptyKCtx, trDestrs = mempty }
 
 getCtx :: TypingM a (TyCtx a)
 getCtx = asks trCtx
@@ -662,9 +691,9 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   subtypeOf' (TFree x) (TFree x') = do
     kctx <- getKCtx
     case () of
-      _ | not (x `isInKContext` kctx) ->
+      _ | not (x `isMemberOf` kctx) ->
             root ("[<:Free]") *> nameNotFound x
-        | not (x' `isInKContext` kctx) ->
+        | not (x' `isMemberOf` kctx) ->
             root ("[<:Free]") *> nameNotFound x'
         | x == x' ->
             root ("[<:Free]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> getCtx

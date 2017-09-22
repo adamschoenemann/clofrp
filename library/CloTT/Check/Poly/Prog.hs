@@ -12,7 +12,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module CloTT.Check.Poly.Elab where
+module CloTT.Check.Poly.Prog where
 
 import qualified Data.Map.Strict as M
 import Data.Data (Data, Typeable)
@@ -32,22 +32,20 @@ import CloTT.Context
 
 -- alias for definitions
 type Defs a = M.Map Name (Expr a)
--- alias for destructors 
-type Destrs a = M.Map Name (Destr a)
 
 type ElabRes a = 
   ( KindCtx a  -- kinds
   , Defs    a  -- function definitions
   , FreeCtx a  -- signatures
   , FreeCtx a  -- constructors
-  , Destrs  a  -- destructors
+  , DestrCtx  a  -- destructors
   )
 
 data ElabProg a = ElabProg
   { kinds  :: KindCtx a
   , types  :: FreeCtx a
   , defs   :: Defs a
-  , destrs :: Destrs a
+  , destrs :: DestrCtx a
   } deriving (Show, Eq, Data, Typeable)
 
 elabProg :: Prog a -> TypingM a (ElabProg a)
@@ -73,12 +71,6 @@ elabProg (Prog decls) =
         | not sigsHaveDefs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
         | otherwise     -> pure $ ElabProg kinds (sigds <> cnstrs) funds destrs
 
--- A destructor which is elaborated from a pattern
-data Destr a = Destr
-  { name   :: Name
-  , typ    :: Type a Poly
-  , args   :: [Type a Poly]
-  } deriving (Show, Eq, Data, Typeable)
 
 -- "Elaborate" the constructors of a type, return a mapping from constructor names
 -- to their types, e.g.
@@ -86,8 +78,8 @@ data Destr a = Destr
 -- Nothing : Maybe a
 -- Just : a -> Maybe a
 -- and a mapping from constructors to their destructors
-elabCs :: forall a. Name -> [Name] -> [Constr a] -> (FreeCtx a, Destrs a)
-elabCs tyname bound cs = (fromList $ map toFn cs, M.fromList $ map toDestr cs) where
+elabCs :: forall a. Name -> [Name] -> [Constr a] -> (FreeCtx a, DestrCtx a)
+elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) where
   -- | The fully applied type e.g. Maybe a
   fullyApplied :: a -> Type a Poly
   fullyApplied ann = foldl (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType') bound
@@ -98,8 +90,26 @@ elabCs tyname bound cs = (fromList $ map toFn cs, M.fromList $ map toDestr cs) w
   toFn    (A ann (Constr nm args)) = (nm, quantify $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)
   -- | Convert a constructor to a destructor, to just for pattern matches
   toDestr :: Constr a -> (Name, Destr a)
-  toDestr (A ann (Constr nm args)) = undefined
+  toDestr (A ann (Constr nm args)) = 
+    (nm, Destr {name = nm, typ = quantify (fullyApplied ann), args = args})
 
   anned :: a -> (t -> r -> b) -> t -> r -> Annotated a b
   anned ann fn = \x y -> A ann $ fn x y
-    -- (nm, Destr {name = nm, typ = quantify (fullyApplied ann), args = args})
+
+-- checkElabedProg :: ElabProg a -> TypingM a ()
+-- checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do
+--   _ <- checkTypes
+--   _ <- checkDefs
+--   pure ()
+--   where 
+--     checkTypes = traverse (validType kinds) types
+--     checkDefs  = M.traverseWithKey traverseDefs defs
+
+--     ctx = TR {trKinds = kinds, trFree = types, destrs = destrs}
+--     -- we have explicit recursion allowed here. In the future, we should probably disallow this
+--     traverseDefs k expr = case M.lookup k types of
+--       Just ty -> check ctx expr ty
+--       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
+
+-- checkProg :: Prog a -> TypingM a ()
+-- checkProg = (checkElabedProg =<<) . elabProg
