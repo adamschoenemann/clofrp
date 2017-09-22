@@ -14,6 +14,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module CloTT.Check.Poly where
 
@@ -24,6 +25,7 @@ import Data.List (break, intercalate, find)
 import Control.Monad (foldM)
 import Debug.Trace
 import Data.Maybe (isJust)
+import Data.Data
 import Data.Char (isUpper)
 import Data.String (fromString)
 import Control.Applicative ((<|>))
@@ -33,6 +35,7 @@ import GHC.Exts (IsList(..))
 import qualified Data.Map.Strict as M
 
 import CloTT.AST.Name
+import CloTT.Context
 import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
 import CloTT.Pretty
@@ -82,10 +85,23 @@ uni = Uni
 
 -- Free contexts contains "global" mappings from names to types
 newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
-  deriving (Monoid)
+  deriving (Show, Eq, Monoid, Data)
+
+instance Context (FreeCtx a) where
+  type Elem (FreeCtx a) = Type a Poly
+  type Key (FreeCtx a)  = Name
+  extend nm ty (FreeCtx m) = FreeCtx $ M.insert nm ty m
+  hasKey nm (FreeCtx m) = M.member nm m
+
 -- Kind context contains "global" mappings from type-names to kinds
 newtype KindCtx a = KindCtx { unKundCtx :: M.Map Name Kind }
-  deriving (Monoid)
+  deriving (Show, Eq, Monoid, Data)
+
+instance Context (KindCtx a) where
+  type Elem (KindCtx a) = Kind
+  type Key (KindCtx a)  = Name
+  extend nm ty (KindCtx m) = KindCtx $ M.insert nm ty m
+  hasKey nm (KindCtx m) = M.member nm m
 
 instance Pretty (KindCtx a) where
   pretty (KindCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
@@ -551,7 +567,6 @@ validType' kctx t = do
     Right Star -> True
     Right k    -> trace ((show $ unann t) ++ " is not valid") $ False
     Left  err  -> trace err $ False
-    _          -> False
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
@@ -587,7 +602,6 @@ instL ahat ty@(A a ty') = do
       
       -- InstLAllR
       Forall beta bty -> do
-        ctx <- getCtx
         root $ "[InstLAllR]" <+> pretty ahat <+> ":<=" <+> pretty bty <+> "in" <+> pretty ctx
         beta' <- freshName
         let bty' = subst (A a $ TFree beta') beta bty

@@ -13,6 +13,7 @@ import Data.String (fromString)
 
 import qualified CloTT.AST.Parsed  as E
 import           CloTT.Check.Poly
+import           CloTT.Check.Poly.Elab
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
 import           CloTT.TestUtils
