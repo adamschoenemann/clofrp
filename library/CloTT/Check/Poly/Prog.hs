@@ -19,6 +19,7 @@ import Data.Data (Data, Typeable)
 import Data.String (fromString)
 import Data.Monoid
 import GHC.Exts (fromList)
+import Control.Monad.Reader (local)
 
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Parsed
@@ -96,20 +97,23 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
   anned :: a -> (t -> r -> b) -> t -> r -> Annotated a b
   anned ann fn = \x y -> A ann $ fn x y
 
--- checkElabedProg :: ElabProg a -> TypingM a ()
--- checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do
---   _ <- checkTypes
---   _ <- checkDefs
---   pure ()
---   where 
---     checkTypes = traverse (validType kinds) types
---     checkDefs  = M.traverseWithKey traverseDefs defs
+checkElabedProg :: ElabProg a -> TypingM a ()
+checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do
+  _ <- checkTypes
+  _ <- checkDefs
+  pure ()
+  where 
+    checkTypes = traverse (validType kinds) (unFreeCtx types)
+    checkDefs  = M.traverseWithKey traverseDefs defs
 
---     ctx = TR {trKinds = kinds, trFree = types, destrs = destrs}
---     -- we have explicit recursion allowed here. In the future, we should probably disallow this
---     traverseDefs k expr = case M.lookup k types of
---       Just ty -> check ctx expr ty
---       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
+    ctx = TR {trKinds = kinds, trFree = types, trDestrs = destrs, trCtx = emptyCtx}
+    -- we have explicit recursion allowed here. In the future, we should probably disallow this
+    traverseDefs k expr = case query k types of
+      Just ty -> local (const ctx) $ check expr ty
+      Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
 
--- checkProg :: Prog a -> TypingM a ()
--- checkProg = (checkElabedProg =<<) . elabProg
+checkProg :: Prog a -> TypingM a ()
+checkProg = (checkElabedProg =<<) . elabProg
+
+runCheckProg :: TypingRead a -> Prog a -> TypingMRes a ()
+runCheckProg rd prog = runTypingM (checkProg prog) rd initState

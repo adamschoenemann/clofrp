@@ -17,4 +17,6 @@ class Eq b => Unann a b | a -> b where
   unann :: a -> b
   (=%=) :: a -> a -> Bool
   x =%= y = unann x == unann y
+  (=/%=) :: a -> a -> Bool
+  x =/%= y = unann x /= unann y
 

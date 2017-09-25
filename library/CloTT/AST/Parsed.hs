@@ -203,7 +203,8 @@ prettyP n (A _ t) = prettyP' n t
 prettyP' :: Bool -> Pat' a -> Doc ann
 prettyP' pars = \case
   Bind nm -> pretty nm
-  Match nm pats -> parensIf $ pretty nm <> hsep (map (prettyP False) pats)
+  Match nm []   -> pretty nm
+  Match nm pats -> parensIf $ pretty nm <+> hsep (map (prettyP False) pats)
   where
     parensIf = if pars then parens else id
 

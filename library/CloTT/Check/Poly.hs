@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module CloTT.Check.Poly where
 
@@ -23,6 +25,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import Data.List (break, intercalate, find)
 import Control.Monad (foldM)
+import Data.Foldable (foldlM)
 import Debug.Trace
 import Data.Maybe (isJust)
 import Data.Data
@@ -104,6 +107,7 @@ instance Context (FreeCtx a) where
   type Key (FreeCtx a)  = Name
   extend nm ty (FreeCtx m) = FreeCtx $ M.insert nm ty m
   isMemberOf nm (FreeCtx m) = M.member nm m
+  query x (FreeCtx m) = M.lookup x m
 
 -- Kind context contains "global" mappings from type-names to kinds
 newtype KindCtx a = KindCtx { unKundCtx :: M.Map Name Kind }
@@ -114,6 +118,7 @@ instance Context (KindCtx a) where
   type Key (KindCtx a)  = Name
   extend nm ty (KindCtx m) = KindCtx $ M.insert nm ty m
   isMemberOf nm (KindCtx m) = M.member nm m
+  query x (KindCtx m) = M.lookup x m
 
 instance (IsList (KindCtx a)) where
   type Item (KindCtx a) = (Name, Kind)
@@ -134,6 +139,7 @@ instance Context (DestrCtx a) where
   type Key (DestrCtx a)  = Name
   extend nm ty (DestrCtx m) = DestrCtx $ M.insert nm ty m
   isMemberOf nm (DestrCtx m) = M.member nm m
+  query x (DestrCtx m) = M.lookup x m
 
 instance (IsList (DestrCtx a)) where
   type Item (DestrCtx a) = (Name, Destr a)
@@ -177,6 +183,10 @@ infixl 4 <++
 (<++) :: TyCtx a -> TyCtx a -> TyCtx a
 Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 
+instance Monoid (TyCtx a) where
+  mempty = emptyCtx
+  mappend = (<++)
+
 isInContext :: CtxElem a -> TyCtx a -> Bool
 isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs
 
@@ -194,7 +204,7 @@ isWfTypeIn' (A ann ty) kctx ctx =
   case ty of
     -- UFreeWF
     TFree x -> x `isMemberOf` kctx
-    -- UvarWF
+    -- UVarWF
     TVar x -> isJust $ ctxFind (freePred x) ctx
     -- EvarWF and SolvedEvarWF
     TExists alpha -> isJust $ ctxFind (expred $ alpha) ctx
@@ -202,7 +212,7 @@ isWfTypeIn' (A ann ty) kctx ctx =
     t1 :->: t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
     -- ForallWF
     Forall x t -> isWfTypeIn' t kctx (ctx <+ Uni x)
-    -- TAppWF. TODO: Use kind-ctx to make sure kinds are correct
+    -- TAppWF. 
     TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
   where 
     expred alpha = \case
@@ -269,6 +279,15 @@ data TypingRead a  =
      , trKinds :: KindCtx a
      , trDestrs :: DestrCtx a
      }
+
+instance Monoid (TypingRead a) where
+  mempty = TR mempty mempty mempty mempty
+  mappend (TR c1 f1 k1 d1) (TR c2 f2 k2 d2) =
+    TR { trCtx    = mappend c1 c2
+       , trFree   = mappend f1 f2 
+       , trKinds  = mappend k1 k2
+       , trDestrs = mappend d1 d2
+       }
   
 emptyFCtx :: FreeCtx a
 emptyFCtx = FreeCtx (M.empty)
@@ -375,12 +394,19 @@ getCtx = asks trCtx
 getFCtx :: TypingM a (FreeCtx a)
 getFCtx = asks trFree
 
+getDCtx :: TypingM a (DestrCtx a)
+getDCtx = asks trDestrs
+
 getKCtx :: TypingM a (KindCtx a)
 getKCtx = asks trKinds
 
 withCtx :: (TyCtx a -> TyCtx a) -> TypingM a r -> TypingM a r
 withCtx fn = local fn' where
   fn' rd = rd { trCtx = fn (trCtx rd) }
+
+withFCtx :: (FreeCtx a -> FreeCtx a) -> TypingM a r -> TypingM a r
+withFCtx fn = local fn' where
+  fn' rd = rd { trFree = fn (trFree rd) }
 
 withKCtx :: (KindCtx a -> KindCtx a) -> TypingM a r -> TypingM a r
 withKCtx fn = local fn' where
@@ -597,6 +623,13 @@ validType' kctx t = do
     Right k    -> trace ((show $ unann t) ++ " is not valid") $ False
     Left  err  -> trace err $ False
 
+validType :: KindCtx a -> Type a Poly -> TypingM a ()
+validType kctx t = do
+  case kindOf' kctx t of
+    Right Star -> pure ()
+    Right k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
+    Left err   -> otherErr $ err
+
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
@@ -738,12 +771,12 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     pure $ dropTil (uni a') ctx'
 
   -- <:∀L
-  subtypeOf' (Forall nm (A at1 t1)) t2 = do
+  subtypeOf' (Forall nm (A at1 t1)) _ = do
     ctx <- getCtx
     root $ "[<:∀L]" <+> pretty ty1 <+> "<:" <+> pretty ty2 <+> "in" <+> pretty ctx
     nm' <- freshName
-    let A _ t1' = subst (A at1 $ TExists nm') nm (A at1 t1)
-    ctx' <- withCtx (\g -> g <+ marker nm' <+ exists nm') $ branch (t1' `subtypeOf'` t2)
+    let t1' = subst (A at1 $ TExists nm') nm (A at1 t1)
+    ctx' <- withCtx (\g -> g <+ marker nm' <+ exists nm') $ branch (t1' `subtypeOf` ty2)
     pure $ dropTil (marker nm') ctx'
   
   -- <:InstantiateL
@@ -779,13 +812,13 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
           nameNotFound ahat
   
   -- <:TApp
-  subtypeOf' (a1 `TApp` a2) (b1 `TApp` b2) = do
+  subtypeOf' (TApp a1 a2) (TApp b1 b2) = do
     ctx <- getCtx
-    root $ "[TApp]" <+> pretty ty1 <+> ">=:" <+> pretty ty2 <+> "in" <+> pretty ctx
+    root $ "[<:TApp]" <+> pretty ty1 <+> "<:" <+> pretty ty2 <+> "in" <+> pretty ctx
     theta <- branch $ a1 `subtypeOf` b1
     a2' <- substCtx theta a2
     b2' <- substCtx theta b2
-    branch $ a2 `subtypeOf` b2
+    branch $ a2' `subtypeOf` b2'
 
   subtypeOf' t1 t2 = do
     root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
@@ -814,6 +847,13 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     let c = x `HasType` aty
     (delta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 bty)
     pure delta
+  
+  -- Case<=
+  check' (Case e' clauses) _ = do
+    root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
+    (pty, delta) <- branch $ synthesize e'
+    cty <- withCtx (const delta) $ branch $ checkCaseClauses pty clauses ty
+    pure delta
 
   -- Sub
   check' _ _ = do
@@ -823,6 +863,14 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     atysubst <- substCtx theta aty
     btysubst <- substCtx theta ty
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
+  
+  checkCaseClauses :: Type a Poly -> [(Pat a, Expr a)] -> Type a Poly -> TypingM a ()
+  checkCaseClauses pty clauses expected = traverse checkClause clauses *> pure () where
+    checkClause (pat, expr) = do 
+      ctx <- getCtx
+      root $ "[CheckClause]" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
+      ctx' <- branch $ checkPat pat pty
+      withCtx (const ctx') $ branch $ check expr expected
 
 
 
@@ -840,7 +888,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
             pure (ty, ctx)
         | otherwise -> do
             root $ "[Var]" <+> pretty nm <+> ":" <+> pretty ty <+> "is not wellformed"
-                   <+> "in kctx: " <+> pretty kctx
+                   <+> "in kctx: " <+> pretty kctx <+> softline <> "in ctx:" <+> pretty ctx
             notWfType ty
 
       Nothing -> root "[Var]" *> nameNotFound nm
@@ -881,6 +929,15 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     ctx <- getCtx
     pure (A ann $ pt, ctx)
 
+  -- Case=>
+  synthesize' (Case e clauses) = do
+    root $ "[Case=>]" <+> pretty e <+> enclose "[" "]" (cat $ map pretty clauses)
+    cannotSynthesize expr
+    -- (pty, delta) <- branch $ synthesize e
+    -- cty <- withCtx (const delta) $ branch $ checkClauses (pty, Nothing) clauses
+    -- ctx <- getCtx
+    -- pure (cty, ctx)
+
   synthesize' _ = cannotSynthesize expr
 
 inferPrim :: Prim -> Type' a Poly
@@ -888,6 +945,54 @@ inferPrim p = TFree $ UName $ case p of
   Unit   -> "Unit"
   Bool _ -> "Bool"
   Nat _  -> "Nat"
+
+-- in a context, check each clause against a type of (pattern, Maybe expression)
+-- if second type is nothing, it is because we do not yet know which type to infer,
+-- but we should know in first recursive call
+-- DEPRECATED!
+-- checkClauses :: (Type a Poly, Maybe (Type a Poly)) -> [(Pat a, Expr a)] -> TypingM a (Type a Poly)
+-- checkClauses (_, mety) [] = 
+--   case mety of 
+--     Just ty -> pure ty
+--     Nothing -> otherErr $ "case expressions must have at least one clause"
+-- checkClauses (pty, mety) ((pat, e) : clauses) = do
+--   root $ "[CheckClause]" <+> pretty pat <+> "->" <+> pretty e <+> "<=" <+> pretty mety
+--   nctx <- checkPat pat pty
+--   case mety of 
+--     Just ety -> withCtx (const nctx) (branch $ check e ety) *> checkClauses (pty, mety) clauses
+--     Nothing  -> do 
+--       (ety, ctx) <- branch $ withCtx (const nctx) (synthesize e)
+--       checkClauses (pty, Just ety) clauses
+
+-- check that patterns type-check and return a new ctx extended with bound variables
+checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)
+checkPat pat@(A _ p) ty = do
+  ctx <- getCtx
+  root $ "[CheckPat]" <+> pretty pat <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+  dctx <- getDCtx
+  case p of
+    Bind nm -> pure $ ctx <+ nm `HasType` ty 
+    Match nm pats -> case query nm dctx of
+      Nothing    -> otherErr $ "Pattern " ++ show nm ++ " not found in context."
+      Just destr -> branch $ checkPats pats destr ty
+
+-- in a context, check a list of patterns against a destructor and an expected type.
+-- if it succeeds, it binds the names listed in the pattern match to the input context
+checkPats :: [Pat a] -> Destr a -> Type a Poly -> TypingM a (TyCtx a)
+checkPats pats (Destr {name, typ, args}) expected
+  | length pats /= length args = 
+      otherErr $ show $ "Expected" <+> pretty (length args) 
+             <+> "arguments to" <> pretty name <+> "but got" <+> pretty (length pats)
+  -- | typ         =/%= expected    = 
+  --     otherErr $ show $ "Pattern '" <> pretty name <> "' has type" <+> pretty typ 
+  --            <+> "but expected" <+> pretty expected
+  | otherwise                  = do
+      ctx' <- branch $ typ `subtypeOf` expected
+      foldlM folder ctx' $ zip pats args
+      where 
+        folder acc (p, t) = do 
+          t' <- substCtx acc t
+          withCtx (const acc) $ checkPat p t'
 
 applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)
 applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where

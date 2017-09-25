@@ -248,7 +248,17 @@ polySpec = do
          let t' = "Unit" @->: "Unit"
          let ctx = rd' ["Unit" |-> Star] nil
          runSubtypeOf ctx t t' `shouldYield` nil
-  
+    
+    specify "applied type-constructors are subtypes (1)" $ do
+      let lctx = nil <+ uni "b"
+      let ctx = rd' ["Maybe" |-> Star :->*: Star] lctx
+      runSubtypeOf ctx (E.forAll ["a"] "a") ("Maybe" @@: "b") `shouldYield` lctx
+
+    specify "applied type-constructors are subtypes (2)" $ do
+      let lctx = nil
+      let ctx = rd' ["Maybe" |-> Star :->*: Star, "Unit" |-> Star] lctx
+      runSubtypeOf ctx (E.forAll ["a"] $ "Maybe" @@: "a") ("Maybe" @@: "Unit") `shouldYield` lctx
+
   describe "synthesize" $ do
     
     it "synthesizes primitives" $ do
@@ -363,6 +373,27 @@ polySpec = do
                   ("foo" @@ ("id" @@ E.nat 10) @@ ("id" @@ E.true))
                   ("Unit")
            `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Bool")
+    
+    it "works with type-constructors (1)" $ do
+      let lctx = nil 
+      let kctx = ["Maybe" |-> Star :->*: Star, "Nat" |-> Star]
+      let fctx = ["Just" |-> E.forAll ["a"] ("a" @->: "Maybe" @@: "a")]
+      let ctx = rd fctx kctx lctx
+      runCheck ctx ("Just" @@ E.nat 10) ("Maybe" @@: "Nat") `shouldYield` (lctx <+ E.mname 0 := "Nat")
+
+    it "works with type-constructors (2)" $ do
+      let lctx = nil 
+      let kctx = ["Maybe" |-> Star :->*: Star, "Nat" |-> Star]
+      let fctx = ["Just" |-> E.forAll ["a"] ("a" @->: "Maybe" @@: "a")]
+      let ctx = rd fctx kctx lctx
+      runCheck ctx ("Just" @@ E.nat 10) ("Maybe" @@: "Nat") `shouldYield` (lctx <+ E.mname 0 := "Nat")
+
+    it "fails Just 10 <= forall a. Maybe a" $ do
+      let lctx = nil 
+      let kctx = ["Maybe" |-> Star :->*: Star, "Nat" |-> Star]
+      let fctx = ["Just" |-> E.forAll ["a"] ("a" @->: "Maybe" @@: "a")]
+      let ctx = rd fctx kctx lctx
+      shouldFail $ runCheck ctx ("Just" @@ E.nat 10) (E.forAll ["a"] $ "Maybe" @@: "a")
     
     it "works with rank-2 types" $ do
       let mk = rd' ["Unit" |-> Star, "Nat" |-> Star]
@@ -495,31 +526,110 @@ polySpec = do
       kindOf' kinds  (E.forAll ["a"] "List" @@: "a" @->: "a") `shouldBe` Right Star
 
   describe "checkProg" $ do
-  it "fails programs with invalid types (1)" $ do
-    let prog = [unsafeProg|
-      data Foo a = MkFoo a.
-      foo : Foo -> Nat.
-      foo = \x -> x.
-    |]
-    checkProg prog `shouldSatisfy` isLeft
+    it "fails programs with invalid types (1)" $ do
+      let prog = [unsafeProg|
+        data Foo a = MkFoo a.
+        foo : Foo -> Nat.
+        foo = \x -> x.
+      |]
+      shouldFail $ runCheckProg mempty prog
 
-  it "fails programs with invalid types (2)" $ do
-    let prog = [unsafeProg|
-      data List a = Nil | Cons a (List a a).
-    |]
-    checkProg prog `shouldSatisfy` isLeft
+    it "succeeds for mono-types" $ do
+      let prog = [unsafeProg|
+        data Int = .
+        data IntList = Nil | Cons Int IntList.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "fails programs with invalid types (2)" $ do
+      let prog = [unsafeProg|
+        data List a = Nil | Cons a (List a a).
+      |]
+      shouldFail $ runCheckProg mempty prog 
 
-  it "fails programs with invalid types (3)" $ do
-    let prog = [unsafeProg|
-      data List = Nil | Cons a (List a).
-    |]
-    checkProg prog `shouldSatisfy` isLeft
+    it "fails programs with invalid types (3)" $ do
+      let prog = [unsafeProg|
+        data List = Nil | Cons a (List a).
+      |]
+      shouldFail $ runCheckProg mempty prog 
 
-  it "succeeds for mono-types" $ do
-    let prog = [unsafeProg|
-      data Int = .
-      data IntList = Nil | Cons Int IntList.
-    |]
-    checkProg prog `shouldBe` Right ()
+    it "succeeds for some simple functions" $ do
+      let prog = [unsafeProg|
+        data Unit = Unit.
+        foo : Unit -> Unit.
+        foo = \x -> x.
+        app : (Unit -> Unit) -> Unit -> Unit.
+        app = \f -> \x -> f x.
+        bar : Unit.
+        bar = app foo Unit.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for some simple poly functions" $ do
+      let prog = [unsafeProg|
+        foo : forall a. a -> a.
+        foo = \x -> x.
+        app : forall a b. (a -> b) -> a -> b.
+        app = \f -> \x -> f x.
+        data Unit = Unit.
+        bar : Unit.
+        bar = app foo Unit.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for monomorphic patterns (1)" $ do
+      let prog = [unsafeProg|
+        data FooBar = Foo | Bar.
+        data Two = One | Two.
+        foo : FooBar -> Two.
+        foo = \x ->
+          case x of
+            | Foo -> One
+            | Bar -> Two.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for monomorphic patterns (2)" $ do
+      let prog = [unsafeProg|
+        data FooBar = Foo | Bar.
+        data Two = One FooBar | Two.
+        foo : FooBar -> Two.
+        foo = \x ->
+          case x of
+            | Foo -> One x
+            | Bar -> Two.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "suceeds for polymorphic patterns (1)" $ do
+      let prog = [unsafeProg|
+        data Maybe a = Nothing | Just a.
+        data Int = .
+        data FooBar = Foo Int | Bar.
+        m1 : forall a. Maybe a.
+        m1 = Nothing.
+
+        isFoo : FooBar -> Maybe Int.
+        isFoo = \x ->
+          case x of
+            | Foo i -> Just i
+            | Bar -> Nothing.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for lists and stuff" $ do
+      let prog = [unsafeProg|
+        data List t = Nil | Cons t (List t).
+        singleton : forall a. a -> List a.
+        singleton = \x -> Cons x Nil.
+
+        data Maybe a = Nothing | Just a.
+        head : forall a. List a -> Maybe a.
+        head = \xs -> 
+          case xs of
+            | Nil -> Nothing
+            | Cons x xs' -> Just x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
 
