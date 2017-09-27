@@ -638,7 +638,7 @@ instL ahat ty@(A a ty') = do
   kctx <- getKCtx
   case (\t -> assign' ahat t kctx ctx) =<< asMonotype ty of 
     Just ctx' -> do 
-      root $ "[InstLSolve] " <+> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
+      root $ "[InstLSolve]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
       pure ctx'
 
     Nothing  -> case ty' of
@@ -852,6 +852,7 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
   check' (Case e' clauses) _ = do
     root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
     (pty, delta) <- branch $ synthesize e'
+    traceM $ show $ pretty delta
     cty <- withCtx (const delta) $ branch $ checkCaseClauses pty clauses ty
     pure delta
 
@@ -974,7 +975,10 @@ checkPat pat@(A _ p) ty = do
     Bind nm -> pure $ ctx <+ nm `HasType` ty 
     Match nm pats -> case query nm dctx of
       Nothing    -> otherErr $ "Pattern " ++ show nm ++ " not found in context."
-      Just destr -> branch $ checkPats pats destr ty
+      Just destr -> do 
+        ctx' <- branch $ checkPats pats destr ty
+        traceM $ showW 80 $ pretty ctx'
+        pure ctx'
 
 -- in a context, check a list of patterns against a destructor and an expected type.
 -- if it succeeds, it binds the names listed in the pattern match to the input context
