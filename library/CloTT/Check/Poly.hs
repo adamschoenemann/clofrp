@@ -551,11 +551,13 @@ wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
 
 -- assign an unsolved variable to a type in a context
 -- TODO: Optimize 
-assign' :: Name -> Type a Mono -> KindCtx a -> TyCtx a -> Maybe (TyCtx a)
+assign' :: Name -> Type a Mono -> KindCtx a -> TyCtx a -> Either String (TyCtx a)
 assign' nm ty kctx (Gamma ctx) =
   case foldr fn ([], False) ctx of
-    (xs, True) | wfContext kctx (Gamma xs) -> Just (Gamma xs)
-    _                                 -> Nothing
+    (xs, True)
+      | wfContext kctx (Gamma xs) -> Right (Gamma xs)
+      | otherwise                 -> Left ("Ctx not well-formed: " ++ show (pretty (Gamma xs)))
+    (xs, False)                   -> Left "Didn't assign anything" 
   where
     fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
     fn x (xs, b)                        = (x : xs, b)
@@ -565,8 +567,8 @@ assign nm ty = do
   ctx <- getCtx
   kctx <- getKCtx
   case assign' nm ty kctx ctx of
-    Nothing  -> root "assign" *> nameNotFound nm
-    Just ctx' -> do 
+    Left err  -> root "assign" *> otherErr err
+    Right ctx' -> do 
       -- traceM $ showW 80 $ "assign" <+> pretty nm <+> pretty ty <+> pretty ctx <+> "---->" <+> pretty ctx'
       pure ctx'
 
@@ -637,12 +639,12 @@ instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 instL ahat ty@(A a ty') = do 
   ctx <- getCtx
   kctx <- getKCtx
-  case (\t -> assign' ahat t kctx ctx) =<< asMonotype ty of 
-    Just ctx' -> do 
+  case (\t -> assign' ahat t kctx ctx) =<< (projRight "asMonotype" $ asMonotype ty) of 
+    Right ctx' -> do 
       root $ "[InstLSolve]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
       pure ctx'
 
-    Nothing  -> case ty' of
+    Left err  -> case ty' of
       -- InstLReach
       TExists bhat -> do
         root $ "InstLReach"
@@ -672,19 +674,25 @@ instL ahat ty@(A a ty') = do
         (delta, _, delta') <- splitCtx (uni beta') ctx'
         pure delta
       
-      _ -> otherErr $ showW 80 $ "[instL] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty
+      _ -> do
+        root $ "[InstLError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
+        otherErr $ showW 80 $ "[instL] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
+
+projRight :: a -> Maybe b -> Either a b
+projRight x Nothing  = Left x
+projRight _ (Just x) = Right x
 
 instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
 instR typ@(A a ty) ahat = do
   ctx <- getCtx
   kctx <- getKCtx
-  case (\t -> assign' ahat t kctx ctx) =<< asMonotype typ of
-    Just ctx' -> do
+  case (\t -> assign' ahat t kctx ctx) =<< (projRight "asMonotype" $ asMonotype typ) of
+    Right ctx' -> do
       root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
       pure ctx'
       
-    Nothing -> case ty of
+    Left err -> case ty of
       -- InstRReach
       TExists bhat -> do 
         root $ "InstRReach"
@@ -714,7 +722,7 @@ instR typ@(A a ty) ahat = do
         (delta, _, delta') <- splitCtx (marker beta') ctx'
         pure delta
       
-      _ -> otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty typ
+      _ -> otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty typ <+> ". Cause:" <+> fromString err
 
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- A is a subtype of B iff A is more polymorphic than B

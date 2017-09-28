@@ -160,33 +160,33 @@ polySpec = do
     let kctx = ["Unit" |-> Star]
     it "fails for empty context" $ do
       let ctx = nil
-      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "fails for singleton context without 'a^'" $ do
       let ctx = nil <+ exists "b"
-      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "fails for singleton context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a"
-      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "fails for context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a" <+ exists "b" <+ marker "c"
-      assign' "a" "Unit" kctx ctx `shouldBe` Nothing
+      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "works for context with 'a^'" $ do
       do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" kctx ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+         assign' "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
       do let t   = nil 
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" kctx ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+         assign' "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
       do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil 
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" kctx ctx `shouldBe` Just (t <+ "a" := "Unit" <++ t')
+         assign' "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
          
   describe "insertAt'" $ do
     it "fails with context without elem" $ do
@@ -677,6 +677,18 @@ polySpec = do
           case xs of
             | Nil -> Nothing
             | Cons x xs' -> Just x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "suceeds for rank2 crap" $ do
+      let prog = [unsafeProg|
+        data List t = Nil | Cons t (List t).
+        data Unit = MkUnit.
+        foo : (forall a. List a) -> Unit.
+        foo = \xs ->
+          case xs of
+            | Nil -> MkUnit
+            | Cons x xs -> MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
