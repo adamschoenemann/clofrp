@@ -29,6 +29,12 @@ foo f = f
 foo' :: forall b. b -> b
 foo' = foo id
 
+bar :: (forall a. [a]) -> Int
+bar xs = 
+  case xs of
+    [] -> 0
+    (x:xs)  -> x
+
 shouldYield :: (Show a1, Pretty a1, Show a2, Eq a2) 
             => (Either a1 a2, t, TypingWrite a) -> a2 -> Expectation
 shouldYield (res, st, tree) ctx = 
@@ -616,8 +622,50 @@ polySpec = do
             | Bar -> Nothing.
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "suceeds for simple poly pattern match (Wrap)" $ do
+      let prog = [unsafeProg|
+        data Wrap t = MkWrap t.
+        unWrap : forall a. Wrap a -> a.
+        unWrap = \x ->
+          case x of
+            | MkWrap x' -> x'.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
-    it "succeeds for lists and stuff" $ do
+    it "suceeds for nested poly pattern match (Wrap)" $ do
+      let prog = [unsafeProg|
+        data Wrap t = MkWrap t.
+        unUnWrap : forall a. Wrap (Wrap a) -> a.
+        unUnWrap = \x ->
+          case x of
+            | MkWrap (MkWrap x') -> x'.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "fails for not-deep-enough pattern matches" $ do
+      let prog = [unsafeProg|
+        data Wrap t = MkWrap t.
+        unUnWrap : forall a. Wrap (Wrap a) -> a.
+        unUnWrap = \x ->
+          case x of
+            | MkWrap x' -> x'.
+      |]
+      shouldFail $ runCheckProg mempty prog
+
+    it "succeeds for nested list matching" $ do
+      let prog = [unsafeProg|
+        data List t = Nil | Cons t (List t).
+        data Maybe a = Nothing | Just a.
+        head2 : forall a. List a -> Maybe a.
+        head2 = \xs -> 
+          case xs of
+            | Cons x (Cons x' xs') -> Just x'.
+            | xs' -> Nothing
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for lists and and maybe" $ do
       let prog = [unsafeProg|
         data List t = Nil | Cons t (List t).
         singleton : forall a. a -> List a.
@@ -632,4 +680,18 @@ polySpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
+    it "fails for tricky polymorphism" $ do
+      let prog = [unsafeProg|
+        data List t = Nil | Cons t (List t).
+        singleton : forall a. a -> List a.
+        singleton = \x -> Cons x Nil.
+
+        data Maybe a = Nothing | Just a.
+        head : forall a b. List a -> Maybe b.
+        head = \xs -> 
+          case xs of
+            | Nil -> Nothing
+            | Cons x xs' -> Just x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
 

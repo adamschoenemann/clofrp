@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as M
 import Data.Data (Data, Typeable)
 import Data.String (fromString)
 import Data.Monoid
+import Data.Foldable
 import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
 
@@ -89,13 +90,19 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
   quantify     = if length bound > 0 then (\(A ann t) -> foldr (\nm t' -> A ann $ Forall nm t') (A ann t) bound) else id
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
   toFn    (A ann (Constr nm args)) = (nm, quantify $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)
-  -- | Convert a constructor to a destructor, to just for pattern matches
+  -- | Convert a constructor to a destructor, to use for pattern matches
   toDestr :: Constr a -> (Name, Destr a)
   toDestr (A ann (Constr nm args)) = 
-    (nm, Destr {name = nm, typ = quantify (fullyApplied ann), args = args})
-
+    (nm, Destr {name = nm, typ = (fullyApplied ann), args = args, bound = bound})
+  
   anned :: a -> (t -> r -> b) -> t -> r -> Annotated a b
   anned ann fn = \x y -> A ann $ fn x y
+
+
+    -- toDestr for continuation based representation of destructors...
+    -- let quantified = quantify (fullyApplied ann)
+    --     t = Forall ["hack"] $ quantified :->: continuation :->: A ann "hack"
+    --     continuation = foldl' (\arg acc -> arg :->: acc) (A ann "hack") args
 
 checkElabedProg :: ElabProg a -> TypingM a ()
 checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do

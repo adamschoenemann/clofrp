@@ -25,7 +25,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import Data.List (break, intercalate, find)
 import Control.Monad (foldM)
-import Data.Foldable (foldlM)
+import Data.Foldable (foldlM, foldrM)
 import Debug.Trace
 import Data.Maybe (isJust)
 import Data.Data
@@ -90,6 +90,7 @@ uni = Uni
 data Destr a = Destr
   { name   :: Name
   , typ    :: Type a Poly
+  , bound  :: [Name]
   , args   :: [Type a Poly]
   } deriving (Show, Eq, Data, Typeable)
 
@@ -852,7 +853,7 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
   check' (Case e' clauses) _ = do
     root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
     (pty, delta) <- branch $ synthesize e'
-    traceM $ show $ pretty delta
+    -- traceM $ show $ pretty delta
     cty <- withCtx (const delta) $ branch $ checkCaseClauses pty clauses ty
     pure delta
 
@@ -967,23 +968,43 @@ inferPrim p = TFree $ UName $ case p of
 
 -- check that patterns type-check and return a new ctx extended with bound variables
 checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)
-checkPat pat@(A _ p) ty = do
+checkPat pat@(A ann p) ty = do
   ctx <- getCtx
   root $ "[CheckPat]" <+> pretty pat <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
   dctx <- getDCtx
   case p of
-    Bind nm -> pure $ ctx <+ nm `HasType` ty 
+    Bind nm -> do 
+      -- alpha <- freshName
+      -- let alphat = A ann $ TExists alpha
+      -- withCtx (\g -> g <+ exists alpha <+ nm `HasType` alphat) $ branch (alphat `subtypeOf` ty)
+      pure $ ctx <+ nm `HasType` ty 
+
     Match nm pats -> case query nm dctx of
       Nothing    -> otherErr $ "Pattern " ++ show nm ++ " not found in context."
       Just destr -> do 
         ctx' <- branch $ checkPats pats destr ty
-        traceM $ showW 80 $ pretty ctx'
+        -- traceM $ showW 80 $ pretty ctx'
         pure ctx'
+
+existentialize :: forall a. a -> Destr a -> TypingM a (TyCtx a, Destr a)
+existentialize ann d = do
+  (nms, d') <- foldrM folder ([], d) (bound d)
+  ctx <- getCtx
+  let ctx' = foldr (\n g -> g <+ Exists n) ctx nms
+  pure (ctx', d')
+  where
+    folder b (nms, d@(Destr {typ, args})) = do
+      b' <- freshName
+      let s = subst (A ann $ TExists b') b
+      let ntyp = s typ
+      let nargs = map s args
+      pure $ (b' : nms, d {typ = ntyp, args = nargs})
+  
 
 -- in a context, check a list of patterns against a destructor and an expected type.
 -- if it succeeds, it binds the names listed in the pattern match to the input context
 checkPats :: [Pat a] -> Destr a -> Type a Poly -> TypingM a (TyCtx a)
-checkPats pats (Destr {name, typ, args}) expected
+checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
   | length pats /= length args = 
       otherErr $ show $ "Expected" <+> pretty (length args) 
              <+> "arguments to" <> pretty name <+> "but got" <+> pretty (length pats)
@@ -991,8 +1012,11 @@ checkPats pats (Destr {name, typ, args}) expected
   --     otherErr $ show $ "Pattern '" <> pretty name <> "' has type" <+> pretty typ 
   --            <+> "but expected" <+> pretty expected
   | otherwise                  = do
-      ctx' <- branch $ typ `subtypeOf` expected
-      foldlM folder ctx' $ zip pats args
+      (delta, Destr {typ = etyp, args = eargs}) <- existentialize ann d
+      -- traceM $ show $ pretty name <> ":" <+> pretty typ <+> "with args" <+> pretty args
+      ctx' <- withCtx (const delta) $ branch $ etyp `subtypeOf` expected
+      -- traceM (show $ pretty ctx')
+      foldlM folder ctx' $ zip pats eargs
       where 
         folder acc (p, t) = do 
           t' <- substCtx acc t

@@ -87,6 +87,10 @@ nameToType' :: Name -> Type' a s
 nameToType' nm@(UName (c:cs)) | isUpper c = TFree nm
 nameToType' nm = TVar nm
 
+nameToExistential' :: Name -> Type' a s
+nameToExistential' nm@(UName (c:cs)) | isUpper c = TFree nm
+nameToExistential' nm = TExists nm
+
   
 instance IsString (Type () s) where
   fromString [] = error "empty string not expected" 
