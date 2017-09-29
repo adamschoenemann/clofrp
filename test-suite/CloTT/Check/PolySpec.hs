@@ -692,11 +692,9 @@ polySpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "fails for tricky polymorphism" $ do
+    it "fails for tricky polymorphism (1)" $ do
       let prog = [unsafeProg|
         data List t = Nil | Cons t (List t).
-        singleton : forall a. a -> List a.
-        singleton = \x -> Cons x Nil.
 
         data Maybe a = Nothing | Just a.
         head : forall a b. List a -> Maybe b.
@@ -706,4 +704,85 @@ polySpec = do
             | Cons x xs' -> Just x.
       |]
       shouldFail $ runCheckProg mempty prog 
+
+    it "fails for tricky polymorphism (2)" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data Maybe a = Nothing | Just a.
+
+        toMaybe : Either a b -> Maybe a.
+        toMaybe = \e ->
+          case e of
+            | Left x -> Nothing
+            | Right x -> Just x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
+    it "succeeds for toMaybe" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data Maybe a = Nothing | Just a.
+
+        toMaybe : Either a b -> Maybe b.
+        toMaybe = \e ->
+          case e of
+            | Left x -> Nothing
+            | Right x -> Just x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
+    it "suceeds for contravariant functor" $ do
+      let prog = [unsafeProg|
+        data Bool = True | False.
+        data Predicate a = Pred (a -> Bool).
+
+        comap : forall a b. (b -> a) -> Predicate a -> Predicate b.
+        comap = \fn -> \pred -> 
+          case pred of
+            | Pred fn' -> Pred (\x -> fn' (fn x)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "suceeds for church lists" $ do
+      let prog = [unsafeProg|
+        data ChurchList a = 
+            ChurchList (forall r. (a -> r -> r) -> r -> r).
+        data List a = Nil | Cons a (List a).
+        
+        runList : forall a. ChurchList a -> forall r. (a -> r -> r) -> r -> r.
+        runList = \cl ->
+          case cl of
+            | ChurchList fn -> fn.
+        
+        -- | Make a 'ChurchList' out of a regular list.
+        -- fromList : forall a. List a -> ChurchList a.
+        -- fromList xs = ChurchList (\k -> \z -> foldr k z xs
+        
+        -- | Turn a 'ChurchList' into a regular list.
+        toList : forall a. ChurchList a -> List a.
+        toList = \xs -> runList xs Cons Nil.
+        
+        -- | The 'ChurchList' counterpart to '(:)'.  Unlike 'DList', whose
+        -- implementation uses the regular list type, 'ChurchList' abstracts
+        -- over it as well.
+        cons : forall a. a -> ChurchList a -> ChurchList a.
+        cons = \x -> \xs -> ChurchList (\k -> \z -> k x (runList xs k z)).
+        
+        -- | Append two 'ChurchList's.  This runs in O(1) time.  Note that
+        -- there is no need to materialize the lists as @[a]@.
+        append : forall a. ChurchList a -> ChurchList a -> ChurchList a.
+        append = \xs -> \ys -> ChurchList (\k -> \z -> runList xs k (runList ys k z)).
+        
+        -- i.e.,
+        
+        nil : forall a. ChurchList a.
+        nil = ChurchList (\k -> \z -> z).
+        
+        singleton : forall a. a -> ChurchList a.
+        singleton = \x -> ChurList (\k -> \z -> k x z).
+
+        snoc : forall a. ChurchList a -> a -> ChurchList a.
+        snoc = \xs -> \x -> ChurchList (\k z -> runList xs k (k x z)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 

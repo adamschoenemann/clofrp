@@ -633,13 +633,20 @@ validType kctx t = do
     Right k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
     Left err   -> otherErr $ err
 
+projRight :: a -> Maybe b -> Either a b
+projRight x Nothing  = Left x
+projRight _ (Just x) = Right x
+
+asMonotypeEither :: Type a s -> Either String (Type a Mono)
+asMonotypeEither = projRight "asMonotype" . asMonotype
+
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat ty@(A a ty') = do 
   ctx <- getCtx
   kctx <- getKCtx
-  case (\t -> assign' ahat t kctx ctx) =<< (projRight "asMonotype" $ asMonotype ty) of 
+  case (\t -> assign' ahat t kctx ctx) =<< asMonotypeEither ty of 
     Right ctx' -> do 
       root $ "[InstLSolve]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
       pure ctx'
@@ -678,21 +685,18 @@ instL ahat ty@(A a ty') = do
         root $ "[InstLError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
         otherErr $ showW 80 $ "[instL] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
 
-projRight :: a -> Maybe b -> Either a b
-projRight x Nothing  = Left x
-projRight _ (Just x) = Right x
 
 instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
-instR typ@(A a ty) ahat = do
+instR ty@(A a ty') ahat = do
   ctx <- getCtx
   kctx <- getKCtx
-  case (\t -> assign' ahat t kctx ctx) =<< (projRight "asMonotype" $ asMonotype typ) of
+  case (\t -> assign' ahat t kctx ctx) =<< asMonotypeEither ty of
     Right ctx' -> do
       root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
       pure ctx'
       
-    Left err -> case ty of
+    Left err -> case ty' of
       -- InstRReach
       TExists bhat -> do 
         root $ "InstRReach"
@@ -722,7 +726,7 @@ instR typ@(A a ty) ahat = do
         (delta, _, delta') <- splitCtx (marker beta') ctx'
         pure delta
       
-      _ -> otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty typ <+> ". Cause:" <+> fromString err
+      _ -> otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
 
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- A is a subtype of B iff A is more polymorphic than B
@@ -773,8 +777,9 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
 
   -- <:∀R
   subtypeOf' t1 (Forall a (A ann t2)) = do
-    root "[<:∀R]"
     a' <- freshName
+    ctx <- getCtx
+    root $ "[<:∀R]" <+> pretty ty1 <+> "<:" <+> pretty ty2 <+> "in" <+> pretty ctx
     let ty2' = subst (A ann $ TVar a') a (A ann $ t2)
     ctx' <- withCtx (\g -> g <+ uni a') $ branch (ty1 `subtypeOf` ty2')
     pure $ dropTil (uni a') ctx'
