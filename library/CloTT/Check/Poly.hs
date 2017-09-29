@@ -986,11 +986,7 @@ checkPat pat@(A ann p) ty = do
   root $ "[CheckPat]" <+> pretty pat <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
   dctx <- getDCtx
   case p of
-    Bind nm -> do 
-      -- alpha <- freshName
-      -- let alphat = A ann $ TExists alpha
-      -- withCtx (\g -> g <+ exists alpha <+ nm `HasType` alphat) $ branch (alphat `subtypeOf` ty)
-      pure $ ctx <+ nm `HasType` ty 
+    Bind nm -> pure $ ctx <+ nm `HasType` ty 
 
     Match nm pats -> case query nm dctx of
       Nothing    -> otherErr $ "Pattern " ++ show nm ++ " not found in context."
@@ -999,6 +995,8 @@ checkPat pat@(A ann p) ty = do
         -- traceM $ showW 80 $ pretty ctx'
         pure ctx'
 
+-- Take a destructor and "existentialize it" - replace its bound type-variables
+-- with fresh existentials
 existentialize :: forall a. a -> Destr a -> TypingM a (TyCtx a, Destr a)
 existentialize ann d = do
   (nms, d') <- foldrM folder ([], d) (bound d)
@@ -1027,13 +1025,27 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
   | otherwise                  = do
       (delta, Destr {typ = etyp, args = eargs}) <- existentialize ann d
       -- traceM $ show $ pretty name <> ":" <+> pretty typ <+> "with args" <+> pretty args
-      ctx' <- withCtx (const delta) $ branch $ etyp `subtypeOf` expected
+      ctx' <- withCtx (const delta) $ branch $ etyp `patSubtypeOf` expected
       -- traceM (show $ pretty ctx')
       foldlM folder ctx' $ zip pats eargs
       where 
         folder acc (p, t) = do 
           t' <- substCtx acc t
           withCtx (const acc) $ checkPat p t'
+  
+-- like subtypeOf, but if the right operand is a forall a. t, we extend
+-- the context with ̂a and subtype from t
+patSubtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
+patSubtypeOf ty1@(A ann1 ty1') ty2@(A ann2 ty2') =
+  case (ty1', ty2') of
+    (_, Forall nm t) -> do
+      alpha <- freshName
+      let t' = subst (A ann2 $ TExists alpha) nm $ t
+      root $ "[PatSubtypeOf]" <+> pretty ty1 <+> ":p<" <+> pretty ty2
+      withCtx (\g -> g <+ Exists alpha) $ branch $ ty1 `patSubtypeOf` t'
+
+    _ -> ty1 `subtypeOf` ty2
+
 
 applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)
 applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where

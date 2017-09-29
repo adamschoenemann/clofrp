@@ -3,6 +3,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module CloTT.Check.PolySpec where
 
@@ -42,7 +43,8 @@ shouldYield (res, st, tree) ctx =
     Right ctx' -> do 
       -- failure (showTree tree)
       ctx' `shouldBe` ctx
-    Left err   -> failure $ (showW 80 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
+    Left err   -> do 
+      failure $ (showW 160 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
 
 shouldFail :: (Show a, Show b) => (Either a b, t1, t) -> Expectation
 shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
@@ -688,7 +690,19 @@ polySpec = do
         foo = \xs ->
           case xs of
             | Nil -> MkUnit
-            | Cons x xs -> MkUnit.
+            | Cons x xs -> x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "suceeds for rank2 stuff" $ do
+      let prog = [unsafeProg|
+        data List t = Nil | Cons t (List t).
+        data Pair a b = Pair a b.
+        data Bool = True | False.
+        data Unit = Unit.
+        foo : (forall a. a -> a) -> Pair (List Bool) (Unit).
+        foo = \id ->
+          Pair (Cons (id True) Nil) (id Unit).
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -710,11 +724,37 @@ polySpec = do
         data Either a b = Left a | Right b.
         data Maybe a = Nothing | Just a.
 
-        toMaybe : Either a b -> Maybe a.
+        toMaybe : forall a b. Either a b -> Maybe a.
         toMaybe = \e ->
           case e of
             | Left x -> Nothing
             | Right x -> Just x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
+    it "fails for wrong patterns" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data Maybe a = Nothing | Just a.
+
+        toMaybe : forall a b. Either a b -> Maybe a.
+        toMaybe = \e ->
+          case e of
+            | Left x -> Nothing
+            | Just x -> Just x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+    
+    it "fails for impredicative types" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data Maybe a = Nothing | Just a.
+
+        toMaybe : forall b. Either (forall a. a) b -> b.
+        toMaybe = \e ->
+          case e of
+            | Left x -> x
+            | Just x -> x.
       |]
       shouldFail $ runCheckProg mempty prog 
 
@@ -723,13 +763,13 @@ polySpec = do
         data Either a b = Left a | Right b.
         data Maybe a = Nothing | Just a.
 
-        toMaybe : Either a b -> Maybe b.
+        toMaybe : forall a b. Either a b -> Maybe b.
         toMaybe = \e ->
           case e of
             | Left x -> Nothing
             | Right x -> Just x.
       |]
-      shouldFail $ runCheckProg mempty prog 
+      runCheckProg mempty prog `shouldYield` ()
 
     it "suceeds for contravariant functor" $ do
       let prog = [unsafeProg|
@@ -742,6 +782,38 @@ polySpec = do
             | Pred fn' -> Pred (\x -> fn' (fn x)).
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "succeeds for lefts" $ do
+      let prog = [unsafeProg|
+        data Bool = True | False.
+        data Either a b = Left a | Right b.
+        data List a = Nil | Cons a (List a).
+
+        lefts : forall a b. List (Either a b) -> List a.
+        lefts = \xs ->
+          case xs of
+            | Nil -> Nil
+            | Cons (Left x) xs'  -> Cons x (lefts xs')
+            | Cons (Right x) xs' -> lefts xs'.
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "fails for incorrect rights" $ do
+      let prog = [unsafeProg|
+        data Bool = True | False.
+        data Either a b = Left a | Right b.
+        data List a = Nil | Cons a (List a).
+
+        rights : forall a b. List (Either a b) -> List b.
+        rights = \xs ->
+          case xs of
+            | Nil -> Nil
+            | Cons (Left x) xs'  -> rights xs'
+            | Cons (Right x) xs' -> Cons x (rights xs').
+
+      |]
+      shouldFail $ runCheckProg mempty prog
     
     it "suceeds for church lists" $ do
       let prog = [unsafeProg|
