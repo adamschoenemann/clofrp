@@ -46,8 +46,11 @@ shouldYield (res, st, tree) ctx =
     Left err   -> do 
       failure $ (showW 160 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
 
-shouldFail :: (Show a, Show b) => (Either a b, t1, t) -> Expectation
-shouldFail (res, st, tree) = res `shouldSatisfy` isLeft
+shouldFail :: (Show a, Show b) => (Either a b, t1, TypingWrite ann) -> Expectation
+shouldFail (res, st, tree) = 
+  case res of
+    Left err -> True `shouldBe` True
+    Right _  -> failure (showW 160 . prettyTree $ tree)
 
 polySpec :: Spec
 polySpec = do
@@ -719,6 +722,17 @@ polySpec = do
       |]
       shouldFail $ runCheckProg mempty prog 
 
+    it "fails getRight" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        getRight : forall a b. Either a b -> b.
+        getRight = \e ->
+          case e of
+            | Left x -> x
+            | Right x -> x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
     it "fails for tricky polymorphism (2)" $ do
       let prog = [unsafeProg|
         data Either a b = Left a | Right b.
@@ -809,9 +823,8 @@ polySpec = do
         rights = \xs ->
           case xs of
             | Nil -> Nil
-            | Cons (Left x) xs'  -> rights xs'
-            | Cons (Right x) xs' -> Cons x (rights xs').
-
+            | Cons (Left x) xs'  -> Cons x (rights xs')
+            | Cons (Right x) xs' -> rights xs'.
       |]
       shouldFail $ runCheckProg mempty prog
     

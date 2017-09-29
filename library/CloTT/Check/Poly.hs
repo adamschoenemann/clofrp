@@ -832,7 +832,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     theta <- branch $ a1 `subtypeOf` b1
     a2' <- substCtx theta a2
     b2' <- substCtx theta b2
-    branch $ a2' `subtypeOf` b2'
+    branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
 
   subtypeOf' t1 t2 = do
     root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
