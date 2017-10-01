@@ -726,6 +726,16 @@ instR ty@(A a ty') ahat = do
         (delta, _, delta') <- splitCtx (marker beta') ctx'
         pure delta
       
+      -- InstRTApp
+      -- FIXME: This is wrong... how the hell do I do this?
+      -- TApp t1 (TExists alpha) -> do
+
+        -- root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat
+        -- alpha <- freshName
+        -- let alphat = A a $ TExists alpha
+        -- ctx' <- withCtx (\g -> g <+ (alpha := mt1) <+ (beta := mt2)) $ branch $ alphat `instR` ahat
+        -- withCtx (const ctx') $ branch $ betat `instR` ahat
+      
       _ -> otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
 
 -- Under input context Γ, type A is a subtype of B, with output context ∆
@@ -1051,7 +1061,8 @@ applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)
 applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ∀App
   applysynth' (Forall alpha aty) = do
-    root $ "[∀App]" <+> pretty ty <+> "•" <+> pretty e
+    ctx <- getCtx
+    root $ "[∀App]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
     -- fresh name to avoid clashes
     alpha' <- freshName
     let atysubst = subst (A tann $ TExists alpha') alpha aty

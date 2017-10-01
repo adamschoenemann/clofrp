@@ -827,11 +827,44 @@ polySpec = do
             | Cons (Right x) xs' -> rights xs'.
       |]
       shouldFail $ runCheckProg mempty prog
+
+    -- let stuff :: Either (Either a b) (Either c d) -> Either (Either d c) (Either b a)
+    --     stuff e1 = 
+    --       case e1 of
+    --         Left (Left a)   -> Right (Right a)
+    --         Left (Right b)  -> Right (Left b)
+    --         Right (Left c)  -> Left (Right c)
+    --         Right (Right d) -> Left (Left d)
+
+    -- we need a new rule to instantiate existentials with type-applications
+    it "succeeds for a bunch of eithers" $ do
+      let prog = [unsafeProg|
+        data Bool = True | False.
+        data Either a b = Left a | Right b.
+
+        left : forall a b c. a -> Either (Either a b) c.
+        left = \x -> Left (Left x).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    -- it "fails for wrong eithers (1)" $ do
+    --   let prog = [unsafeProg|
+    --     data Bool = True | False.
+    --     data Either a b = Left a | Right b.
+
+    --     main : forall a b c d. Either (Either a b) (Either c d) -> Either (Either d c) (Either b a).
+    --     main = \e1 ->
+    --       case e1 of
+    --         | Left (Left a)   -> Right (Left a)
+    --         | Left (Right b)  -> Right (Right b)
+    --         | Right (Left c)  -> Left (Right c)
+    --         | Right (Right d) -> Left (Left d).
+    --   |]
+    --   shouldFail $ runCheckProg mempty prog
     
     it "suceeds for church lists" $ do
       let prog = [unsafeProg|
-        data ChurchList a = 
-            ChurchList (forall r. (a -> r -> r) -> r -> r).
+        data ChurchList a = ChurchList (forall r. (a -> r -> r) -> r -> r).
         data List a = Nil | Cons a (List a).
         
         runList : forall a. ChurchList a -> forall r. (a -> r -> r) -> r -> r.
