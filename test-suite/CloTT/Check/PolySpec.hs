@@ -65,6 +65,26 @@ polySpec = do
         , "List" |-> Star :->*: Star, "Maybe" |-> Star :->*: Star
         ]
 
+  describe "inferVarKind" $ do
+    it "should work for just the variable" $ do
+      inferVarKind @() mempty "a" ("a") `shouldBe` Right Star
+    it "should work for a -> a" $ do
+      inferVarKind @() mempty "a" ("a" @->: "a") `shouldBe` Right Star
+    it "should work for a -> Int" $ do
+      inferVarKind ["Int" |-> Star] "a" ("a" @->: "Int") `shouldBe` Right Star
+    it "fail for just Int" $ do
+      inferVarKind @() ["Int" |-> Star] "a" "Int" `shouldSatisfy` isLeft
+    it "should work for a Int" $ do
+      inferVarKind ["Int" |-> Star] "a" ("a" @@: "Int") `shouldBe` Right (Star :->*: Star)
+    it "should work for List a" $ do
+      inferVarKind ["List" |-> (Star :->*: Star)] "a" ("List" @@: "a") `shouldBe` Right Star
+    it "should work for List (List a)" $ do
+      inferVarKind ["List" |-> (Star :->*: Star)] "a" ("List" @@: ("List" @@: "a")) `shouldBe` Right Star
+    it "should work for a List" $ do
+      inferVarKind ["List" |-> (Star :->*: Star)] "a" ("a" @@: "List") `shouldBe` Right ((Star :->*: Star) :->*: Star)
+    it "should work for a List Int" $ do
+      inferVarKind ["Int" |-> Star, "List" |-> (Star :->*: Star)] "a" ("a" @@: "List" @@: "Int")
+        `shouldBe` Right ((Star :->*: Star) :->*: Star :->*: Star)
   
   describe "wfContext" $ do
     specify "nil is well-formed" $ do
@@ -1089,6 +1109,12 @@ polySpec = do
             | Z -> Empty
             | S n' -> Branch x (ofDepth (MkPair x x) n').
 
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "succeeds for higher-kinded types" $ do
+      let prog = [unsafeProg|
+        data Functor f = Functor (forall a b. (a -> b) -> f a -> f b) .
       |]
       runCheckProg mempty prog `shouldYield` ()
 

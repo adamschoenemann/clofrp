@@ -584,6 +584,40 @@ insertAt at insertee = do
     Nothing   -> otherErr $ "Cannot insert into context " ++ show ctx ++ " at " ++ show at
     Just ctx' -> pure ctx'
 
+-- Infer the kind of a type variable from how it is used in a type
+-- Its not gonna work, I think tough... Instead, "spine-ify" first and
+-- then filter
+inferVarKind :: KindCtx a -> Name -> Type a Poly -> Either String Kind
+inferVarKind kctx nm (A _ ty) =
+  case ty of
+    TFree v -> noInfo
+    TVar  v -> pure Star
+    TExists v -> noInfo
+
+    TApp (A _ (TVar v)) t2
+      | v == nm   -> do 
+        k <- kindOf' kctx t2
+        pure $ k :->*: Star
+      | otherwise -> inferVarKind kctx nm t2
+
+    TApp t1 t2 -> 
+      case inferVarKind kctx nm t1 of 
+        Left _ -> inferVarKind kctx nm t2
+        Right k -> case inferVarKind kctx nm t2 of
+          Left _ -> pure k
+          Right k' -> if k == k' then pure k else Left ("Conflicting kinds inferred for" ++ show nm)
+
+    t1 :->: t2 -> 
+      case inferVarKind kctx nm t1 of 
+        Left _ -> inferVarKind kctx nm t2
+        Right k -> case inferVarKind kctx nm t2 of
+          Left _ -> pure k
+          Right k' -> if k == k' then pure k else Left ("Conflicting kinds inferred for" ++ show nm)
+    
+    Forall v tau -> inferVarKind kctx nm tau
+  where
+    noInfo = Left $ "Cannot infer kind of type-variable " ++ show nm
+
 -- Infer the kind of a type expression
 kindOf' :: KindCtx a -> Type a Poly -> Either String Kind
 kindOf' kctx (A _ t) =
