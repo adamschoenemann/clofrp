@@ -63,7 +63,7 @@ instance Unann (CtxElem a) (CtxElem ()) where
 instance Show (CtxElem a) where
   show = \case
     Uni nm          -> show nm
-    Exists nm       -> "̂" ++ show nm
+    Exists nm       -> "^" ++ show nm
     nm `HasType` ty -> show nm ++ " : " ++ show (unannT ty)
     nm := ty        -> show nm ++ " = " ++ show (unannT ty)
     Marker nm       -> "▷" ++ show nm
@@ -213,7 +213,7 @@ isWfTypeIn' (A ann ty) kctx ctx =
     t1 :->: t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
     -- ForallWF
     Forall x t -> isWfTypeIn' t kctx (ctx <+ Uni x)
-    -- TAppWF. 
+    -- TAppWF. FIXME Should check kinds correct kinds as well.
     TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
   where 
     expred alpha = \case
@@ -448,7 +448,7 @@ substCtx' ctx (A a ty) =
     TVar x  -> pure $ A a $ TVar  x
     TExists x -> 
       case findAssigned x ctx of
-        Just tau -> pure $ asPolytype tau
+        Just tau -> substCtx' ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
         Nothing
           | Exists x `isInContext` ctx -> pure $ A a $ TExists x
           | otherwise                  -> Left x
@@ -633,12 +633,8 @@ validType kctx t = do
     Right k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
     Left err   -> otherErr $ err
 
-projRight :: a -> Maybe b -> Either a b
-projRight x Nothing  = Left x
-projRight _ (Just x) = Right x
-
 asMonotypeEither :: Type a s -> Either String (Type a Mono)
-asMonotypeEither = projRight "asMonotype" . asMonotype
+asMonotypeEither = maybe (Left "asMonotype") Right . asMonotype
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
@@ -654,7 +650,7 @@ instL ahat ty@(A a ty') = do
     Left err  -> case ty' of
       -- InstLReach
       TExists bhat -> do
-        root $ "InstLReach"
+        root $ "[InstLReach]"
         Exists ahat `before` Exists bhat >>= \case
           True -> assign bhat (A a $ TExists ahat)
           False -> otherErr $ "InstLReach"
@@ -667,7 +663,8 @@ instL ahat ty@(A a ty') = do
         let ahat1 = exists af1
         let ahat2 = exists af2
         let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-        omega <- withCtx (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (t1 `instR` af1)
+        ctx' <- insertAt (exists ahat) $ mempty <+ ahat1 <+ ahat2 <+ ahat := arr
+        omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
         substed <- substCtx omega t2
         r <- withCtx (const omega) $ branch (af2 `instL` substed)
         pure r
@@ -680,6 +677,20 @@ instL ahat ty@(A a ty') = do
         ctx' <- withCtx (\g -> g <+ uni beta') $ branch (ahat `instL` bty')
         (delta, _, delta') <- splitCtx (uni beta') ctx'
         pure delta
+
+      -- InstLTApp. Identical to InstLArr
+      TApp t1 t2 -> do
+        root $ "[InstLTApp]" <+> pretty ty <+> ":<=" <+> pretty ahat
+        af1 <- freshName
+        af2 <- freshName
+        let ahat1 = exists af1
+        let ahat2 = exists af2
+        let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
+        ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
+        omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
+        substed <- substCtx omega t2
+        r <- withCtx (const omega) $ branch (af2 `instL` substed)
+        pure r
       
       _ -> do
         root $ "[InstLError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
@@ -712,7 +723,8 @@ instR ty@(A a ty') ahat = do
         let ahat1 = exists af1
         let ahat2 = exists af2
         let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-        omega <- withCtx (\g -> g <+ ahat1 <+ ahat2 <+ ahat := arr) $ branch (af1 `instL` t1)
+        ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := arr)
+        omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
         substed <- substCtx omega t2
         r <- withCtx (const omega) $ branch (substed `instR` af2)
         pure r
@@ -726,15 +738,19 @@ instR ty@(A a ty') ahat = do
         (delta, _, delta') <- splitCtx (marker beta') ctx'
         pure delta
       
-      -- InstRTApp
-      -- FIXME: This is wrong... how the hell do I do this?
-      -- TApp t1 (TExists alpha) -> do
-
-        -- root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat
-        -- alpha <- freshName
-        -- let alphat = A a $ TExists alpha
-        -- ctx' <- withCtx (\g -> g <+ (alpha := mt1) <+ (beta := mt2)) $ branch $ alphat `instR` ahat
-        -- withCtx (const ctx') $ branch $ betat `instR` ahat
+      -- InstRTApp. Identical to InstRArr
+      TApp t1 t2 -> do
+        root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat
+        af1 <- freshName
+        af2 <- freshName
+        let ahat1 = exists af1
+        let ahat2 = exists af2
+        let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
+        ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
+        omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
+        substed <- substCtx omega t2
+        r <- withCtx (const omega) $ branch (substed `instR` af2)
+        pure r
       
       _ -> otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
 
@@ -885,6 +901,7 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     ctx <- getCtx
     root $ "[Sub]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
     (aty, theta) <- branch $ synthesize e
+    branch $ root $ "[Info] Synthesized" <+> pretty (aty, theta)
     atysubst <- substCtx theta aty
     btysubst <- substCtx theta ty
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst

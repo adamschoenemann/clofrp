@@ -44,7 +44,7 @@ shouldYield (res, st, tree) ctx =
       -- failure (showTree tree)
       ctx' `shouldBe` ctx
     Left err   -> do 
-      failure $ (showW 160 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
+      failure $ (showW 200 . pretty $ err) ++ "\nProgress:\n" ++ showTree tree
 
 shouldFail :: (Show a, Show b) => (Either a b, t1, TypingWrite ann) -> Expectation
 shouldFail (res, st, tree) = 
@@ -83,6 +83,11 @@ polySpec = do
       wfContext mempty (nil <+ exists "a" <+ "x" .: E.exists "a") `shouldBe` True
     specify "nil <+ ^a <+ ^b = ^a is well-formed" $ do
       wfContext mempty (nil <+ exists "a" <+ "b" := E.exists "a") `shouldBe` True
+    specify "`nil <+ ^a <+ ^b = Either Unit <+ ^c = ∃b ∃a` is well-formed" $ do
+      let Just cass = E.asMonotype (E.exists "b" @@: E.exists "a")
+      let Just eapp = E.asMonotype ("Either" @@: "Unit")
+      let kctx = ["Unit" |-> Star, "Either" |-> Star :->*: Star :->*: Star]
+      wfContext kctx (nil <+ exists "a" <+ "b" := eapp <+ "c" := cass) `shouldBe` True
 
     specify "nil <+ a <+ a is not well-formed" $ do
       wfContext mempty (nil <+ exists "a" <+ exists "a") `shouldBe` False
@@ -205,11 +210,14 @@ polySpec = do
       insertAt' (exists "a") p ctx `shouldBe` Just (nil <+ marker "m" <++ p <+ uni "a")
   
   describe "substCtx'" $ do
-    it "subst existentials with their solutions" $ do
+    it "substs existentials with their solutions" $ do
       do let ctx = nil <+ "a" := "Nat"
          substCtx' ctx (E.exists "a") `shouldBe` Right "Nat"
       do let ctx = nil <+ "a" := "Nat"
          substCtx' ctx (E.exists "a" @->: E.exists "a") `shouldBe` Right ("Nat" @->: "Nat")
+    it "substitutes simultaneously" $ do
+      let ctx = nil <+ exists "c" <+ "b" := E.exists "c" <+ "a" := E.exists "b"
+      substCtx' ctx (E.exists "a") `shouldBe` Right (E.exists "c")
 
   -- TODO: Add tests with type constructors
   describe "subtypeOf" $ do
@@ -828,39 +836,90 @@ polySpec = do
       |]
       shouldFail $ runCheckProg mempty prog
 
-    -- let stuff :: Either (Either a b) (Either c d) -> Either (Either d c) (Either b a)
-    --     stuff e1 = 
-    --       case e1 of
-    --         Left (Left a)   -> Right (Right a)
-    --         Left (Right b)  -> Right (Left b)
-    --         Right (Left c)  -> Left (Right c)
-    --         Right (Right d) -> Left (Left d)
-
     -- we need a new rule to instantiate existentials with type-applications
     it "succeeds for a bunch of eithers" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data Unit = MkUnit.
+        data A = MkA.
+        data B = MkB.
+
+        either1 : Either (Either Unit Unit) Unit.
+        either1 = Left (Left MkUnit).
+        either2 : Either (Either B A) A.
+        either2 = Left (Right MkA).
+        either3 : Either (Either B A) A.
+        either3 = Left (Left MkB).
+        either4 : Either (Either B A) A.
+        either4 = Right MkA.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+
+    it "succeeds for a bunch of polymorphic eithers" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+
+        either1 : forall a b c. a -> Either a (Either b c).
+        either1 = \a -> Left a.
+        either2 : forall a. a -> Either a (Either a a).
+        either2 = \a -> Left a.
+        either3 : forall a b c. a -> Either (Either a b) c.
+        either3 = \a -> Left (Left a).
+        either4 : forall a b c. b -> Either (Either a b) c.
+        either4 = \a -> Left (Right a).
+        either5 : forall a b c d. b -> Either (Either a b) (Either c d).
+        either5 = \a -> Left (Right a).
+        either6 : forall a b c d e. b -> Either (Either a (Either b c)) (Either d e).
+        either6 = \a -> Left (Right (Left a)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for nested eithers (either-swap)" $ do
       let prog = [unsafeProg|
         data Bool = True | False.
         data Either a b = Left a | Right b.
 
-        left : forall a b c. a -> Either (Either a b) c.
-        left = \x -> Left (Left x).
+        main : forall a b c d. Either (Either a b) (Either c d) -> Either (Either d c) (Either b a).
+        main = \e1 ->
+          case e1 of
+            | Left  (Left  a) -> Right (Left a)
+            | Left  (Right b) -> Right (Right b)
+            | Right (Left  c) -> Left  (Right c)
+            | Right (Right d) -> Left  (Left d).
       |]
-      runCheckProg mempty prog `shouldYield` ()
+      shouldFail $ runCheckProg mempty prog
 
-    -- it "fails for wrong eithers (1)" $ do
-    --   let prog = [unsafeProg|
-    --     data Bool = True | False.
-    --     data Either a b = Left a | Right b.
+    it "fails for a bunch of eithers (1)" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data A = MkA.
+        data B = MkB.
 
-    --     main : forall a b c d. Either (Either a b) (Either c d) -> Either (Either d c) (Either b a).
-    --     main = \e1 ->
-    --       case e1 of
-    --         | Left (Left a)   -> Right (Left a)
-    --         | Left (Right b)  -> Right (Right b)
-    --         | Right (Left c)  -> Left (Right c)
-    --         | Right (Right d) -> Left (Left d).
-    --   |]
-    --   shouldFail $ runCheckProg mempty prog
+        either : Either (Either B A) A.
+        either = Left (Left MkA).
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
+    it "fails for a bunch of eithers (2)" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data A = MkA.
+        data B = MkB.
+
+        either : Either A (Either B A).
+        either = Right (Left MkA).
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
+    it "fails for a bunch of eithers (3)" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+
+        either : forall a b c. a -> Either a (Either b c).
+        either = \x -> Right (Left x).
+      |]
+      shouldFail $ runCheckProg mempty prog 
     
     it "suceeds for church lists" $ do
       let prog = [unsafeProg|
@@ -901,6 +960,71 @@ polySpec = do
 
         snoc : forall a. ChurchList a -> a -> ChurchList a.
         snoc = \xs -> \x -> ChurchList (\k z -> runList xs k (k x z)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "succeeds for Data.Either stdlib" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data List a = Nil | Cons a (List a).
+        data Bool = True | False.
+        data Pair a b = MkPair a b.
+
+        either : forall a b c. (a -> c) -> (b -> c) -> Either a b -> c.
+        either = \lf -> \rf -> \e ->
+          case e of
+            | Left l -> lf l
+            | Right r -> rf r.
+        
+        lefts : forall a b. List (Either a b) -> List a.
+        lefts = \xs ->
+          case xs of
+            | Nil -> Nil
+            | Cons (Left x) xs'  -> Cons x (lefts xs')
+            | Cons (Right x) xs' -> lefts xs'.
+
+        rights : forall a b. List (Either a b) -> List b.
+        rights = \xs ->
+          case xs of
+            | Nil -> Nil
+            | Cons (Right x) xs' -> Cons x (rights xs')
+            | Cons (Left x) xs'  -> rights xs'.
+        
+        partitionEithers : forall a b. List (Either a b) -> Pair (List a) (List b).
+        partitionEithers = \xs ->
+          case xs of
+            | Nil -> MkPair Nil Nil
+            | Cons x xs' -> 
+              case (partitionEithers xs') of
+                | MkPair ls rs ->
+                  case x of
+                    | Left x' -> MkPair (Cons x' ls) rs
+                    | Right x' -> MkPair ls (Cons x' rs).
+        
+        isLeft : forall a b. Either a b -> Bool.
+        isLeft = \e ->
+          case e of
+            | Left x -> True
+            | Right x -> False.
+
+        isRight : forall a b. Either a b -> Bool.
+        isRight = \e ->
+          case e of
+            | Left x -> False
+            | Right x -> True.
+        
+        fromLeft : forall a b. a -> Either a b -> a.
+        fromLeft = \d -> \e ->
+          case e of
+            | Left x -> x
+            | Right x -> d.
+
+        fromRight : forall a b. b -> Either a b -> b.
+        fromRight = \d -> \e ->
+          case e of
+            | Left x -> d
+            | Right x -> x.
+        
       |]
       runCheckProg mempty prog `shouldYield` ()
 

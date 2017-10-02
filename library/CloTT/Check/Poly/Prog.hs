@@ -54,6 +54,7 @@ elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg (Prog decls) =
   let (kinds, funds, sigds, cnstrs, destrs) = foldr folder (mempty, mempty, mempty, mempty, mempty) decls 
 
+      -- TODO: Check for duplicate defs/signatures/datadecls
       folder :: Decl a -> ElabRes a -> ElabRes a
       folder (A _ x) (ks, fs, ss, cs, ds) = case x of
         DataD nm k b cs' ->
