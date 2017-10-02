@@ -36,6 +36,7 @@ bar xs =
     [] -> 0
     (x:xs)  -> x
 
+
 shouldYield :: (Show a1, Pretty a1, Show a2, Eq a2) 
             => (Either a1 a2, t, TypingWrite a) -> a2 -> Expectation
 shouldYield (res, st, tree) ctx = 
@@ -1027,4 +1028,68 @@ polySpec = do
         
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "succeeds for superfluous quantifiers" $ do
+      let prog = [unsafeProg|
+        foo : forall a b c. a -> a.
+        foo = \x -> x.
+
+        data Unit = MkUnit.
+        bar : Unit.
+        bar = foo MkUnit.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "fails for impossible defs" $ do
+      let prog = [unsafeProg|
+        foo : forall a b. a -> b.
+        foo = \x -> x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+    
+    it "succeeds for non-regular data (omg)" $ do
+      let prog = [unsafeProg|
+        data Pair a = MkPair a a.
+        data BalTree a = Empty | Branch a (BalTree (Pair a)).
+        data Nat = Z | S Nat.
+
+        zero : Nat.
+        zero = Z.
+        one : Nat.
+        one = S zero.
+        two : Nat.
+        two = S one.
+        three : Nat.
+        three = S two.
+
+        ex01 : forall a. BalTree a.
+        ex01 = Empty.
+
+        ex02 : BalTree Nat.
+        ex02 = Branch zero Empty.
+
+        ex03 : BalTree Nat.
+        ex03 = Branch zero (Branch (MkPair one two) Empty).
+
+        ex04 : BalTree Nat.
+        ex04 =
+          Branch
+            zero 
+            (Branch
+              (MkPair one two)
+              (Branch
+                (MkPair (MkPair three three) (MkPair three three))
+                Empty
+              )
+             ).
+        
+        ofDepth : forall a. a -> Nat -> BalTree a.
+        ofDepth = \x -> \n ->
+          case n of
+            | Z -> Empty
+            | S n' -> Branch x (ofDepth (MkPair x x) n').
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
 
