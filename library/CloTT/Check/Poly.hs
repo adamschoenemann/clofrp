@@ -684,10 +684,10 @@ instL ahat ty@(A a ty') = do
     Left err  -> case ty' of
       -- InstLReach
       TExists bhat -> do
-        root $ "[InstLReach]"
+        root $ "[InstLReach]" <+> "^" <> pretty bhat <+> "=" <+> "^" <> pretty ahat
         Exists ahat `before` Exists bhat >>= \case
           True -> assign bhat (A a $ TExists ahat)
-          False -> otherErr $ "InstLReach"
+          False -> otherErr $ "[InstLReach] error"
 
       -- InstLArr
       t1 :->: t2 -> do
@@ -926,8 +926,9 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
   check' (Case e' clauses) _ = do
     root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
     (pty, delta) <- branch $ synthesize e'
-    -- traceM $ show $ pretty delta
-    cty <- withCtx (const delta) $ branch $ checkCaseClauses pty clauses ty
+    (pty', delta') <- withCtx (const delta) $ branch $ intros pty
+    markerName <- freshName
+    cty <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty' clauses ty
     pure delta
 
   -- Sub
@@ -940,13 +941,38 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     btysubst <- substCtx theta ty
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
   
-  checkCaseClauses :: Type a Poly -> [(Pat a, Expr a)] -> Type a Poly -> TypingM a ()
-  checkCaseClauses pty clauses expected = traverse checkClause clauses *> pure () where
-    checkClause (pat, expr) = do 
-      ctx <- getCtx
-      root $ "[CheckClause]" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
-      ctx' <- branch $ checkPat pat pty
-      withCtx (const ctx') $ branch $ check expr expected
+  -- just introduce forall-quantified variables as existentials
+  -- in the current context
+  intros :: Type a Poly -> TypingM a (Type a Poly, TyCtx a)
+  intros ty@(A ann (Forall nm t)) = do
+    root $ "[Intros]" <+> pretty ty
+    ahat <- freshName
+    let t' = subst (A ann $ TExists ahat) nm t
+    withCtx (\g -> g <+ Exists ahat) $ branch $ intros t'
+  intros ty = do
+    root $ "[Intros]" <+> pretty ty
+    ctx <- getCtx
+    pure (ty, ctx)
+
+  -- Could be expressed as a fold, but this is a bit simpler methinks.
+  -- Checks some clauses against an expected type.
+  -- The marker is to make sure that the clauses can assign types to existentials
+  -- that are in scope at the case-expr, but does not pollute the scope with new
+  -- type variables that came into the context during the branch and body.
+  checkCaseClauses :: Name -> Type a Poly -> [(Pat a, Expr a)] -> Type a Poly -> TypingM a ()
+  checkCaseClauses markerName pty clauses expected = 
+    case clauses of
+      (pat, expr) : clauses' -> do
+        ctx <- getCtx
+        root $ "[CheckClause]" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
+        ctx' <- branch $ checkPat pat pty
+        ctx'' <- withCtx (const ctx') $ branch $ check expr expected
+        let nextCtx =  (dropTil (Marker markerName) ctx'') <+ Marker markerName
+        withCtx (const nextCtx) $
+            checkCaseClauses markerName pty clauses' expected
+      [] -> pure ()
+
+
 
 
 
@@ -1086,7 +1112,7 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
   | otherwise                  = do
       (delta, Destr {typ = etyp, args = eargs}) <- existentialize ann d
       -- traceM $ show $ pretty name <> ":" <+> pretty typ <+> "with args" <+> pretty args
-      ctx' <- withCtx (const delta) $ branch $ etyp `patSubtypeOf` expected
+      ctx' <- withCtx (const delta) $ branch $ etyp `subtypeOf` expected
       -- traceM (show $ pretty ctx')
       foldlM folder ctx' $ zip pats eargs
       where 
@@ -1096,16 +1122,16 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
   
 -- like subtypeOf, but if the right operand is a forall a. t, we extend
 -- the context with ̂a and subtype from t
-patSubtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
-patSubtypeOf ty1@(A ann1 ty1') ty2@(A ann2 ty2') =
-  case (ty1', ty2') of
-    (_, Forall nm t) -> do
-      alpha <- freshName
-      let t' = subst (A ann2 $ TExists alpha) nm $ t
-      root $ "[PatSubtypeOf]" <+> pretty ty1 <+> ":p<" <+> pretty ty2
-      withCtx (\g -> g <+ Exists alpha) $ branch $ ty1 `patSubtypeOf` t'
+-- patSubtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
+-- patSubtypeOf ty1@(A ann1 ty1') ty2@(A ann2 ty2') =
+--   case (ty1', ty2') of
+--     (_, Forall nm t) -> do
+--       alpha <- freshName
+--       let t' = subst (A ann2 $ TExists alpha) nm $ t
+--       root $ "[PatSubtypeOf]" <+> pretty ty1 <+> ":p<" <+> pretty ty2
+--       withCtx (\g -> g <+ Exists alpha) $ branch $ ty1 `patSubtypeOf` t'
 
-    _ -> ty1 `subtypeOf` ty2
+--     _ -> ty1 `subtypeOf` ty2
 
 
 applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)
