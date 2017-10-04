@@ -18,7 +18,12 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module CloTT.Check.Poly where
+module CloTT.Check.Poly
+  ( module CloTT.Check.Poly
+  , module CloTT.Check.Poly.Destr
+  , module CloTT.Check.Poly.Contexts
+  )
+  where
 
 import Control.Monad.RWS.Strict hiding ((<>))
 import Control.Monad.Except
@@ -42,221 +47,9 @@ import CloTT.Context
 import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
 import CloTT.Pretty
+import CloTT.Check.Poly.Destr
+import CloTT.Check.Poly.Contexts
 
-data CtxElem a
-  = Uni Name -- ^ Universal
-  | Exists Name -- ^ Existential
-  | Name `HasType` Type a Poly -- ^ x : A
-  | Name := Type a Mono -- ^ a = t
-  | Marker Name -- ^ |>a
-  deriving Eq
-
-instance Unann (CtxElem a) (CtxElem ()) where
-  unann el = 
-    case el of
-      Uni nm          -> Uni nm
-      Exists nm       -> Exists nm
-      nm `HasType` ty -> nm `HasType` unann ty
-      nm := ty        -> nm := unann ty
-      Marker nm       -> Marker nm
-
-instance Show (CtxElem a) where
-  show = \case
-    Uni nm          -> show nm
-    Exists nm       -> "^" ++ show nm
-    nm `HasType` ty -> show nm ++ " : " ++ show (unannT ty)
-    nm := ty        -> show nm ++ " = " ++ show (unannT ty)
-    Marker nm       -> "▷" ++ show nm
-
-instance Pretty (CtxElem a) where
-  pretty = \case
-    Uni nm          -> pretty nm
-    Exists nm       -> "^" <> pretty nm
-    nm `HasType` ty -> pretty nm <> " : " <> pretty (unann ty)
-    nm := ty        -> "^" <> pretty nm <> " = " <> pretty (unann ty)
-    Marker nm       -> "▷" <> pretty nm
-
-
-exists :: Name -> CtxElem a
-exists = Exists
-
-marker :: Name -> CtxElem a
-marker = Marker
-
-uni :: Name -> CtxElem a
-uni = Uni
-
--- A destructor which is elaborated from a pattern
-data Destr a = Destr
-  { name   :: Name
-  , typ    :: Type a Poly
-  , bound  :: [Name]
-  , args   :: [Type a Poly]
-  } deriving (Show, Eq, Data, Typeable)
-
--- Free contexts contains "global" mappings from names to types
-newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
-  deriving (Show, Eq, Monoid, Data)
-
-instance (IsList (FreeCtx a)) where
-  type Item (FreeCtx a) = (Name, Type a Poly)
-  fromList xs = FreeCtx $ M.fromList xs
-  toList (FreeCtx m) = M.toList m
-
-instance Context (FreeCtx a) where
-  type Elem (FreeCtx a) = Type a Poly
-  type Key (FreeCtx a)  = Name
-  extend nm ty (FreeCtx m) = FreeCtx $ M.insert nm ty m
-  isMemberOf nm (FreeCtx m) = M.member nm m
-  query x (FreeCtx m) = M.lookup x m
-
--- Kind context contains "global" mappings from type-names to kinds
-newtype KindCtx a = KindCtx { unKundCtx :: M.Map Name Kind }
-  deriving (Show, Eq, Monoid, Data)
-
-instance Context (KindCtx a) where
-  type Elem (KindCtx a) = Kind
-  type Key (KindCtx a)  = Name
-  extend nm ty (KindCtx m) = KindCtx $ M.insert nm ty m
-  isMemberOf nm (KindCtx m) = M.member nm m
-  query x (KindCtx m) = M.lookup x m
-
-instance (IsList (KindCtx a)) where
-  type Item (KindCtx a) = (Name, Kind)
-  fromList xs = KindCtx $ M.fromList xs
-  toList (KindCtx m) = M.toList m
-
-instance Pretty (KindCtx a) where
-  pretty (KindCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
-    fn (k, v) = pretty k <+> "↦" <+> pretty v 
-
-
--- context of destructors 
-newtype DestrCtx a = DestrCtx { unDestrCtx :: M.Map Name (Destr a) }
-  deriving (Show, Eq, Monoid, Data)
-
-instance Context (DestrCtx a) where
-  type Elem (DestrCtx a) = Destr a
-  type Key (DestrCtx a)  = Name
-  extend nm ty (DestrCtx m) = DestrCtx $ M.insert nm ty m
-  isMemberOf nm (DestrCtx m) = M.member nm m
-  query x (DestrCtx m) = M.lookup x m
-
-instance (IsList (DestrCtx a)) where
-  type Item (DestrCtx a) = (Name, Destr a)
-  fromList xs = DestrCtx $ M.fromList xs
-  toList (DestrCtx m) = M.toList m
-
--- instance Pretty (DestrCtx a) where
---   pretty (DestrCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
---     fn (k, v) = pretty k <+> "↦" <+> pretty v 
-
-
-
-infix 1 |->
-(|->) :: a -> b -> (a,b)
-x |-> y = (x,y)
-
--- Typing context contains local variables and stuff
-newtype TyCtx a = Gamma { unGamma :: [CtxElem a] }
-  deriving (Eq)
-
-instance Show (TyCtx a) where
-  show gamma = showW 80 (pretty gamma)
-
-instance Pretty (TyCtx a) where
-  pretty (Gamma xs) = encloseSep "[" "]" ", " $ map pretty $ reverse xs
-
-instance Unann (TyCtx a) (TyCtx ()) where
-  unann (Gamma xs) = Gamma $ map unann xs
-
-emptyCtx :: TyCtx a
-emptyCtx = Gamma []
-
--- Lists are left-prepend but contexts are right-append
--- It doesn't matter, so we just pretend that we right-append stuff,
--- yet put it at the head 
-infixl 5 <+
-(<+) :: TyCtx a -> CtxElem a -> TyCtx a
-Gamma xs <+ x = Gamma (x : xs)
-
-infixl 4 <++
-(<++) :: TyCtx a -> TyCtx a -> TyCtx a
-Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
-
-instance Monoid (TyCtx a) where
-  mempty = emptyCtx
-  mappend = (<++)
-
-isInContext :: CtxElem a -> TyCtx a -> Bool
-isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs
-
-isInFContext :: Name -> FreeCtx a -> Bool
-isInFContext = isMemberOf
-
-isInKContext :: Name -> KindCtx a -> Bool
-isInKContext = isMemberOf
-
--- A type is wellformed
--- this one, validType and kindOf should probably be merged somehow...
-isWfTypeIn' :: Type a Poly -> KindCtx a -> TyCtx a -> Bool
-isWfTypeIn' (A ann ty) kctx ctx =
-  -- trace ("isWfTypeIn'" ++ (show $ unann ty)) $
-  case ty of
-    -- UFreeWF
-    TFree x -> x `isMemberOf` kctx
-    -- UVarWF
-    TVar x -> isJust $ ctxFind (freePred x) ctx
-    -- EvarWF and SolvedEvarWF
-    TExists alpha -> isJust $ ctxFind (expred $ alpha) ctx
-    -- ArrowWF
-    t1 :->: t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
-    -- ForallWF
-    Forall x t -> isWfTypeIn' t kctx (ctx <+ Uni x)
-    -- TAppWF. FIXME Should check kinds correct kinds as well.
-    TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
-  where 
-    expred alpha = \case
-      Exists alpha' -> alpha == alpha'
-      alpha' := _   -> alpha == alpha' 
-      _         -> False
-
-    freePred x = \case
-      Uni x' -> x == x'
-      _      -> False
-
-
-findMap :: (a -> Maybe b) -> [a] -> Maybe b
-findMap fn = foldr fun Nothing where
-  fun x acc = 
-    case fn x of
-      Just x' -> Just x'
-      Nothing -> acc
-
-ctxFind :: (CtxElem a -> Bool) -> TyCtx a -> Maybe (CtxElem a)
-ctxFind p (Gamma xs) = find p xs
-
-elemBy :: (a -> Bool) -> [a] -> Bool
-elemBy fn = isJust . find fn
-
-findAssigned :: Name -> TyCtx a -> Maybe (Type a Mono)
-findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
-  fn (nm' := ty) | nm == nm' = pure ty
-  fn _                       = Nothing
-
-hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a Poly)
-hasTypeInCtx nm (Gamma xs) = findMap fn xs where
-  fn (nm' `HasType` ty) | nm == nm' = pure ty
-  fn _                             = Nothing
-
-hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a Poly)
-hasTypeInFCtx nm (FreeCtx m) = M.lookup nm m
-
-lookupKind :: Name -> KindCtx a -> Maybe (Kind)
-lookupKind nm (KindCtx m) = M.lookup nm m
-
-addK :: Name -> Kind -> KindCtx a -> KindCtx a
-addK nm k (KindCtx m) = KindCtx $ M.insert nm k m
 
 branch :: TypingM a r -> TypingM a r
 branch comp = do
@@ -290,11 +83,6 @@ instance Monoid (TypingRead a) where
        , trDestrs = mappend d1 d2
        }
   
-emptyFCtx :: FreeCtx a
-emptyFCtx = FreeCtx (M.empty)
-
-emptyKCtx :: KindCtx a
-emptyKCtx = KindCtx (M.empty)
 
 type TypingWrite a = [(Integer, Doc ())]
 type TypingErr a = (TyExcept a, TyCtx a)
@@ -473,19 +261,6 @@ substCtx ctx ty =
     Left x -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
     Right ctx' -> pure ctx'
 
--- | drop until an element `el` is encountered in the context. Also drops `el`
-dropTil :: CtxElem a -> TyCtx a -> TyCtx a
-dropTil el (Gamma xs) = Gamma $ tl $ dropWhile ((unann el /=) . unann) xs where
-  tl []     = []
-  tl (_:ys) = ys
-
--- again, since contexts are "reversed" notationally, this does not yield 
--- we switch ys and zs in the definition
-splitCtx' :: CtxElem a -> TyCtx a -> Maybe (TyCtx a, CtxElem a, TyCtx a)
-splitCtx' el ctx@(Gamma xs) =
-  case break ((unann el ==) . unann) xs of
-    (_, [])    -> Nothing
-    (ys, z:zs) -> pure (Gamma zs, z, Gamma ys)
 
 splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
@@ -515,52 +290,12 @@ subst x forY (A a inTy) =
     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
     
 
--- | Check if an elem alpha comes before beta in a context
-before' :: CtxElem a -> CtxElem a -> TyCtx a -> Bool
-before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False where
-  comesBefore x y [] xr yr = yr
-  comesBefore x y (a:as) False False
-    | x =%= a     = comesBefore x y as True False
-    | y =%= a     = False
-    | otherwise = comesBefore x y as False False
-  comesBefore x y (a:as) True False
-    | x =%= a = False
-    | y =%= a = True
-    | otherwise = comesBefore x y as True False
-  comesBefore _ _ _ _ _ = False
 
 before :: CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
--- Check if a context is well-formed
-wfContext :: forall a. KindCtx a -> TyCtx a -> Bool
-wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
-  fn :: CtxElem a -> Maybe [CtxElem a] -> Maybe [CtxElem a]
-  fn el accM = accM >>= (\acc -> if checkIt acc el then Just (el : acc) else Nothing)
-
-  elem' f xs = isJust $ find (\x -> f (unann x)) xs
-  checkIt acc = \case
-    Uni nm          -> notInDom nm
-    Exists nm       -> notInDom nm
-    nm `HasType` ty -> notInDom nm && ((asPolytype ty `isWfTypeIn'` kctx) (Gamma acc))
-    nm := ty        -> notInDom nm && ((asPolytype ty `isWfTypeIn'` kctx) (Gamma acc))
-    Marker nm       -> notInDom nm && not ((\x -> Marker nm == x) `elem'` acc)
-    where
-      notInDom nm = not $ (\x -> Uni nm == x || Exists nm == x) `elem'` acc
 
 
--- assign an unsolved variable to a type in a context
--- TODO: Optimize 
-assign' :: Name -> Type a Mono -> KindCtx a -> TyCtx a -> Either String (TyCtx a)
-assign' nm ty kctx (Gamma ctx) =
-  case foldr fn ([], False) ctx of
-    (xs, True)
-      | wfContext kctx (Gamma xs) -> Right (Gamma xs)
-      | otherwise                 -> Left ("Ctx not well-formed: " ++ show (pretty (Gamma xs)))
-    (xs, False)                   -> Left "Didn't assign anything" 
-  where
-    fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
-    fn x (xs, b)                        = (x : xs, b)
 
 assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
@@ -571,11 +306,6 @@ assign nm ty = do
     Right ctx' -> do 
       -- traceM $ showW 80 $ "assign" <+> pretty nm <+> pretty ty <+> pretty ctx <+> "---->" <+> pretty ctx'
       pure ctx'
-
-insertAt' :: CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
-insertAt' at insertee into = do
-  (l, _, r) <- splitCtx' at into
-  pure $ l <++ insertee <++ r
 
 insertAt :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a)
 insertAt at insertee = do
@@ -648,7 +378,7 @@ kindOf' kctx (A _ t) =
         (k1', k2')   -> Left $ "Both operands in arrow types must have kind *, but had " 
                      ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
     
-    Forall v tau -> kindOf' (addK v Star kctx) tau
+    Forall v tau -> kindOf' (extend v Star kctx) tau
   where
     notFound v = Left $ "Type " ++ pps v ++ " not found in context."
 
@@ -790,7 +520,6 @@ instR ty@(A a ty') ahat = do
 
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- A is a subtype of B iff A is more polymorphic than B
--- TODO: Consider how to avoid name capture (alpha renaming probably)
 subtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:Free
@@ -972,10 +701,6 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
             checkCaseClauses markerName pty clauses' expected
       [] -> pure ()
 
-
-
-
-
 synthesize :: Expr a -> TypingM a (Type a Poly, TyCtx a)
 synthesize expr@(A ann expr') = synthesize' expr' where
   -- Var
@@ -1048,24 +773,6 @@ inferPrim p = TFree $ UName $ case p of
   Bool _ -> "Bool"
   Nat _  -> "Nat"
 
--- in a context, check each clause against a type of (pattern, Maybe expression)
--- if second type is nothing, it is because we do not yet know which type to infer,
--- but we should know in first recursive call
--- DEPRECATED!
--- checkClauses :: (Type a Poly, Maybe (Type a Poly)) -> [(Pat a, Expr a)] -> TypingM a (Type a Poly)
--- checkClauses (_, mety) [] = 
---   case mety of 
---     Just ty -> pure ty
---     Nothing -> otherErr $ "case expressions must have at least one clause"
--- checkClauses (pty, mety) ((pat, e) : clauses) = do
---   root $ "[CheckClause]" <+> pretty pat <+> "->" <+> pretty e <+> "<=" <+> pretty mety
---   nctx <- checkPat pat pty
---   case mety of 
---     Just ety -> withCtx (const nctx) (branch $ check e ety) *> checkClauses (pty, mety) clauses
---     Nothing  -> do 
---       (ety, ctx) <- branch $ withCtx (const nctx) (synthesize e)
---       checkClauses (pty, Just ety) clauses
-
 -- check that patterns type-check and return a new ctx extended with bound variables
 checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)
 checkPat pat@(A ann p) ty = do
@@ -1120,20 +827,6 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
           t' <- substCtx acc t
           withCtx (const acc) $ checkPat p t'
   
--- like subtypeOf, but if the right operand is a forall a. t, we extend
--- the context with ̂a and subtype from t
--- patSubtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
--- patSubtypeOf ty1@(A ann1 ty1') ty2@(A ann2 ty2') =
---   case (ty1', ty2') of
---     (_, Forall nm t) -> do
---       alpha <- freshName
---       let t' = subst (A ann2 $ TExists alpha) nm $ t
---       root $ "[PatSubtypeOf]" <+> pretty ty1 <+> ":p<" <+> pretty ty2
---       withCtx (\g -> g <+ Exists alpha) $ branch $ ty1 `patSubtypeOf` t'
-
---     _ -> ty1 `subtypeOf` ty2
-
-
 applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)
 applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ∀App
