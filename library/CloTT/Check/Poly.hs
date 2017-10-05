@@ -22,12 +22,10 @@ module CloTT.Check.Poly
   ( module CloTT.Check.Poly
   , module CloTT.Check.Poly.Destr
   , module CloTT.Check.Poly.Contexts
+  , module CloTT.Check.Poly.TypingM
   )
   where
 
-import Control.Monad.RWS.Strict hiding ((<>))
-import Control.Monad.Except
-import Control.Monad.State
 import Data.List (break, intercalate, find)
 import Control.Monad (foldM)
 import Data.Foldable (foldlM, foldrM)
@@ -49,169 +47,8 @@ import CloTT.AST.Parsed hiding (exists)
 import CloTT.Pretty
 import CloTT.Check.Poly.Destr
 import CloTT.Check.Poly.Contexts
+import CloTT.Check.Poly.TypingM
 
-
-branch :: TypingM a r -> TypingM a r
-branch comp = do
-  i <- gets level
-  modify $ \s -> s { level = i + 1 }
-  r <- comp
-  modify $ \s -> s { level = i }
-  pure r
-
-root :: Doc () -> TypingM a ()
-root x = gets level >>= \l -> tell [(l,x)]
-
-data TypingState   = 
-  TS { names :: Integer -- |Just an integer for generating names
-     , level :: Integer
-     }
-
-data TypingRead a  = 
-  TR { trCtx :: TyCtx a
-     , trFree :: FreeCtx a
-     , trKinds :: KindCtx a
-     , trDestrs :: DestrCtx a
-     }
-
-instance Monoid (TypingRead a) where
-  mempty = TR mempty mempty mempty mempty
-  mappend (TR c1 f1 k1 d1) (TR c2 f2 k2 d2) =
-    TR { trCtx    = mappend c1 c2
-       , trFree   = mappend f1 f2 
-       , trKinds  = mappend k1 k2
-       , trDestrs = mappend d1 d2
-       }
-  
-
-type TypingWrite a = [(Integer, Doc ())]
-type TypingErr a = (TyExcept a, TyCtx a)
-
-showTree :: TypingWrite a -> String
-showTree = showW 90 . prettyTree
-
-prettyTree :: TypingWrite a -> Doc ()
-prettyTree = vcat . map fn where
-  fn (i, doc) = indent (fromInteger $ i * 2) doc
--- prettyTree [] = ""
--- prettyTree ((i,s):xs) = indented ++ showTree xs where
-  -- indented = unlines $ map (replicate (fromIntegral (i * 4)) ' ' ++) $ lines s
-
-data TyExcept a
-  = Type a Poly `CannotSubtype` Type a Poly
-  | Name `OccursIn` Type a Poly
-  | NameNotFound Name
-  | CannotSplit (CtxElem a) (TyCtx a)
-  | CannotSynthesize (Expr a)
-  | CannotAppSynthesize (Type a Poly) (Expr a)
-  | NotWfType (Type a Poly)
-  | Other String
-  deriving (Show, Eq)
-
-instance Unann (TyExcept a) (TyExcept ()) where
-  unann = \case
-    ty `CannotSubtype` ty'   -> unann ty `CannotSubtype` unann ty'
-    nm `OccursIn` ty         -> nm `OccursIn` unann ty
-    NameNotFound x           -> NameNotFound x
-    CannotSplit el ctx       -> CannotSplit (unann el) (unann ctx)
-    CannotSynthesize e       -> CannotSynthesize (unann e)
-    CannotAppSynthesize ty e -> CannotAppSynthesize (unann ty) (unann e)
-    NotWfType ty             -> NotWfType (unann ty)
-    Other s                  -> Other s
-
-instance Pretty (TyExcept a) where
-  pretty = \case
-    ty `CannotSubtype` ty'   -> pretty ty <+> "cannot subtype" <+> pretty ty'
-    nm `OccursIn` ty         -> pretty nm <+> "occurs in" <+> pretty ty
-    NameNotFound x           -> "Cannot find name" <+> pretty x
-    CannotSplit el ctx       -> "Cannot split" <+> pretty ctx <+> "at" <+> pretty el
-    CannotSynthesize e       -> "Cannot synthesize" <+> pretty e
-    CannotAppSynthesize ty e -> "Cannot app_synthesize" <+> pretty ty <+> "•" <+> pretty e
-    NotWfType ty             -> pretty ty <+> "is not well-formed"
-    Other s                  -> "Other error:" <+> fromString s
-
-tyExcept :: TyExcept a -> TypingM a r
-tyExcept err = do 
-  ctx <- getCtx 
-  throwError (err, ctx)
-
-cannotSubtype :: Type a Poly -> Type a Poly -> TypingM a r
-cannotSubtype t1 t2 = tyExcept $ CannotSubtype t1 t2
-
-cannotSynthesize :: Expr a -> TypingM a r
-cannotSynthesize e = tyExcept $ CannotSynthesize e
-
-cannotAppSynthesize :: Type a Poly -> Expr a -> TypingM a r
-cannotAppSynthesize t e = tyExcept $ CannotAppSynthesize t e
-
-occursIn :: Name -> Type a Poly -> TypingM a r
-occursIn nm t = tyExcept $ OccursIn nm t
-
-nameNotFound :: Name -> TypingM a r
-nameNotFound nm = tyExcept $ NameNotFound nm
-
-notWfType :: Type a Poly -> TypingM a r
-notWfType ty = tyExcept $ NotWfType ty
-
-cannotSplit :: CtxElem a -> TyCtx a -> TypingM a r
-cannotSplit el ctx = tyExcept $ CannotSplit el ctx
-
-otherErr :: String -> TypingM a r
-otherErr s = tyExcept $ Other s
-
-newtype TypingM a r = Typ { unTypingM :: ExceptT (TypingErr a) (RWS (TypingRead a) (TypingWrite a) TypingState) r }
-  deriving ( Functor
-           , Applicative
-           , Monad
-           , MonadError (TypingErr a)
-           , MonadState TypingState
-           , MonadWriter (TypingWrite a)
-           , MonadReader (TypingRead a)
-           )
-
-type TypingMRes a r = (Either (TypingErr a) r, TypingState, TypingWrite a)
-
-runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
-runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
-
-initRead :: TypingRead a 
-initRead = TR { trFree = emptyFCtx, trCtx = emptyCtx, trKinds = emptyKCtx, trDestrs = mempty }
-
-getCtx :: TypingM a (TyCtx a)
-getCtx = asks trCtx
-
-getFCtx :: TypingM a (FreeCtx a)
-getFCtx = asks trFree
-
-getDCtx :: TypingM a (DestrCtx a)
-getDCtx = asks trDestrs
-
-getKCtx :: TypingM a (KindCtx a)
-getKCtx = asks trKinds
-
-withCtx :: (TyCtx a -> TyCtx a) -> TypingM a r -> TypingM a r
-withCtx fn = local fn' where
-  fn' rd = rd { trCtx = fn (trCtx rd) }
-
-withFCtx :: (FreeCtx a -> FreeCtx a) -> TypingM a r -> TypingM a r
-withFCtx fn = local fn' where
-  fn' rd = rd { trFree = fn (trFree rd) }
-
-withKCtx :: (KindCtx a -> KindCtx a) -> TypingM a r -> TypingM a r
-withKCtx fn = local fn' where
-  fn' rd = rd { trKinds = fn (trKinds rd) }
-
-freshName :: TypingM a Name
-freshName = do 
-  i <- gets names
-  modify $ \s -> s {names = names s + 1}
-  pure $ MName i
-
-initState :: TypingState
-initState = TS 0 0
-
-runTypingM0 :: TypingM a r -> TypingRead a -> TypingMRes a r
-runTypingM0 tm r = runTypingM tm r initState
 
 runSubtypeOf0 :: Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runSubtypeOf0 t1 t2 = runSubtypeOf initRead t1 t2
