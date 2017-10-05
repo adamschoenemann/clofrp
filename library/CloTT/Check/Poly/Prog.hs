@@ -19,6 +19,8 @@ import Data.Data (Data, Typeable)
 import Data.Monoid
 import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
+import Debug.Trace
+import CloTT.Pretty hiding ((<>))
 
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Parsed
@@ -32,13 +34,15 @@ import CloTT.Context
 
 -- alias for definitions
 type Defs a = M.Map Name (Expr a)
+type Aliases a = M.Map Name (Alias a)
 
 type ElabRes a = 
-  ( KindCtx a  -- kinds
-  , Defs    a  -- function definitions
-  , FreeCtx a  -- signatures
-  , FreeCtx a  -- constructors
+  ( KindCtx a    -- kinds
+  , Defs    a    -- function definitions
+  , FreeCtx a    -- signatures
+  , FreeCtx a    -- constructors
   , DestrCtx  a  -- destructors
+  , Aliases a    -- type aliases
   )
 
 data ElabProg a = ElabProg
@@ -48,19 +52,106 @@ data ElabProg a = ElabProg
   , destrs :: DestrCtx a
   } deriving (Show, Eq, Data, Typeable)
 
+{-
+  type FlipSum a b = Either b a.
+
+  foo : List (FlipSum a b) -> FlipSum (List a) b.
+
+  expal (List (FlipSum a b))
+  = expal List `TApp` expal (FlipSum a b)
+  = List `TApp` (expal (FlipSum a) `TApp` expal b)
+  = List `TApp` ((expal FlipSum `TApp` expal a) `TApp` expal b)
+  = List `TApp` (((\y x -> Either x y) `TApp` a) `TApp` b)
+  = List `TApp` (\x -> Either x a) `TApp` b
+  = List `TApp` Either b a
+
+  expal (List (Sum a b) -> Sum (List a b))
+  = expal (List (Sum a b)) `TArr` expal (Sum (List a b))
+  = (expal List `TApp` expal (Sum a b)) `TArr` (expal Sum `TApp` expal (List a b))
+  = 
+-}
+
+-- is this just a free monad?
+data Expand a
+  = Done (Type a Poly)
+  | Ex (Type a Poly -> Expand a)
+
+instance Eq (Expand a) where
+  Done t1 == Done t2 = t1 =%= t2
+  _       == _       = False
+
+instance Monoid a => Show (Expand a) where
+  show (Done t) = show . pretty $ t
+  show (Ex f)   = show (f (A mempty $ TFree (UName "_")))
+
+{-
+  ae (Alias FlipSum [a,b] (Either b a))
+  = Ex (\x -> ae (Alias FlipSum [b] (Either b x)))
+  = Ex (\x -> Ex (\y -> ae (Alias [] FlipSum (Either y x))))
+  = Ex (\x -> Ex (\y -> Done (Either y x)))
+-}
+
+-- FIXME: There are problems with name capture!!! How to fix it best?
+aliasToExpand :: Alias a -> Expand a
+aliasToExpand al@(Alias {alName, alBound, alExpansion}) =
+  case alBound of
+    [] -> Done alExpansion
+    x:xs -> Ex $ \t ->
+        let alExpansion' = subst t x alExpansion
+        in aliasToExpand (al { alBound = xs, alExpansion = alExpansion' }) 
+
+{-
+  ea (FlipSum a (FlipSum b c))
+  = (ea (FlipSum a), ea (FlipSum b c))
+  = ((Either _ _, Done a), (ea (FlipSum b), Done c))
+  = (Either _ a, ((ea FlipSum, Done b), Done c))
+  = (Either _ a, ((Either 2 1, Done b), Done c))
+  = (Either _ a, (Either 2 b, Done c))
+  = (Either _ a, Either b c)
+  = (Either (Either b c) a)
+-}
+expandAliases :: Monoid a => Aliases a -> Type a Poly -> Expand a
+expandAliases als (A ann ty') =
+  case ty' of
+    TFree n 
+      | Just al <- M.lookup n als -> aliasToExpand al
+      | otherwise                 -> Done (A ann $ ty')
+
+    TVar n     -> Done (A ann ty')
+    TExists n  -> Done (A ann ty')
+    TApp t1 t2 -> 
+      case (expandAliases als t1, expandAliases als t2) of
+        (Done t1', Done t2') -> Done (A ann $ TApp t1' t2')
+        (Done t1', Ex f2)    -> error "expandAliases TApp 2" -- Ex (\x -> Done $ t1' `TApp` f2 x)
+        (Ex f1, Done t2')    -> 
+          let r = f1 t2'
+          in  trace ("apply " ++ show (Ex f1) ++ " to " ++ pps t2' ++ " gives " ++ show r) $ f1 t2'
+        (Ex f1, Ex f2)       -> error "expandAliases TApp 4" -- undefined -- Ex (\x -> )
+
+    t1 :->: t2   -> 
+      case (expandAliases als t1, expandAliases als t2) of
+        (Done t1', Done t2') -> Done (A ann $ t1' :->: t2')
+        _                    -> error "expandAliases :->: error" 
+
+    Forall n t -> 
+      case expandAliases als t of
+        Done t' -> Done $ A ann $ Forall n t'
+        _       -> error "expandAliases forall error"
+
 elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg (Prog decls) =
-  let (kinds, funds, sigds, cnstrs, destrs) = foldr folder (mempty, mempty, mempty, mempty, mempty) decls 
+  let (kinds, funds, sigds, cnstrs, destrs, aliases) = foldr folder (mempty, mempty, mempty, mempty, mempty, mempty) decls 
 
       -- TODO: Check for duplicate defs/signatures/datadecls
       folder :: Decl a -> ElabRes a -> ElabRes a
-      folder (A _ x) (ks, fs, ss, cs, ds) = case x of
+      folder (A _ x) (ks, fs, ss, cs, ds, als) = case x of
         DataD nm k b cs' ->
           let (tys, dstrs) = elabCs nm b cs' 
-          in  (extend nm k ks, fs, ss, tys <> cs, dstrs <> ds)
+          in  (extend nm k ks, fs, ss, tys <> cs, dstrs <> ds, als)
 
-        FunD nm e        -> (ks, M.insert nm e fs, ss, cs, ds)
-        SigD nm t        -> (ks, fs, extend nm t ss, cs, ds)
+        FunD nm e        -> (ks, M.insert nm e fs, ss, cs, ds, als)
+        SigD nm t        -> (ks, fs, extend nm t ss, cs, ds, als)
+        AliasD alias     -> (ks, fs, ss, cs, ds, M.insert (alName alias) alias als)
 
       defsNoSig = funds `M.difference` (unFreeCtx sigds)
       sigsNoDef = (unFreeCtx sigds) `M.difference` funds

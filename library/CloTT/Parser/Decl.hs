@@ -7,6 +7,7 @@ import qualified CloTT.AST.Parsed as E
 import           CloTT.Parser.Lang
 import qualified CloTT.Parser.Type as P
 import qualified CloTT.Parser.Expr as P
+import qualified CloTT.Parser.Alias as P
 import           CloTT.AST.Name
 
 type Decl = E.Decl SourcePos
@@ -17,7 +18,7 @@ decls = many decl
 -- using monadic parser style here is a bit annoying, but
 -- it improves the parser error messages significantly
 decl :: Parser Decl
-decl = datad <|> p where
+decl = datad <|> alias <|> p where
   p = do
     nm <- lidentifier
     op <- (oneOf [':', '=']) <* ws
@@ -26,6 +27,7 @@ decl = datad <|> p where
               ':' -> E.SigD (UName nm) <$> P.typep
               _   -> error "the impossible happened"
     ann <*> p' <* reservedOp "."
+  alias = ann <*> (E.AliasD <$> P.alias)
 
 -- sigd :: Parser Decl
 -- sigd = ann <*> p <* reservedOp "." where

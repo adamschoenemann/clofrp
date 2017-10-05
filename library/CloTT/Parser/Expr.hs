@@ -11,8 +11,6 @@ import qualified CloTT.AST.Prim   as P
 import           CloTT.Parser.Lang
 import qualified CloTT.Parser.Type as T
 import           CloTT.AST.Name
-import           Data.Char (isSpace, isUpper)
-import           Data.List (intercalate)
 
 type Expr = E.Expr SourcePos
 type Pat  = E.Pat  SourcePos

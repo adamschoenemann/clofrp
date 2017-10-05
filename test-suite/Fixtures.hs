@@ -9,7 +9,7 @@ module Fixtures where
 import CloTT.QuasiQuoter
 
 import qualified CloTT.Parser.Expr as P
-import qualified CloTT.Parser.Type as P
+-- import qualified CloTT.Parser.Type as P
 import qualified CloTT.Parser.Decl as P
 import qualified CloTT.Parser.Prog as P
 

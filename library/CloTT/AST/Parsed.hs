@@ -21,14 +21,13 @@ module CloTT.AST.Parsed
   , module CloTT.AST.Type
   , module CloTT.AST.Pat
   , module CloTT.AST.Expr
+  , module CloTT.AST.Alias
   , P.Prim(..)
   , Unann(..)
 ) where
 
 import Data.String (IsString(..))
-import qualified Data.Set as S
 import Data.Data (Data, Typeable)
-import Data.Char (isUpper)
 import qualified CloTT.AST.Prim as P
 import Data.Text.Prettyprint.Doc
 
@@ -37,6 +36,7 @@ import CloTT.AST.Name
 import CloTT.AST.Type
 import CloTT.AST.Pat
 import CloTT.AST.Expr
+import CloTT.AST.Alias
 
 
 infixr 2 :->*:
@@ -62,6 +62,7 @@ data Decl' a
   -- |    name kind tvars  constructors
   | DataD Name Kind [Name] [Constr a]
   | SigD Name (Type a Poly)
+  | AliasD (Alias a)
 
 deriving instance Show a     => Show (Decl' a)
 deriving instance Eq a       => Eq (Decl' a)
@@ -79,6 +80,7 @@ deriving instance Typeable a => Typeable (Constr' a)
 
 data Prog a = Prog [Decl a]
   deriving (Show, Eq, Data, Typeable)
+
 
 -- Here are some combinators for creating un-annotated expressions easily
 
@@ -114,6 +116,9 @@ fund nm e =  A () $ FunD nm e
 
 sigd :: Name -> Type () Poly -> Decl ()
 sigd nm t =  A () $ SigD nm t
+
+aliasd :: Name -> [Name] -> Type () Poly -> Decl ()
+aliasd nm bs t = A () $ AliasD (Alias nm bs t)
 
 prog :: [Decl ()] -> Prog ()
 prog = Prog
@@ -172,6 +177,7 @@ unannD = help go where
     FunD nm c -> FunD nm (unannE c) 
     DataD nm k b cstrs -> DataD nm k b (map unannConstr cstrs)
     SigD nm t  -> SigD nm (unannT t)
+    AliasD al  -> AliasD $ unann al
 
 instance Unann (Prog a) (Prog ()) where
   unann = unannP

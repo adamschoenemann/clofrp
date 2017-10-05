@@ -18,12 +18,11 @@ import Data.Data
 import GHC.Exts (IsList(..))
 import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
-import Data.List (break, intercalate, find)
+import Data.List (break, find)
 import Data.Maybe (isJust)
 
 import CloTT.Check.Poly.Destr
 import CloTT.AST.Parsed hiding (exists)
-import CloTT.AST.Name
 import CloTT.Context
 import CloTT.Annotated
 import CloTT.Pretty

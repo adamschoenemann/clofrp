@@ -18,9 +18,7 @@
 module CloTT.AST.Expr where
 
 import Data.String (IsString(..))
-import qualified Data.Set as S
 import Data.Data (Data, Typeable)
-import Data.Char (isUpper)
 import qualified CloTT.AST.Prim as P
 import Data.Text.Prettyprint.Doc
 

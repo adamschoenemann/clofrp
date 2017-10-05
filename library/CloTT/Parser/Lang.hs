@@ -57,6 +57,7 @@ reservedNames = [ "if"
                 , "the"
                 , "data"
                 , "forall"
+                , "type"
                 ]
 
 languageDef :: Tok.LanguageDef ()

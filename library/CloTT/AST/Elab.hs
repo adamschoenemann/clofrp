@@ -15,7 +15,6 @@ module CloTT.AST.Elab where
 
 import qualified Data.Map.Strict as M
 import Data.Data (Data, Typeable)
-import Data.String (fromString)
 
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Parsed

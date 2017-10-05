@@ -12,6 +12,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -28,11 +29,9 @@ module CloTT.Check.Poly
 
 import Data.Foldable (foldlM, foldrM)
 import Debug.Trace
-import Data.Data
 import Data.String (fromString)
 import Control.Applicative ((<|>))
 import Data.Text.Prettyprint.Doc
-import Control.Monad (foldM)
 
 import CloTT.AST.Name
 import CloTT.Context

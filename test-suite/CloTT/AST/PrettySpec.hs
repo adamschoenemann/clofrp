@@ -8,16 +8,13 @@
 module CloTT.AST.PrettySpec where
 
 import           Test.Tasty.Hspec
-import           Data.Text.Prettyprint.Doc
 
 import qualified CloTT.AST.Parsed  as E
-import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
+import           CloTT.AST.Parsed ((@->:), (@@:))
 import           CloTT.AST.Parsed (LamCalc(..))
 import           CloTT.QuasiQuoter
 import           CloTT.Pretty
 
-import CloTT.TestUtils
-import Fixtures
 
 prettySpec :: Spec
 prettySpec = do
@@ -65,4 +62,13 @@ prettySpec = do
       pps (E.the ("Nat" @->: "Bool") (E.nat 10)) `shouldBe` "the (Nat -> Bool) 10"
       pps [unsafeExpr|case 10 of | x -> 0|] `shouldBe` "case 10 of | x -> 0"
       ppsw 100 [unsafeExpr|case b of | True -> 0 | False -> 1|] `shouldBe` "case b of | True -> 0 | False -> 1"
+  
+  describe "type aliases" $ do
+    it "works lol" $ do
+      pps (E.Alias @() "Seconds" [] "Int") `shouldBe` "type Seconds = Int."
+      pps (E.Alias @() "Stream" ["a"] $ "List" @@: "a") `shouldBe` "type Stream a = List a."
+      pps (E.Alias @() "Option" ["a"] $ "Maybe" @@: "a") `shouldBe` "type Option a = Maybe a."
+      pps (E.Alias @() "Sum" ["a", "b"] $ "Either" @@: "a" @@: "b") `shouldBe` "type Sum a b = Either a b."
+      ppsw 80 (E.Alias @() "CList" ["a"] $ E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")
+        `shouldBe` "type CList a = ∀r. (a -> r -> r) -> r -> r."
 
