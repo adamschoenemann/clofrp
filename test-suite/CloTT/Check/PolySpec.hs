@@ -9,17 +9,13 @@ module CloTT.Check.PolySpec where
 
 import Test.Tasty.Hspec
 import Data.Either (isLeft)
-import CloTT.Pretty
 import Data.String (fromString)
 
 import qualified CloTT.AST.Parsed  as E
 import           CloTT.Check.Poly
-import           CloTT.Check.Poly.Prog
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
-import           CloTT.TestUtils
 import           CloTT.QuasiQuoter
-import           CloTT.Pretty 
 import           CloTT.Check.Poly.TestUtils
 
 foo :: (forall a. a -> a) -> (forall b. b -> b)
@@ -32,7 +28,7 @@ bar :: (forall a. [a]) -> Int
 bar xs = 
   case xs of
     [] -> 0
-    (x:xs)  -> x
+    (x:xs')  -> x
 
 -- rank2 :: (forall a. [a]) -> Either () Bool
 -- rank2 = \xs ->

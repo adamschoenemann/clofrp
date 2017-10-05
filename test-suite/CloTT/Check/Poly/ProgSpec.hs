@@ -9,7 +9,6 @@ import Test.Tasty.Hspec
 
 import           CloTT.Check.Poly.TestUtils
 import           CloTT.QuasiQuoter
-import           CloTT.Check.Poly
 import           CloTT.Check.Poly.Prog
 
 progSpec :: Spec 
@@ -595,9 +594,9 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
     
-    it "succeeds for higher-kinded types" $ do
-      let prog = [unsafeProg|
-        data Functor f = Functor (forall a b. (a -> b) -> f a -> f b) .
-      |]
-      pending
+    -- it "succeeds for higher-kinded types" $ do
+    --   let prog = [unsafeProg|
+    --     data Functor f = Functor (forall a b. (a -> b) -> f a -> f b) .
+    --   |]
+    --   pending
       -- runCheckProg mempty prog `shouldYield` ()

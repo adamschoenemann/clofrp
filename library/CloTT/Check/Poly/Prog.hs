@@ -16,9 +16,7 @@ module CloTT.Check.Poly.Prog where
 
 import qualified Data.Map.Strict as M
 import Data.Data (Data, Typeable)
-import Data.String (fromString)
 import Data.Monoid
-import Data.Foldable
 import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
 

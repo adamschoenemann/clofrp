@@ -26,19 +26,13 @@ module CloTT.Check.Poly
   )
   where
 
-import Data.List (break, intercalate, find)
-import Control.Monad (foldM)
 import Data.Foldable (foldlM, foldrM)
 import Debug.Trace
-import Data.Maybe (isJust)
 import Data.Data
-import Data.Char (isUpper)
 import Data.String (fromString)
 import Control.Applicative ((<|>))
 import Data.Text.Prettyprint.Doc
 import Control.Monad (foldM)
-import GHC.Exts (IsList(..))
-import qualified Data.Map.Strict as M
 
 import CloTT.AST.Name
 import CloTT.Context

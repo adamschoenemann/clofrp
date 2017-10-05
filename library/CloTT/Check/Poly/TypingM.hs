@@ -19,7 +19,7 @@ module CloTT.Check.Poly.TypingM where
 
 import Control.Monad.RWS.Strict hiding ((<>))
 import Control.Monad.Except
-import Control.Monad.State
+import Control.Monad.State ()
 import Data.String (fromString)
 
 import CloTT.AST.Name
