@@ -18,6 +18,7 @@ import CloTT.ParserSpec
 import CloTT.AST.ElabSpec
 import CloTT.QuasiQuoterSpec
 import CloTT.Check.PolySpec
+import CloTT.Check.Poly.ProgSpec
 import CloTT.AST.PrettySpec
 
 main :: IO ()
@@ -30,5 +31,6 @@ main = do
   elab <- testSpec "elaboration" elabSpec
   kindOf <- testSpec "kindOf" kindOfSpec
   pretty <- testSpec "pretty" prettySpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, mono, poly, decl, elab, kindOf, pretty]
+  checkProg <- testSpec "checkProg" progSpec
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, mono, poly, decl, elab, kindOf, pretty, checkProg]
   Test.Tasty.defaultMain group
