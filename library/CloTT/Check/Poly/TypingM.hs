@@ -79,6 +79,7 @@ data TyExcept a
   | CannotSynthesize (Expr a)
   | CannotAppSynthesize (Type a Poly) (Expr a)
   | NotWfType (Type a Poly)
+  | PartialAliasApp (Alias a)
   | Other String
   deriving (Show, Eq)
 
@@ -91,6 +92,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     CannotSynthesize e       -> CannotSynthesize (unann e)
     CannotAppSynthesize ty e -> CannotAppSynthesize (unann ty) (unann e)
     NotWfType ty             -> NotWfType (unann ty)
+    PartialAliasApp al       -> PartialAliasApp (unann al)
     Other s                  -> Other s
 
 instance Pretty (TyExcept a) where
@@ -102,6 +104,7 @@ instance Pretty (TyExcept a) where
     CannotSynthesize e       -> "Cannot synthesize" <+> pretty e
     CannotAppSynthesize ty e -> "Cannot app_synthesize" <+> pretty ty <+> "•" <+> pretty e
     NotWfType ty             -> pretty ty <+> "is not well-formed"
+    PartialAliasApp al       -> "Partial type-alias application of alias " <+> pretty al
     Other s                  -> "Other error:" <+> fromString s
 
 tyExcept :: TyExcept a -> TypingM a r
@@ -132,6 +135,9 @@ cannotSplit el ctx = tyExcept $ CannotSplit el ctx
 
 otherErr :: String -> TypingM a r
 otherErr s = tyExcept $ Other s
+
+partialAliasApp :: Alias a -> TypingM a r
+partialAliasApp al = tyExcept $ PartialAliasApp al
 
 newtype TypingM a r = Typ { unTypingM :: ExceptT (TypingErr a) (RWS (TypingRead a) (TypingWrite a) TypingState) r }
   deriving ( Functor

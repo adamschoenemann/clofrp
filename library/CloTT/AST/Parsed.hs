@@ -136,6 +136,9 @@ caseof expr clauses = A () $ Case expr clauses
 match :: Name -> [Pat ()] -> Pat ()
 match nm ps = A () $ Match nm ps
 
+debrjn :: Integer -> Type () a
+debrjn = A () . TVar . DeBruijn
+
 infixr 2 @->
 infixr 2 @:->
 infixl 9 @@

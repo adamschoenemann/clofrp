@@ -10,6 +10,7 @@ import Data.Text.Prettyprint.Doc
 data Name 
   = UName String
   | MName Integer
+  | DeBruijn Integer
   deriving (Ord, Eq, Data, Typeable)
 
 instance Show Name where
@@ -17,6 +18,7 @@ instance Show Name where
     case x of
       UName x -> x
       MName i -> '`' : intToString i where
+      DeBruijn i -> show i
 
 instance Pretty Name where
   pretty = fromString . show

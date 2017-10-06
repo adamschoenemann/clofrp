@@ -74,7 +74,7 @@ data ElabProg a = ElabProg
 -- is this just a free monad?
 data Expand a
   = Done (Type a Poly)
-  | Ex (Type a Poly -> Expand a)
+  | Ex Name (Type a Poly -> Expand a)
 
 instance Eq (Expand a) where
   Done t1 == Done t2 = t1 =%= t2
@@ -82,7 +82,7 @@ instance Eq (Expand a) where
 
 instance Monoid a => Show (Expand a) where
   show (Done t) = show . pretty $ t
-  show (Ex f)   = show (f (A mempty $ TFree (UName "_")))
+  show (Ex _ f) = show (f (A mempty $ TFree (UName "_")))
 
 {-
   ae (Alias FlipSum [a,b] (Either b a))
@@ -91,14 +91,23 @@ instance Monoid a => Show (Expand a) where
   = Ex (\x -> Ex (\y -> Done (Either y x)))
 -}
 
--- FIXME: There are problems with name capture!!! How to fix it best?
-aliasToExpand :: Alias a -> Expand a
-aliasToExpand al@(Alias {alName, alBound, alExpansion}) =
-  case alBound of
-    [] -> Done alExpansion
-    x:xs -> Ex $ \t ->
-        let alExpansion' = subst t x alExpansion
-        in aliasToExpand (al { alBound = xs, alExpansion = alExpansion' }) 
+aliasToExpand :: a -> Alias a -> Expand a
+aliasToExpand ann al = go 0 (deb al) where 
+
+  deb al@(Alias {alName, alBound, alExpansion}) =
+    al { alExpansion = deBruijnify ann alBound alExpansion } 
+
+  go i (Alias {alName, alBound, alExpansion}) =
+    case alBound of
+      [] -> Done alExpansion
+      _:xs -> Ex alName $ \t ->
+          let alExpansion' = subst t (DeBruijn i) alExpansion
+          in  go (i+1) (al { alBound = xs, alExpansion = alExpansion' }) 
+
+deBruijnify :: a -> [Name] -> Type a Poly -> Type a Poly
+deBruijnify ann = go 0 where
+  go i []     ty = ty
+  go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
 {-
   ea (FlipSum a (FlipSum b c))
@@ -110,33 +119,42 @@ aliasToExpand al@(Alias {alName, alBound, alExpansion}) =
   = (Either _ a, Either b c)
   = (Either (Either b c) a)
 -}
-expandAliases :: Monoid a => Aliases a -> Type a Poly -> Expand a
+expandAliases :: Monoid a => Aliases a -> Type a Poly -> TypingM a (Expand a)
 expandAliases als (A ann ty') =
   case ty' of
     TFree n 
-      | Just al <- M.lookup n als -> aliasToExpand al
-      | otherwise                 -> Done (A ann $ ty')
+      | Just al <- M.lookup n als -> pure $ aliasToExpand ann al
+      | otherwise                 -> done (A ann $ ty')
 
-    TVar n     -> Done (A ann ty')
-    TExists n  -> Done (A ann ty')
+    TVar n     -> done (A ann ty')
+    TExists n  -> done (A ann ty')
     TApp t1 t2 -> 
-      case (expandAliases als t1, expandAliases als t2) of
-        (Done t1', Done t2') -> Done (A ann $ TApp t1' t2')
-        (Done t1', Ex f2)    -> error "expandAliases TApp 2" -- Ex (\x -> Done $ t1' `TApp` f2 x)
-        (Ex f1, Done t2')    -> 
-          let r = f1 t2'
-          in  trace ("apply " ++ show (Ex f1) ++ " to " ++ pps t2' ++ " gives " ++ show r) $ f1 t2'
-        (Ex f1, Ex f2)       -> error "expandAliases TApp 4" -- undefined -- Ex (\x -> )
+      (expandAliases als t1, expandAliases als t2) &&& \case
+        (Done t1', Done t2') -> done (A ann $ TApp t1' t2')
+        (Done t1', Ex nm f2) -> wrong nm
+        (Ex _ f1, Done t2')  -> pure $ f1 t2'
+        (Ex nm f1, Ex _ f2)  -> wrong nm
 
     t1 :->: t2   -> 
-      case (expandAliases als t1, expandAliases als t2) of
-        (Done t1', Done t2') -> Done (A ann $ t1' :->: t2')
-        _                    -> error "expandAliases :->: error" 
+      (expandAliases als t1, expandAliases als t2) &&& \case
+        (Done t1', Done t2') -> done (A ann $ t1' :->: t2')
+        (Ex nm _, _)         -> wrong nm
+        (_, Ex nm _)         -> wrong nm
 
     Forall n t -> 
-      case expandAliases als t of
-        Done t' -> Done $ A ann $ Forall n t'
-        _       -> error "expandAliases forall error"
+      expandAliases als t >>= \case
+        Done t' -> done $ A ann $ Forall n t'
+        Ex nm _ -> wrong nm
+  where 
+    (&&&) :: Monad m => (m a, m a) -> ((a, a) -> m b) -> m b
+    (c1, c2) &&& fn = do
+      e1 <- c1
+      e2 <- c2
+      fn (e1, e2)
+    done = pure . Done
+    wrong nm 
+      | Just al <- M.lookup nm als = partialAliasApp al
+      | otherwise                  = otherErr $ "alias " ++ show nm ++ " not in context. Should never happen"
 
 elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg (Prog decls) =
