@@ -182,8 +182,10 @@ elabProg (Prog decls) = do
         | not sigsHaveDefs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
         | otherwise     -> do
             let FreeCtx types = sigds <> cnstrs
-            expanded <- FreeCtx <$> traverse (expandAliases aliases) types
-            pure $ ElabProg kinds expanded funds destrs
+            expanded <- traverse (expandAliases aliases) types
+            -- traceM $ show $ pretty $ M.toList expanded
+            -- destrs <- DestrCtx <$> traverse ()
+            pure $ ElabProg kinds (FreeCtx expanded) funds destrs
   where 
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> TypingM a (ElabRes a)
@@ -240,7 +242,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do
     ctx = TR {trKinds = kinds, trFree = types, trDestrs = destrs, trCtx = emptyCtx}
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case query k types of
-      Just ty -> local (const ctx) $ check expr ty
+      Just ty -> {- trace ("check" ++ show k) $ local (const ctx) $ -} check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
 
 checkProg :: Prog a -> TypingM a ()

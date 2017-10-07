@@ -64,6 +64,14 @@ data Decl' a
   | SigD Name (Type a Poly)
   | AliasD (Alias a)
 
+instance Pretty (Decl a) where
+  pretty (A _ d) = prettyD d where
+    prettyD = \case
+      FunD nm e       -> pretty nm <+> "=" <+> pretty e <> "."
+      DataD nm k b cs -> "data" <+> pretty nm <+> (sep $ map pretty b) <+> "=" <+> (encloseSep "" "" " | " $ map pretty cs) <> "."
+      SigD nm ty      -> pretty nm <+> ":" <+> pretty ty <> "."
+      AliasD al       -> pretty al <> "."
+
 deriving instance Show a     => Show (Decl' a)
 deriving instance Eq a       => Eq (Decl' a)
 deriving instance Data a     => Data (Decl' a)
@@ -73,6 +81,10 @@ type Constr a = Annotated a (Constr' a)
 data Constr' a
   = Constr Name [Type a Poly]
 
+instance Pretty (Constr a) where
+  pretty (A _ c) = prettyC c where
+    prettyC (Constr nm ps) = pretty nm <+> sep (map pretty ps)
+
 deriving instance Show a     => Show (Constr' a)
 deriving instance Eq a       => Eq (Constr' a)
 deriving instance Data a     => Data (Constr' a)
@@ -80,6 +92,9 @@ deriving instance Typeable a => Typeable (Constr' a)
 
 data Prog a = Prog [Decl a]
   deriving (Show, Eq, Data, Typeable)
+
+instance Pretty (Prog a) where
+  pretty (Prog ds) = vsep $ map pretty ds
 
 
 -- Here are some combinators for creating un-annotated expressions easily

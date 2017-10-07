@@ -10,6 +10,8 @@ import Test.Tasty.Hspec
 import           CloTT.Check.Poly.TestUtils
 import           CloTT.QuasiQuoter
 import           CloTT.Check.Poly.Prog
+import           CloTT.Pretty
+import           CloTT.TestUtils
 
 progSpec :: Spec 
 progSpec = do
@@ -142,8 +144,8 @@ progSpec = do
         head2 : forall a. List a -> Maybe a.
         head2 = \xs -> 
           case xs of
-            | Cons x (Cons x' xs') -> Just x'.
-            | xs' -> Nothing
+            | Cons x (Cons x' xs') -> Just x'
+            | xs' -> Nothing.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -462,44 +464,33 @@ progSpec = do
         singleton = \x -> ChurList (\k -> \z -> k x z).
 
         snoc : forall a. ChurchList a -> a -> ChurchList a.
-        snoc = \xs -> \x -> ChurchList (\k z -> runList xs k (k x z)).
+        snoc = \xs -> \x -> ChurchList (\k -> \z -> runList xs k (k x z)).
       |]
+      -- failure (showW 180 $ pretty prog)
       runCheckProg mempty prog `shouldYield` ()
 
     it "suceeds for church lists (alias)" $ do
       let prog = [unsafeProg|
         data List a = Nil | Cons a (List a).
-        type ChurchList a = ChurchList (forall r. (a -> r -> r) -> r -> r).
+        type ChurchList a = forall r. (a -> r -> r) -> r -> r.
         
-        -- | Make a 'ChurchList' out of a regular list.
-        -- fromList : forall a. List a -> ChurchList a.
-        -- fromList xs = ChurchList (\k -> \z -> foldr k z xs
-        
-        -- | Turn a 'ChurchList' into a regular list.
+        cons : forall a. a -> ChurchList a -> ChurchList a.
+        cons = \x -> \xs -> ChurchList (\k -> \z -> k x (runList xs k z)).
+
         toList : forall a. ChurchList a -> List a.
         toList = \xs -> xs Cons Nil.
-        
-        -- -- | The 'ChurchList' counterpart to '(:)'.  Unlike 'DList', whose
-        -- -- implementation uses the regular list type, 'ChurchList' abstracts
-        -- -- over it as well.
-        -- cons : forall a. a -> ChurchList a -> ChurchList a.
-        -- cons = \x -> \xs -> ChurchList (\k -> \z -> k x (runList xs k z)).
-        
-        -- -- | Append two 'ChurchList's.  This runs in O(1) time.  Note that
-        -- -- there is no need to materialize the lists as @[a]@.
-        -- append : forall a. ChurchList a -> ChurchList a -> ChurchList a.
-        -- append = \xs -> \ys -> ChurchList (\k -> \z -> runList xs k (runList ys k z)).
-        
-        -- -- i.e.,
-        
-        -- nil : forall a. ChurchList a.
-        -- nil = ChurchList (\k -> \z -> z).
-        
-        -- singleton : forall a. a -> ChurchList a.
-        -- singleton = \x -> ChurList (\k -> \z -> k x z).
 
-        -- snoc : forall a. ChurchList a -> a -> ChurchList a.
-        -- snoc = \xs -> \x -> ChurchList (\k z -> runList xs k (k x z)).
+        append : forall a. ChurchList a -> ChurchList a -> ChurchList a.
+        append = \xs -> \ys -> ChurchList (\k -> \z -> runList xs k (runList ys k z)).
+        
+        nil : forall a. ChurchList a.
+        nil = ChurchList (\k -> \z -> z).
+        
+        singleton : forall a. a -> ChurchList a.
+        singleton = \x -> ChurList (\k -> \z -> k x z).
+
+        snoc : forall a. ChurchList a -> a -> ChurchList a.
+        snoc = \xs -> \x -> ChurchList (\k -> \z -> runList xs k (k x z)).
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -628,6 +619,36 @@ progSpec = do
             | Z -> Empty
             | S n' -> Branch x (ofDepth (MkPair x x) n').
 
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "checks and expands type-aliases (1) " $ do
+      let prog = [unsafeProg|
+        data Bar = Bar.
+        type Foo = Bar.
+        id : Foo -> Bar.
+        id = \x -> x. 
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "checks and expands type-aliases (2) " $ do
+      let prog = [unsafeProg|
+        type Id a = a.
+        id : forall a. Id a -> Id a.
+        id = \x -> x. 
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "checks and expands type-aliases (3) " $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        type FlipSum a b = Either b a.
+
+        flip : forall a b. Either a b -> FlipSum a b.
+        flip = \e ->
+          case e of
+            | Left x -> Right x
+            | Right x -> Left x.
       |]
       runCheckProg mempty prog `shouldYield` ()
     

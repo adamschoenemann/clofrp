@@ -11,11 +11,12 @@ import qualified CloTT.Parser.Lang as P
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
 import Text.Parsec (parse)
+import Text.Parsec.Combinator (eof)
 import Text.Parsec.String (Parser)
 
 
 liftParse :: Monad m => Parser p -> String -> m p
-liftParse p s = either (fail . show) pure $ parse (P.ws >> p) "quasi" s
+liftParse p s = either (fail . show) pure $ parse (P.ws *> p <* eof) "quasi" s
 
 unsafeExpr :: QuasiQuoter
 unsafeExpr = QuasiQuoter 

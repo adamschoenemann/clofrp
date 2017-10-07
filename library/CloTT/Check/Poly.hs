@@ -124,9 +124,6 @@ subst x forY (A a inTy) =
 before :: CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
-
-
-
 assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
   ctx <- getCtx
