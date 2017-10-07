@@ -17,6 +17,7 @@ module CloTT.Check.Poly.Prog where
 import qualified Data.Map.Strict as M
 import Data.Data (Data, Typeable)
 import Data.Monoid
+import Data.Foldable
 import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
 import Debug.Trace
@@ -72,17 +73,19 @@ data ElabProg a = ElabProg
 -}
 
 -- is this just a free monad?
-data Expand a
-  = Done (Type a Poly)
-  | Ex Name (Type a Poly -> Expand a)
+data ElabAlias a
+  = Done (Type a Poly) -- a fully expanded alias
+  -- | the Name is the name of the alias
+  | Ex Name (Type a Poly -> ElabAlias a) -- an alias that still needs at least one application
 
-instance Eq (Expand a) where
+instance Eq (ElabAlias a) where
   Done t1 == Done t2 = t1 =%= t2
   _       == _       = False
 
-instance Monoid a => Show (Expand a) where
-  show (Done t) = show . pretty $ t
-  show (Ex _ f) = show (f (A mempty $ TFree (UName "_")))
+instance Monoid a => Show (ElabAlias a) where
+  show e = showex 0 e where
+    showex i (Ex _ f) = showex (i+1) (f (A mempty $ TFree (DeBruijn i)))
+    showex i (Done t) = show . pretty $ t
 
 {-
   ae (Alias FlipSum [a,b] (Either b a))
@@ -91,8 +94,8 @@ instance Monoid a => Show (Expand a) where
   = Ex (\x -> Ex (\y -> Done (Either y x)))
 -}
 
-aliasToExpand :: a -> Alias a -> Expand a
-aliasToExpand ann al = go 0 (deb al) where 
+elabAlias :: a -> Alias a -> ElabAlias a
+elabAlias ann al = go 0 (deb al) where 
 
   deb al@(Alias {alName, alBound, alExpansion}) =
     al { alExpansion = deBruijnify ann alBound alExpansion } 
@@ -104,6 +107,9 @@ aliasToExpand ann al = go 0 (deb al) where
           let alExpansion' = subst t (DeBruijn i) alExpansion
           in  go (i+1) (al { alBound = xs, alExpansion = alExpansion' }) 
 
+-- Change type-variables to use debruijn indices based on the order induced
+-- by the second argument. Type-variables that do not appear in the list are
+-- not changed
 deBruijnify :: a -> [Name] -> Type a Poly -> Type a Poly
 deBruijnify ann = go 0 where
   go i []     ty = ty
@@ -119,67 +125,77 @@ deBruijnify ann = go 0 where
   = (Either _ a, Either b c)
   = (Either (Either b c) a)
 -}
-expandAliases :: Monoid a => Aliases a -> Type a Poly -> TypingM a (Expand a)
-expandAliases als (A ann ty') =
-  case ty' of
-    TFree n 
-      | Just al <- M.lookup n als -> pure $ aliasToExpand ann al
-      | otherwise                 -> done (A ann $ ty')
+expandAliases :: forall a. Aliases a -> Type a Poly -> TypingM a (Type a Poly)
+expandAliases als t = 
+  go t >>= \case 
+    Done t -> pure t
+    Ex nm _ -> wrong nm
+  where
+    go :: Type a Poly -> TypingM a (ElabAlias a)
+    go (A ann ty') = 
+      case ty' of
+        TFree n 
+          | Just al <- M.lookup n als -> pure $ elabAlias ann al
+          | otherwise                 -> done (A ann $ ty')
 
-    TVar n     -> done (A ann ty')
-    TExists n  -> done (A ann ty')
-    TApp t1 t2 -> 
-      (expandAliases als t1, expandAliases als t2) &&& \case
-        (Done t1', Done t2') -> done (A ann $ TApp t1' t2')
-        (Done t1', Ex nm f2) -> wrong nm
-        (Ex _ f1, Done t2')  -> pure $ f1 t2'
-        (Ex nm f1, Ex _ f2)  -> wrong nm
+        TVar n     -> done (A ann ty')
+        TExists n  -> done (A ann ty')
+        TApp t1 t2 -> 
+          (go t1, go t2) &&& \case
+            (Done t1', Done t2') -> done (A ann $ TApp t1' t2')
+            (Done t1', Ex nm f2) -> wrong nm
+            (Ex _ f1, Done t2')  -> pure $ f1 t2'
+            (Ex nm f1, Ex _ f2)  -> wrong nm
 
-    t1 :->: t2   -> 
-      (expandAliases als t1, expandAliases als t2) &&& \case
-        (Done t1', Done t2') -> done (A ann $ t1' :->: t2')
-        (Ex nm _, _)         -> wrong nm
-        (_, Ex nm _)         -> wrong nm
+        t1 :->: t2   -> 
+          (go t1, go t2) &&& \case
+            (Done t1', Done t2') -> done (A ann $ t1' :->: t2')
+            (Ex nm _, _)         -> wrong nm
+            (_, Ex nm _)         -> wrong nm
 
-    Forall n t -> 
-      expandAliases als t >>= \case
-        Done t' -> done $ A ann $ Forall n t'
-        Ex nm _ -> wrong nm
-  where 
-    (&&&) :: Monad m => (m a, m a) -> ((a, a) -> m b) -> m b
+        Forall n t -> 
+          go t >>= \case
+            Done t' -> done $ A ann $ Forall n t'
+            Ex nm _ -> wrong nm
+
     (c1, c2) &&& fn = do
       e1 <- c1
       e2 <- c2
       fn (e1, e2)
+
     done = pure . Done
+
+    wrong :: Name -> TypingM a r
     wrong nm 
       | Just al <- M.lookup nm als = partialAliasApp al
       | otherwise                  = otherErr $ "alias " ++ show nm ++ " not in context. Should never happen"
 
 elabProg :: Prog a -> TypingM a (ElabProg a)
-elabProg (Prog decls) =
-  let (kinds, funds, sigds, cnstrs, destrs, aliases) = foldr folder (mempty, mempty, mempty, mempty, mempty, mempty) decls 
-
-      -- TODO: Check for duplicate defs/signatures/datadecls
-      folder :: Decl a -> ElabRes a -> ElabRes a
-      folder (A _ x) (ks, fs, ss, cs, ds, als) = case x of
-        DataD nm k b cs' ->
-          let (tys, dstrs) = elabCs nm b cs' 
-          in  (extend nm k ks, fs, ss, tys <> cs, dstrs <> ds, als)
-
-        FunD nm e        -> (ks, M.insert nm e fs, ss, cs, ds, als)
-        SigD nm t        -> (ks, fs, extend nm t ss, cs, ds, als)
-        AliasD alias     -> (ks, fs, ss, cs, ds, M.insert (alName alias) alias als)
-
-      defsNoSig = funds `M.difference` (unFreeCtx sigds)
+elabProg (Prog decls) = do
+  (kinds, funds, sigds, cnstrs, destrs, aliases) <- foldrM folder (mempty, mempty, mempty, mempty, mempty, mempty) decls 
+  let defsNoSig = funds `M.difference` (unFreeCtx sigds)
       sigsNoDef = (unFreeCtx sigds) `M.difference` funds
       defsHaveSigs = M.null defsNoSig -- all tlds have signatures
       sigsHaveDefs = M.null sigsNoDef -- all signatures have definitions
-        
-  in case () of
+  case () of
       _ | not defsHaveSigs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a signature.") defsNoSig
         | not sigsHaveDefs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
-        | otherwise     -> pure $ ElabProg kinds (sigds <> cnstrs) funds destrs
+        | otherwise     -> do
+            let FreeCtx types = sigds <> cnstrs
+            expanded <- FreeCtx <$> traverse (expandAliases aliases) types
+            pure $ ElabProg kinds expanded funds destrs
+  where 
+    -- TODO: Check for duplicate defs/signatures/datadecls
+    folder :: Decl a -> ElabRes a -> TypingM a (ElabRes a)
+    folder (A _ x) (ks, fs, ss, cs, ds, als) = case x of
+      DataD nm k b cs' ->
+        let (tys, dstrs) = elabCs nm b cs' 
+        in  pure (extend nm k ks, fs, ss, tys <> cs, dstrs <> ds, als)
+
+      FunD nm e        -> pure (ks, M.insert nm e fs, ss, cs, ds, als)
+      SigD nm t        -> pure (ks, fs, extend nm t ss, cs, ds, als)
+      AliasD alias     -> pure (ks, fs, ss, cs, ds, M.insert (alName alias) alias als)
+
 
 
 -- "Elaborate" the constructors of a type, return a mapping from constructor names

@@ -18,7 +18,7 @@ instance Show Name where
     case x of
       UName x -> x
       MName i -> '`' : intToString i where
-      DeBruijn i -> show i
+      DeBruijn i -> '`' : show i
 
 instance Pretty Name where
   pretty = fromString . show

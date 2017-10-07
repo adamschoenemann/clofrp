@@ -63,14 +63,14 @@ polySpec = do
       deBruijnify () ["a", "b", "c"] ("a" @@: ("b" @@: "c")) `shouldBe` (E.debrjn 0 @@: (E.debrjn 1 @@: E.debrjn 2))
       deBruijnify () ["a"] ("a" @@: ("a" @@: "a")) `shouldBe` (E.debrjn 0 @@: (E.debrjn 0 @@: E.debrjn 0))
 
-  describe "aliasToExpand" $ do
+  describe "elabAlias" $ do
     it "should work with flipsum" $ do
-      let (Ex _ f) = aliasToExpand () (E.Alias "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f) = elabAlias () (E.Alias "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a")
       let (Ex _ f') = f ("a")
       f' "b" `shouldBe` Done ("Either" @@: "b" @@: "a")
 
     it "should work with nested flipsum" $ do
-      let (Ex _ f1) = aliasToExpand () (E.Alias "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f1) = elabAlias () (E.Alias "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a")
       let (Ex _ f2) = f1 ("a")
       let (Done t) = f2 ("FlipSum" @@: "b" @@: "d")
       t `shouldBe` ("Either" @@: ("FlipSum" @@: "b" @@: "d") @@: "a")
@@ -83,37 +83,37 @@ polySpec = do
             (Right e2', _, _) -> e2' `shouldBe` e2
 
     it "expands the simplest of aliases" $ do
-      expandAliases @() (als [al "Foo" [] "Bar"]) "Foo" `shouldExpandTo` Done "Bar"
-      expandAliases @() (als [al "Foo" [] "Bar"]) ("Foo" @->: "Foo") `shouldExpandTo` Done ("Bar" @->: "Bar")
-      expandAliases @() (als [al "Foo" [] "Bar"]) (E.forAll ["a"] $ "a" @->: "Foo") `shouldExpandTo` Done (E.forAll ["a"] $ "a" @->: "Bar")
+      expandAliases @() (als [al "Foo" [] "Bar"]) "Foo" `shouldExpandTo` "Bar"
+      expandAliases @() (als [al "Foo" [] "Bar"]) ("Foo" @->: "Foo") `shouldExpandTo` ("Bar" @->: "Bar")
+      expandAliases @() (als [al "Foo" [] "Bar"]) (E.forAll ["a"] $ "a" @->: "Foo") `shouldExpandTo` (E.forAll ["a"] $ "a" @->: "Bar")
       -- below should actually fail, but I guess the "kind-check" should catch it instead?
-      expandAliases @() (als [al "Foo" [] "Bar"]) ("Foo" @@: "a" @->: "Foo") `shouldExpandTo` Done ("Bar" @@: "a" @->: "Bar")
+      expandAliases @() (als [al "Foo" [] "Bar"]) ("Foo" @@: "a" @->: "Foo") `shouldExpandTo` ("Bar" @@: "a" @->: "Bar")
 
     it "expands aliases with one param" $ do
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a") `shouldExpandTo` Done ("a")
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "Foo") `shouldExpandTo` Done ("Foo")
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: ("Id" @@: "Foo")) `shouldExpandTo` Done ("Foo")
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a" @->: "Id" @@: "b") `shouldExpandTo` Done ("a" @->: "b")
+      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a") `shouldExpandTo` ("a")
+      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "Foo") `shouldExpandTo` ("Foo")
+      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: ("Id" @@: "Foo")) `shouldExpandTo` ("Foo")
+      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a" @->: "Id" @@: "b") `shouldExpandTo` ("a" @->: "b")
       expandAliases @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("List" @@: ("Option" @@: "a") @->: "Option" @@: ("List" @@: "a"))
-        `shouldExpandTo` Done ("List" @@: ("Maybe" @@: "a") @->: "Maybe" @@: ("List" @@: "a"))
+        `shouldExpandTo` ("List" @@: ("Maybe" @@: "a") @->: "Maybe" @@: ("List" @@: "a"))
       expandAliases @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("Option" @@: ("Option" @@: "a"))
-        `shouldExpandTo` Done ("Maybe" @@: ("Maybe" @@: "a"))
+        `shouldExpandTo` ("Maybe" @@: ("Maybe" @@: "a"))
 
     it "expands aliases with two params" $ do
       expandAliases @() (als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]) 
                         ("FlipSum" @@: "a" @@: "b") 
-        `shouldExpandTo` Done ("Either" @@: "b" @@: "a")
+        `shouldExpandTo` ("Either" @@: "b" @@: "a")
     
     it "avoids name capture problems" $ do
       do let aliases = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
          expandAliases @() aliases ("FlipSum" @@: "a" @@: ("FlipSum" @@: "b" @@: "c")) 
-           `shouldExpandTo` Done ("Either" @@: ("Either" @@: "c" @@: "b") @@: "a")
+           `shouldExpandTo` ("Either" @@: ("Either" @@: "c" @@: "b") @@: "a")
       do let aliases = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
          expandAliases @() aliases ("FlipSum" @@: ("FlipSum" @@: "a" @@: "b") @@: "c") 
-          `shouldExpandTo` Done ("Either" @@: "c" @@: ("Either" @@: "b" @@: "a"))
+          `shouldExpandTo` ("Either" @@: "c" @@: ("Either" @@: "b" @@: "a"))
       do let aliases = als [al "App" ["a", "b", "c"] $ "a" @@: "b" @@: "c"]
          expandAliases @() aliases ("App" @@: "c" @@: "c" @@: "a") 
-          `shouldExpandTo` Done ("c" @@: "c" @@: "a")
+          `shouldExpandTo` ("c" @@: "c" @@: "a")
     
     it "fails partial applications" $ do
       let assertPartial x = case runTypingM0 x mempty of

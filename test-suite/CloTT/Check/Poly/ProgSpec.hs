@@ -424,7 +424,7 @@ progSpec = do
       |]
       shouldFail $ runCheckProg mempty prog 
     
-    it "suceeds for church lists" $ do
+    it "suceeds for church lists (data-dec)" $ do
       let prog = [unsafeProg|
         data ChurchList a = ChurchList (forall r. (a -> r -> r) -> r -> r).
         data List a = Nil | Cons a (List a).
@@ -463,6 +463,43 @@ progSpec = do
 
         snoc : forall a. ChurchList a -> a -> ChurchList a.
         snoc = \xs -> \x -> ChurchList (\k z -> runList xs k (k x z)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "suceeds for church lists (alias)" $ do
+      let prog = [unsafeProg|
+        data List a = Nil | Cons a (List a).
+        type ChurchList a = ChurchList (forall r. (a -> r -> r) -> r -> r).
+        
+        -- | Make a 'ChurchList' out of a regular list.
+        -- fromList : forall a. List a -> ChurchList a.
+        -- fromList xs = ChurchList (\k -> \z -> foldr k z xs
+        
+        -- | Turn a 'ChurchList' into a regular list.
+        toList : forall a. ChurchList a -> List a.
+        toList = \xs -> xs Cons Nil.
+        
+        -- -- | The 'ChurchList' counterpart to '(:)'.  Unlike 'DList', whose
+        -- -- implementation uses the regular list type, 'ChurchList' abstracts
+        -- -- over it as well.
+        -- cons : forall a. a -> ChurchList a -> ChurchList a.
+        -- cons = \x -> \xs -> ChurchList (\k -> \z -> k x (runList xs k z)).
+        
+        -- -- | Append two 'ChurchList's.  This runs in O(1) time.  Note that
+        -- -- there is no need to materialize the lists as @[a]@.
+        -- append : forall a. ChurchList a -> ChurchList a -> ChurchList a.
+        -- append = \xs -> \ys -> ChurchList (\k -> \z -> runList xs k (runList ys k z)).
+        
+        -- -- i.e.,
+        
+        -- nil : forall a. ChurchList a.
+        -- nil = ChurchList (\k -> \z -> z).
+        
+        -- singleton : forall a. a -> ChurchList a.
+        -- singleton = \x -> ChurList (\k -> \z -> k x z).
+
+        -- snoc : forall a. ChurchList a -> a -> ChurchList a.
+        -- snoc = \xs -> \x -> ChurchList (\k z -> runList xs k (k x z)).
       |]
       runCheckProg mempty prog `shouldYield` ()
     

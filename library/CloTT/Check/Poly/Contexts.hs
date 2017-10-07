@@ -74,6 +74,10 @@ uni = Uni
 newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
   deriving (Show, Eq, Monoid, Data)
 
+
+mapFreeCtx :: (Type a Poly -> Type b Poly) -> FreeCtx a -> FreeCtx b
+mapFreeCtx fn (FreeCtx m) = FreeCtx $ M.map fn m
+
 instance (IsList (FreeCtx a)) where
   type Item (FreeCtx a) = (Name, Type a Poly)
   fromList xs = FreeCtx $ M.fromList xs
