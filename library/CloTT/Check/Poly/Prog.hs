@@ -118,7 +118,27 @@ deBruijnify ann = go 0 where
 -- TODO: make sure aliases are not (mutally) recursive and
 -- also, consider type-checking them at declaration, but it's a lot of work tbh
 checkAliases :: Aliases a -> TypingM a ()
-checkAliases als = undefined
+checkAliases als = sequence (M.mapWithKey (\k al -> checkAlias (alName al) (alExpansion al)) als) *> pure () where
+  checkAlias name (A _ ty') = 
+    case ty' of
+      TFree n 
+        | n == name                  -> otherErr $ show name ++ " is recursive"
+        | Just al' <- M.lookup n als -> checkAlias name (alExpansion al')
+        | otherwise                  -> pure ()
+
+      TVar n     -> pure ()
+      TExists n  -> pure ()
+      TApp t1 t2 -> do
+        checkAlias name t1
+        checkAlias name t2
+
+      t1 :->: t2   -> do
+        checkAlias name t1
+        checkAlias name t2
+
+      Forall n t -> checkAlias name t
+            
+
 
 {-
   ea (FlipSum a (FlipSum b c))
@@ -191,6 +211,7 @@ elabProg (Prog decls) = do
         | otherwise     -> do
             let FreeCtx types = sigds <> cnstrs
             expanded <- traverse (expandAliases aliases) types
+            _ <- checkAliases aliases
             -- traceM $ show $ pretty $ M.toList expanded
             -- destrs <- DestrCtx <$> traverse ()
             pure $ ElabProg kinds (FreeCtx expanded) funds destrs
