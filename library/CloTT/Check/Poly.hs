@@ -222,7 +222,7 @@ validType kctx t = do
   case kindOf' kctx t of
     Right Star -> pure ()
     Right k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
-    Left err   -> otherErr $ err
+    Left err   -> otherErr $ err ++ " When validating " ++ pps t ++ " in ktcx" ++ pps kctx
 
 asMonotypeEither :: Type a s -> Either String (Type a Mono)
 asMonotypeEither = maybe (Left "asMonotype") Right . asMonotype

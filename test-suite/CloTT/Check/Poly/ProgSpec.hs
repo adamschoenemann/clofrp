@@ -461,36 +461,35 @@ progSpec = do
         nil = ChurchList (\k -> \z -> z).
         
         singleton : forall a. a -> ChurchList a.
-        singleton = \x -> ChurList (\k -> \z -> k x z).
+        singleton = \x -> ChurchList (\k -> \z -> k x z).
 
         snoc : forall a. ChurchList a -> a -> ChurchList a.
         snoc = \xs -> \x -> ChurchList (\k -> \z -> runList xs k (k x z)).
       |]
-      -- failure (showW 180 $ pretty prog)
       runCheckProg mempty prog `shouldYield` ()
 
-    it "suceeds for church lists (alias)" $ do
+    it "succeeds for church lists (alias)" $ do
       let prog = [unsafeProg|
         data List a = Nil | Cons a (List a).
         type ChurchList a = forall r. (a -> r -> r) -> r -> r.
         
         cons : forall a. a -> ChurchList a -> ChurchList a.
-        cons = \x -> \xs -> ChurchList (\k -> \z -> k x (runList xs k z)).
+        cons = \x -> \xs -> \k -> \z -> k x (xs k z).
 
         toList : forall a. ChurchList a -> List a.
         toList = \xs -> xs Cons Nil.
 
         append : forall a. ChurchList a -> ChurchList a -> ChurchList a.
-        append = \xs -> \ys -> ChurchList (\k -> \z -> runList xs k (runList ys k z)).
+        append = \xs -> \ys -> \k -> \z -> xs k (ys k z).
         
         nil : forall a. ChurchList a.
-        nil = ChurchList (\k -> \z -> z).
+        nil = \k -> \z -> z.
         
         singleton : forall a. a -> ChurchList a.
-        singleton = \x -> ChurList (\k -> \z -> k x z).
+        singleton = \x -> \k -> \z -> k x z.
 
         snoc : forall a. ChurchList a -> a -> ChurchList a.
-        snoc = \xs -> \x -> ChurchList (\k -> \z -> runList xs k (k x z)).
+        snoc = \xs -> \x -> \k -> \z -> xs k (k x z).
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -649,6 +648,51 @@ progSpec = do
           case e of
             | Left x -> Right x
             | Right x -> Left x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "checks and expands '2nd-order' type-aliases (4)" $ do
+      let prog = [unsafeProg|
+        data List a = Nil | Cons a (List a).
+        type Array a = List a.
+        type Array2D a = Array (Array a).
+
+        app : forall a. List a -> List a -> List a.
+        app = \xs -> \ys ->
+          case xs of
+            | Nil -> ys
+            | Cons x xs' -> Cons x (app xs' ys).
+
+        flatten : forall a. Array2D a -> Array a.
+        flatten = \xss ->
+          case xss of
+            | Nil -> Nil
+            | Cons xs xss' -> app xs (flatten xss').
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "fails incorrect aliases (1)" $ do
+      let prog = [unsafeProg|
+        type Foo = Bar.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
+
+
+    it "disallows recursive type aliases" $ do
+      let prog = [unsafeProg|
+        data Unit = MkUnit.
+        data Pair a b = MkPair a b.
+        data List a = Nil | Cons a (List a).
+
+        type Units = Pair Unit Units.
+
+        units2lst : Units -> List Unit.
+        units2lst = \x ->
+          case x of
+            | MkPair u us -> Cons u (units2lst us).
+
       |]
       runCheckProg mempty prog `shouldYield` ()
     

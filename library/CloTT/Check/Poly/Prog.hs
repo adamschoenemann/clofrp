@@ -127,8 +127,11 @@ deBruijnify ann = go 0 where
 -}
 expandAliases :: forall a. Aliases a -> Type a Poly -> TypingM a (Type a Poly)
 expandAliases als t = 
+  -- fixpoint it! for recursive alias expansion
+  -- recursive type aliases will probably make this non-terminating
   go t >>= \case 
-    Done t -> pure t
+    Done t' | t =%= t' -> pure t'
+            | otherwise -> expandAliases als t'
     Ex nm _ -> wrong nm
   where
     go :: Type a Poly -> TypingM a (ElabAlias a)
@@ -242,7 +245,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do
     ctx = TR {trKinds = kinds, trFree = types, trDestrs = destrs, trCtx = emptyCtx}
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case query k types of
-      Just ty -> {- trace ("check" ++ show k) $ local (const ctx) $ -} check expr ty
+      Just ty -> {- trace ("check" ++ show k) $ -} local (const ctx) $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
 
 checkProg :: Prog a -> TypingM a ()
