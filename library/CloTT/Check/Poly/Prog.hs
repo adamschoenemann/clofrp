@@ -115,6 +115,11 @@ deBruijnify ann = go 0 where
   go i []     ty = ty
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
+-- TODO: make sure aliases are not (mutally) recursive and
+-- also, consider type-checking them at declaration, but it's a lot of work tbh
+checkAliases :: Aliases a -> TypingM a ()
+checkAliases als = undefined
+
 {-
   ea (FlipSum a (FlipSum b c))
   = (ea (FlipSum a), ea (FlipSum b c))

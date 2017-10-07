@@ -678,6 +678,21 @@ progSpec = do
       |]
       shouldFail $ runCheckProg mempty prog 
 
+    it "fails incorrect aliases (2)" $ do
+      let prog = [unsafeProg|
+        type A1 = Foo.
+        type A2 = A1.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
+    it "fails incorrect aliases (3)" $ do
+      let prog = [unsafeProg|
+        data Unit = MkUnit.
+        data Foo a = Foo a.
+        type A = Unit -> Foo.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
 
 
     it "disallows recursive type aliases" $ do

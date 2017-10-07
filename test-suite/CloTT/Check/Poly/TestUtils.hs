@@ -23,4 +23,4 @@ shouldFail :: (Show a, Show b) => (Either a b, t1, TypingWrite ann) -> Expectati
 shouldFail (res, st, tree) = 
   case res of
     Left err -> True `shouldBe` True
-    Right _  -> failure (showW 200 . prettyTree $ tree)
+    Right x  -> failure (show x ++ "\n" ++ (showW 200 . prettyTree $ tree))
