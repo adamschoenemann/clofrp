@@ -10,6 +10,7 @@ import Test.Tasty.Hspec
 import           CloTT.Check.Poly.TestUtils
 import           CloTT.QuasiQuoter
 import           CloTT.Check.Poly.Prog
+import           CloTT.Check.Poly.TypingM
 import           CloTT.Pretty
 import           CloTT.TestUtils
 
@@ -695,7 +696,7 @@ progSpec = do
 
 
 
-    it "disallows recursive type aliases" $ do
+    it "rejects recursive type aliases" $ do
       let prog = [unsafeProg|
         data Unit = MkUnit.
         data Pair a b = MkPair a b.
@@ -709,7 +710,19 @@ progSpec = do
             | MkPair u us -> Cons u (units2lst us).
 
       |]
-      runCheckProg mempty prog `shouldYield` ()
+      runCheckProg mempty prog `shouldFailWith` (\(e,_) -> e `shouldBe` Other "Units is recursive")
+
+    it "rejects mutually recursive type aliases" $ do
+      let prog = [unsafeProg|
+        data Unit = MkUnit.
+        data Bool = True | False.
+        data Pair a b = MkPair a b.
+
+        type BoolThenUnits = Pair Bool UnitThenBools.
+        type UnitThenBools = Pair Unit BoolThenUnits.
+
+      |]
+      runCheckProg mempty prog `shouldFailWith` (\(e,_) -> e `shouldBe` Other "BoolThenUnits is recursive")
     
     -- it "succeeds for higher-kinded types" $ do
     --   let prog = [unsafeProg|

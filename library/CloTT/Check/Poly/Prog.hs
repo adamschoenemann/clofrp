@@ -51,6 +51,7 @@ data ElabProg a = ElabProg
   , types  :: FreeCtx a
   , defs   :: Defs a
   , destrs :: DestrCtx a
+  , aliases :: Aliases a
   } deriving (Show, Eq, Data, Typeable)
 
 {-
@@ -115,28 +116,26 @@ deBruijnify ann = go 0 where
   go i []     ty = ty
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
--- TODO: make sure aliases are not (mutally) recursive and
--- we'll need to traverse data-decls though so...
-checkAliases :: Aliases a -> TypingM a ()
-checkAliases als = sequence (M.mapWithKey (\k al -> checkAlias (alName al) (alExpansion al)) als) *> pure () where
-  checkAlias name (A _ ty') = 
+checkRecAliases :: Aliases a -> TypingM a ()
+checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (alExpansion al)) als) *> pure () where
+  checkRecAl name (A _ ty') = 
     case ty' of
       TFree n 
         | n == name                  -> otherErr $ show name ++ " is recursive"
-        | Just al' <- M.lookup n als -> checkAlias name (alExpansion al')
+        | Just al' <- M.lookup n als -> checkRecAl name (alExpansion al')
         | otherwise                  -> pure ()
 
       TVar n     -> pure ()
       TExists n  -> pure ()
       TApp t1 t2 -> do
-        checkAlias name t1
-        checkAlias name t2
+        checkRecAl name t1
+        checkRecAl name t2
 
       t1 :->: t2   -> do
-        checkAlias name t1
-        checkAlias name t2
+        checkRecAl name t1
+        checkRecAl name t2
 
-      Forall n t -> checkAlias name t
+      Forall n t -> checkRecAl name t
             
 
 
@@ -209,12 +208,12 @@ elabProg (Prog decls) = do
       _ | not defsHaveSigs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a signature.") defsNoSig
         | not sigsHaveDefs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
         | otherwise     -> do
+            _ <- checkRecAliases aliases
             let FreeCtx types = sigds <> cnstrs
             expanded <- traverse (expandAliases aliases) types
-            _ <- checkAliases aliases
             -- traceM $ show $ pretty $ M.toList expanded
             -- destrs <- DestrCtx <$> traverse ()
-            pure $ ElabProg kinds (FreeCtx expanded) funds destrs
+            pure $ ElabProg kinds (FreeCtx expanded) funds destrs aliases
   where 
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> TypingM a (ElabRes a)
@@ -240,11 +239,8 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
   -- | The fully applied type e.g. Maybe a
   fullyApplied :: a -> Type a Poly
   fullyApplied ann = foldl (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType') bound
-  -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
-  quantify :: Type a Poly -> Type a Poly
-  quantify     = if length bound > 0 then (\(A ann t) -> foldr (\nm t' -> A ann $ Forall nm t') (A ann t) bound) else id
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
-  toFn    (A ann (Constr nm args)) = (nm, quantify $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)
+  toFn    (A ann (Constr nm args)) = (nm, quantify bound $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)
   -- | Convert a constructor to a destructor, to use for pattern matches
   toDestr :: Constr a -> (Name, Destr a)
   toDestr (A ann (Constr nm args)) = 
@@ -253,26 +249,28 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
   anned :: a -> (t -> r -> b) -> t -> r -> Annotated a b
   anned ann fn = \x y -> A ann $ fn x y
 
-
-    -- toDestr for continuation based representation of destructors...
-    -- let quantified = quantify (fullyApplied ann)
-    --     t = Forall ["hack"] $ quantified :->: continuation :->: A ann "hack"
-    --     continuation = foldl' (\arg acc -> arg :->: acc) (A ann "hack") args
-
 checkElabedProg :: ElabProg a -> TypingM a ()
-checkElabedProg (ElabProg {kinds, types, defs, destrs}) = do
+checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases}) = do
   _ <- checkTypes
   _ <- checkDefs
+  _ <- checkAliases
   pure ()
   where 
     checkTypes = traverse (validType kinds) (unFreeCtx types)
     checkDefs  = M.traverseWithKey traverseDefs defs
+    checkAliases = traverse traverseAlias aliases
 
     ctx = TR {trKinds = kinds, trFree = types, trDestrs = destrs, trCtx = emptyCtx}
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case query k types of
       Just ty -> {- trace ("check" ++ show k) $ -} local (const ctx) $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
+    
+    traverseAlias (Alias {alName, alBound, alExpansion}) = do
+      expanded <- expandAliases aliases alExpansion
+      validType kinds (quantify alBound expanded)
+    
+
 
 checkProg :: Prog a -> TypingM a ()
 checkProg = (checkElabedProg =<<) . elabProg

@@ -210,3 +210,7 @@ unannConstr :: Constr a -> Constr ()
 unannConstr (A _ c) =
   case c of
     Constr nm ts -> A () $ Constr nm (map unannT ts)
+
+-- | quantify a definition over the bound variables (or dont quantify if there are no bound)
+quantify :: [Name] -> Type a Poly -> Type a Poly
+quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\nm t' -> A ann $ Forall nm t') (A ann t) bound) else id

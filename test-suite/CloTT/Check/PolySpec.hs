@@ -57,12 +57,13 @@ polySpec = do
   let als = M.fromList 
   let al x b e = (x, E.Alias x b e)
   
-  describe "checkAliases" $ do
-    let checkAl x = runTypingM0 @() (checkAliases x) mempty
+  describe "checkRecAliases" $ do
+    let checkAl x = runTypingM0 @() (checkRecAliases x) mempty
     let errs e x = fst x `shouldBe` e
     it "rejects recursive type aliases" $ do
-      shouldFailWith (checkAl [al "Foo" [] "Foo"]) (errs $ Other "Foo is recursive")
-      shouldFailWith (checkAl [al "Foo" ["a"] $ "Foo" @@: "a"]) (errs $ Other "Foo is recursive")
+      checkAl [al "Foo" [] "Foo"]                             `shouldFailWith` errs (Other "Foo is recursive")
+      checkAl [al "Foo" ["a"] $ "Foo" @@: "a"]                `shouldFailWith` errs (Other "Foo is recursive")
+      checkAl [al "Units" [] $ "Pair" @@: "Unit" @@: "Units"] `shouldFailWith` errs (Other "Units is recursive")
 
     it "rejects mutually recursive type aliases" $ do
       shouldFailWith (checkAl [al "Bar" [] "Foo", al "Foo" [] $ "Unit" @->: "Bar"]) (errs $ Other "Bar is recursive")
