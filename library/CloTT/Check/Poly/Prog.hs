@@ -116,7 +116,7 @@ deBruijnify ann = go 0 where
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
 -- TODO: make sure aliases are not (mutally) recursive and
--- also, consider type-checking them at declaration, but it's a lot of work tbh
+-- we'll need to traverse data-decls though so...
 checkAliases :: Aliases a -> TypingM a ()
 checkAliases als = sequence (M.mapWithKey (\k al -> checkAlias (alName al) (alExpansion al)) als) *> pure () where
   checkAlias name (A _ ty') = 

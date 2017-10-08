@@ -53,7 +53,21 @@ polySpec = do
         [ "Nat" |-> Star, "Unit" |-> Star, "Bool" |-> Star, "Int" |-> Star
         , "List" |-> Star :->*: Star, "Maybe" |-> Star :->*: Star
         ]
+
+  let als = M.fromList 
+  let al x b e = (x, E.Alias x b e)
   
+  describe "checkAliases" $ do
+    let checkAl x = runTypingM0 @() (checkAliases x) mempty
+    let errs e x = fst x `shouldBe` e
+    it "rejects recursive type aliases" $ do
+      shouldFailWith (checkAl [al "Foo" [] "Foo"]) (errs $ Other "Foo is recursive")
+      shouldFailWith (checkAl [al "Foo" ["a"] $ "Foo" @@: "a"]) (errs $ Other "Foo is recursive")
+
+    it "rejects mutually recursive type aliases" $ do
+      shouldFailWith (checkAl [al "Bar" [] "Foo", al "Foo" [] $ "Unit" @->: "Bar"]) (errs $ Other "Bar is recursive")
+      shouldFailWith (checkAl [al "Foo" [] $ "Unit" @->: "Bar", al "Bar" [] $ "Id" @@: "Foo", al "Id" ["a"] "a"]) (errs $ Other "Bar is recursive")
+
   describe "deBruijnify" $ do
     it "does nothing with no bound vars" $ do
       deBruijnify () [] ("Either" @@: "a" @@: "b") `shouldBe` ("Either" @@: "a" @@: "b")
@@ -76,8 +90,6 @@ polySpec = do
       t `shouldBe` ("Either" @@: ("FlipSum" @@: "b" @@: "d") @@: "a")
 
   describe "expandAliases" $ do
-    let als = M.fromList 
-    let al x b e = (x, E.Alias x b e)
     let shouldExpandTo e1 e2 =
           case runTypingM0 e1 mempty of
             (Right e2', _, _) -> e2' `shouldBe` e2

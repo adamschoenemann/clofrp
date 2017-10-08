@@ -24,3 +24,9 @@ shouldFail (res, st, tree) =
   case res of
     Left err -> True `shouldBe` True
     Right x  -> failure (show x ++ "\n" ++ (showW 200 . prettyTree $ tree))
+
+shouldFailWith :: (Show a, Show b) => (Either a b, t1, TypingWrite ann) -> (a -> Expectation) -> Expectation
+shouldFailWith (res, st, tree) fn = 
+  case res of
+    Left err -> fn err
+    Right x  -> failure (show x ++ "\n" ++ (showW 200 . prettyTree $ tree))
