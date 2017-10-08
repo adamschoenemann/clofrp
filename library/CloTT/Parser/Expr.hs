@@ -4,6 +4,7 @@ module CloTT.Parser.Expr where
 
 import Text.Parsec.Pos
 import Text.Parsec
+import Data.Foldable (foldrM)
 
 import qualified CloTT.Annotated  as A
 import qualified CloTT.AST.Parsed as E
@@ -28,12 +29,14 @@ tuple = ann <*> parens ((\e1 e2 -> E.Tuple e1 e2) <$> expr <* comma <*> expr)
 
 lam :: Parser Expr
 lam = do
-  (nm, ty) <- symbol "\\" *> param
+  ps <- symbol "\\" *> many1 param
   bd <- reservedOp "->" *> expr
-  ann <*> pure (E.Lam nm ty bd)
+  pure $ foldr (\(A.A ann nm, ty) acc -> A.A ann $ E.Lam nm ty acc) bd ps
+  -- ann <*> (pure $ foldr (\(nm, ty) acc -> E.Lam nm ty acc) bd ps)
   where
-    param =  (\x -> (UName x, Nothing)) <$> identifier
-         <|> parens ((,) <$> (UName <$> identifier) <*> (optionMaybe $ reservedOp ":" *> T.typep))
+    param =  (\x -> (x, Nothing)) <$> (ann <*> (UName <$> lidentifier))
+         <|> parens ((,) <$> (ann <*> (UName <$> identifier) )
+             <*> (optionMaybe $ reservedOp ":" *> T.typep))
 
 var :: Parser Expr
 var = ann <*> (E.Var . UName <$> identifier)
@@ -51,16 +54,6 @@ casep = do
   where
     matchp = (,) <$> (pat <* reservedOp "->") <*> expr
 
--- pat :: Parser Pat
--- pat = do 
---   ast <- p
---   pure ast
---   where 
---     p = do
---       tree <- spacetree (ann <*> uidentifier) (ann <*> identifier)
---       pure $ fn tree
---     fn (Leaf (A.A a i)) = A.A a (E.Bind $ UName i)
---     fn (Branch (A.A a i) next) = A.A a (E.Match (UName i) $ map fn next)
 
 pat :: Parser Pat
 pat = ann <*> p where

@@ -53,6 +53,12 @@ parserSpec = do
     case E.unannE <$> parse P.expr "" "\\(x:Bool) -> \\(y:Int) -> x" of
       Left e -> failure $ show e 
       Right e -> e `shouldBe` ("x", E.free "Bool") @:-> ("y", E.free "Int") @:-> "x"
+
+  it "parses multi-param lambdas" $ do
+    do let Right e = E.unannE <$> parse P.expr "" "\\x y z -> x"
+       e `shouldBe` "x" @-> "y" @-> "z" @-> "x"
+    do let Right e = E.unannE <$> parse P.expr "" "\\x (y:Int) (z:Bool) -> x"
+       e `shouldBe` "x" @-> ("y", "Int") @:-> ("z", "Bool") @:-> "x"
   
   it "parses application" $ do
     do let Right e = E.unannE <$> parse P.expr "" "e1 e2"

@@ -5,10 +5,10 @@
 
 -- Primitive recursion encoded with functors
 
--- F[μX. F[X]] -> μX. F[X]
+-- F[μX. F[X]] -> (μX. F[X])
 data Fix f = Into (f (Fix f))
 
--- μX. F[X] -> F[μX. F[X]]
+-- (μX. F[X]) -> F[μX. F[X]]
 out :: Fix f -> f (Fix f)
 out (Into f) = f
 
@@ -23,6 +23,7 @@ fix f =
   in x
 
 -- primitive recursion 
+-- (F[(µX. F) × A] → A) → µX. F[X] → A
 primRec :: Functor f => (f (Fix f, a) -> a) -> Fix f -> a
 primRec fn (Into f) =
   fn (fmap (\y -> (y, primRec fn y)) f)
