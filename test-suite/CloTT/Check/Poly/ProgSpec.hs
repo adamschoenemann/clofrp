@@ -449,23 +449,23 @@ progSpec = do
         -- implementation uses the regular list type, 'ChurchList' abstracts
         -- over it as well.
         cons : forall a. a -> ChurchList a -> ChurchList a.
-        cons = \x -> \xs -> ChurchList (\k -> \z -> k x (runList xs k z)).
+        cons = \x xs -> ChurchList (\k z -> k x (runList xs k z)).
         
         -- | Append two 'ChurchList's.  This runs in O(1) time.  Note that
         -- there is no need to materialize the lists as @[a]@.
         append : forall a. ChurchList a -> ChurchList a -> ChurchList a.
-        append = \xs -> \ys -> ChurchList (\k -> \z -> runList xs k (runList ys k z)).
+        append = \xs ys -> ChurchList (\k z -> runList xs k (runList ys k z)).
         
         -- i.e.,
         
         nil : forall a. ChurchList a.
-        nil = ChurchList (\k -> \z -> z).
+        nil = ChurchList (\k z -> z).
         
         singleton : forall a. a -> ChurchList a.
-        singleton = \x -> ChurchList (\k -> \z -> k x z).
+        singleton = \x -> ChurchList (\k z -> k x z).
 
         snoc : forall a. ChurchList a -> a -> ChurchList a.
-        snoc = \xs -> \x -> ChurchList (\k -> \z -> runList xs k (k x z)).
+        snoc = \xs x -> ChurchList (\k z -> runList xs k (k x z)).
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -475,22 +475,22 @@ progSpec = do
         type ChurchList a = forall r. (a -> r -> r) -> r -> r.
         
         cons : forall a. a -> ChurchList a -> ChurchList a.
-        cons = \x -> \xs -> \k -> \z -> k x (xs k z).
+        cons = \x xs -> \k z -> k x (xs k z).
 
         toList : forall a. ChurchList a -> List a.
         toList = \xs -> xs Cons Nil.
 
         append : forall a. ChurchList a -> ChurchList a -> ChurchList a.
-        append = \xs -> \ys -> \k -> \z -> xs k (ys k z).
+        append = \xs ys -> \k z -> xs k (ys k z).
         
         nil : forall a. ChurchList a.
-        nil = \k -> \z -> z.
+        nil = \k z -> z.
         
         singleton : forall a. a -> ChurchList a.
-        singleton = \x -> \k -> \z -> k x z.
+        singleton = \x -> \k z -> k x z.
 
         snoc : forall a. ChurchList a -> a -> ChurchList a.
-        snoc = \xs -> \x -> \k -> \z -> xs k (k x z).
+        snoc = \xs x -> \k z -> xs k (k x z).
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -502,7 +502,7 @@ progSpec = do
         data Pair a b = MkPair a b.
 
         either : forall a b c. (a -> c) -> (b -> c) -> Either a b -> c.
-        either = \lf -> \rf -> \e ->
+        either = \lf rf e ->
           case e of
             | Left l -> lf l
             | Right r -> rf r.
@@ -545,13 +545,13 @@ progSpec = do
             | Right x -> True.
         
         fromLeft : forall a b. a -> Either a b -> a.
-        fromLeft = \d -> \e ->
+        fromLeft = \d e ->
           case e of
             | Left x -> x
             | Right x -> d.
 
         fromRight : forall a b. b -> Either a b -> b.
-        fromRight = \d -> \e ->
+        fromRight = \d e ->
           case e of
             | Left x -> d
             | Right x -> x.
@@ -614,7 +614,7 @@ progSpec = do
              ).
         
         ofDepth : forall a. a -> Nat -> BalTree a.
-        ofDepth = \x -> \n ->
+        ofDepth = \x n ->
           case n of
             | Z -> Empty
             | S n' -> Branch x (ofDepth (MkPair x x) n').
