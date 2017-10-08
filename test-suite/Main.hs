@@ -21,6 +21,7 @@ import CloTT.Check.PolySpec
 import CloTT.Check.Poly.ProgSpec
 import CloTT.AST.PrettySpec
 
+
 main :: IO ()
 main = do
   parser <- testSpec "parsing" parserSpec
