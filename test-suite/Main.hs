@@ -13,9 +13,7 @@ import qualified Test.Tasty
 -- writing tests. Its website has more info: <https://hspec.github.io>.
 import Test.Tasty.Hspec
 
-import CloTT.Check.MonoSpec
 import CloTT.ParserSpec
-import CloTT.AST.ElabSpec
 import CloTT.QuasiQuoterSpec
 import CloTT.Check.PolySpec
 import CloTT.Check.Poly.ProgSpec
@@ -26,12 +24,9 @@ main :: IO ()
 main = do
   parser <- testSpec "parsing" parserSpec
   quasi <- testSpec "quasi" quasiSpec
-  mono <- testSpec "mono-type checking" monoSpec
   poly <- testSpec "poly-type checking" polySpec
   decl <- testSpec "declarations" declSpec
-  elab <- testSpec "elaboration" elabSpec
-  kindOf <- testSpec "kindOf" kindOfSpec
   pretty <- testSpec "pretty" prettySpec
   checkProg <- testSpec "checkProg" progSpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, mono, poly, decl, elab, kindOf, pretty, checkProg]
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, poly, decl, pretty, checkProg]
   Test.Tasty.defaultMain group

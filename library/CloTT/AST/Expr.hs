@@ -33,8 +33,9 @@ data Expr' a
   = Var Name
   | Ann (Expr a) (Type a Poly)
   | App (Expr a) (Expr a)
-  | Lam Name (Maybe (Type a Poly)) (Expr a)
-  | Tuple (Expr a) (Expr a)
+  | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx. e OR λ(x : A). e
+  | TickAbs Name Name (Expr a) -- λ(α : κ). e
+  | Tuple (Expr a) (Expr a) -- not really used right now
   | Case (Expr a) [(Pat a, Expr a)]
   | Prim P.Prim
  
@@ -51,7 +52,9 @@ prettyE' pars = \case
 
   Lam nm mty e -> 
     let tyann = maybe "" (\t -> space <> ":" <+> pretty t) mty
-    in  parensIf $ "λ" <> pretty nm <> tyann <+> "->" <+> prettyE False e
+    in  parensIf $ "\\" <> pretty nm <> tyann <+> "->" <+> prettyE False e
+  
+  TickAbs nm kappa e -> "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
 
   Tuple e1 e2 -> parens (prettyE False e1 <> comma <+> prettyE False e2)
 
@@ -93,6 +96,7 @@ unannE' = \case
   Ann e t -> Ann (unannE e) (unannT t)
   App e1 e2 -> App (unannE e1) (unannE e2)
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannE e)
+  TickAbs nm kappa e -> TickAbs nm kappa (unannE e)
   Tuple e1 e2 -> Tuple (unannE e1) (unannE e2)
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
   Prim p -> Prim p

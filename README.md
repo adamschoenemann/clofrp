@@ -8,7 +8,8 @@ For my master's thesis at ITU
 ## TODO
 - Support higher-kinded types (should be not that hard)
 - Check/infer lambdas with annotated type-params
-- Parse and desugar multi-param lambdas
+- Parse and desugar multi-param lambdas ✓
+- Syntax sugar for tuples/units/lists?
 - Optimize type-checking in general
 - Make sure everything is sane by checking context-wellformedness more and checking that no impredicativeness takes place
   - Note: Assigning an existential to a partially-applied type-constructor is fine

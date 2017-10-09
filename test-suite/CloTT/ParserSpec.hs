@@ -91,6 +91,14 @@ parserSpec = do
   it "parses compound expressions" $ 
     do let Right e = E.unannE <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
        e `shouldBe` "x" @-> ("y" @-> "x" @@ "y") @* "y" @@ (E.true @* "x")
+
+  it "parses tick abstractions (1)" $ do
+    do let Right e = E.unannE <$> parse P.expr "" "\\\\(a : k) -> \\x -> x"
+       e `shouldBe` (("a", "k") `E.tAbs` ("x" @-> "x"))
+
+  it "parses tick abstractions (2)" $ do
+    do let Right e = E.unannE <$> parse P.expr "" "\\\\(a : k) (b : k') -> \\x -> x"
+       e `shouldBe` (("a", "k") `E.tAbs` (("b", "k'") `E.tAbs` ("x" @-> "x")))
   
   it "parses simple types" $ do
     do let Right e = E.unannT <$> parse P.typep "" "x"
@@ -133,6 +141,7 @@ parserSpec = do
        e `shouldBe` [E.free "A"] 
     do let Right e = map E.unannT <$> parse (many P.free) "" "A B"
        e `shouldBe` [E.free "A", E.free "B"] 
+  
 
 
 declSpec :: Spec

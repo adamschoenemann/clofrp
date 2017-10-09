@@ -20,6 +20,7 @@ import           CloTT.AST.Parsed (LamCalc(..))
 import           CloTT.QuasiQuoter
 import           CloTT.Check.Poly.TestUtils
 import           CloTT.TestUtils
+import           CloTT.Pretty
 
 foo :: (forall a. a -> a) -> (forall b. b -> b)
 foo f = f
@@ -94,6 +95,7 @@ polySpec = do
     let shouldExpandTo e1 e2 =
           case runTypingM0 e1 mempty of
             (Right e2', _, _) -> e2' `shouldBe` e2
+            (Left e, _, _)    -> failure (pps e)
 
     it "expands the simplest of aliases" $ do
       expandAliases @() (als [al "Foo" [] "Bar"]) "Foo" `shouldExpandTo` "Bar"
@@ -647,6 +649,3 @@ polySpec = do
       kindOf' kinds  (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
       kindOf' kinds  (E.forAll ["a"] "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
       kindOf' kinds  (E.forAll ["a"] "List" @@: "a" @->: "a") `shouldBe` Right Star
-
-
-

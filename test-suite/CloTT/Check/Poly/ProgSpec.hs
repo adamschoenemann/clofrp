@@ -11,8 +11,6 @@ import           CloTT.Check.Poly.TestUtils
 import           CloTT.QuasiQuoter
 import           CloTT.Check.Poly.Prog
 import           CloTT.Check.Poly.TypingM
-import           CloTT.Pretty
-import           CloTT.TestUtils
 
 progSpec :: Spec 
 progSpec = do

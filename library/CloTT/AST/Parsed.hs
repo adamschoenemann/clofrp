@@ -154,6 +154,9 @@ match nm ps = A () $ Match nm ps
 debrjn :: Integer -> Type () a
 debrjn = A () . TVar . DeBruijn
 
+tAbs :: (Name, Name) -> Expr () -> Expr ()
+tAbs (a, k) e = A () $ TickAbs a k e
+
 infixr 2 @->
 infixr 2 @:->
 infixl 9 @@
