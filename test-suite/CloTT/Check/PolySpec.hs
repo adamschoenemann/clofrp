@@ -45,8 +45,8 @@ bar xs =
 
 polySpec :: Spec
 polySpec = do
-  let nil = emptyCtx @()
-  let rd fctx kctx ctx = TR ctx fctx kctx mempty
+  let nil = mempty :: TyCtx ()
+  let rd fctx kctx ctx = TR ctx fctx kctx mempty mempty
   let rd'  = rd mempty 
   let rd'' = rd mempty mempty
   let (.:) = HasType
@@ -143,27 +143,27 @@ polySpec = do
 
 
   -- NOTE: Work in progress (for higher-kinded types)
-  describe "inferVarKind" $ do
-    it "should work for just the variable" $ do
-      inferVarKind @() mempty "a" ("a") `shouldBe` Right Star
-    it "should work for a -> a" $ do
-      inferVarKind @() mempty "a" ("a" @->: "a") `shouldBe` Right Star
-    it "should work for a -> Int" $ do
-      inferVarKind ["Int" |-> Star] "a" ("a" @->: "Int") `shouldBe` Right Star
-    it "fail for just Int" $ do
-      inferVarKind @() ["Int" |-> Star] "a" "Int" `shouldSatisfy` isLeft
-    it "should work for a Int" $ do
-      inferVarKind ["Int" |-> Star] "a" ("a" @@: "Int") `shouldBe` Right (Star :->*: Star)
-    it "should work for List a" $ do
-      inferVarKind ["List" |-> (Star :->*: Star)] "a" ("List" @@: "a") `shouldBe` Right Star
-    it "should work for List (List a)" $ do
-      inferVarKind ["List" |-> (Star :->*: Star)] "a" ("List" @@: ("List" @@: "a")) `shouldBe` Right Star
-    it "should work for a List" $ do
-      inferVarKind ["List" |-> (Star :->*: Star)] "a" ("a" @@: "List") `shouldBe` Right ((Star :->*: Star) :->*: Star)
-    -- it "should work for a List Int" $ do
-    --   pending
-      -- inferVarKind ["Int" |-> Star, "List" |-> (Star :->*: Star)] "a" ("a" @@: "List" @@: "Int")
-      --   `shouldBe` Right ((Star :->*: Star) :->*: Star :->*: Star)
+  -- describe "inferVarKind" $ do
+  --   it "should work for just the variable" $ do
+  --     inferVarKind @() mempty "a" ("a") `shouldBe` Right Star
+  --   it "should work for a -> a" $ do
+  --     inferVarKind @() mempty "a" ("a" @->: "a") `shouldBe` Right Star
+  --   it "should work for a -> Int" $ do
+  --     inferVarKind ["Int" |-> Star] "a" ("a" @->: "Int") `shouldBe` Right Star
+  --   it "fail for just Int" $ do
+  --     inferVarKind @() ["Int" |-> Star] "a" "Int" `shouldSatisfy` isLeft
+  --   it "should work for a Int" $ do
+  --     inferVarKind ["Int" |-> Star] "a" ("a" @@: "Int") `shouldBe` Right (Star :->*: Star)
+  --   it "should work for List a" $ do
+  --     inferVarKind ["List" |-> (Star :->*: Star)] "a" ("List" @@: "a") `shouldBe` Right Star
+  --   it "should work for List (List a)" $ do
+  --     inferVarKind ["List" |-> (Star :->*: Star)] "a" ("List" @@: ("List" @@: "a")) `shouldBe` Right Star
+  --   it "should work for a List" $ do
+  --     inferVarKind ["List" |-> (Star :->*: Star)] "a" ("a" @@: "List") `shouldBe` Right ((Star :->*: Star) :->*: Star)
+  --   -- it "should work for a List Int" $ do
+  --   --   pending
+  --     -- inferVarKind ["Int" |-> Star, "List" |-> (Star :->*: Star)] "a" ("a" @@: "List" @@: "Int")
+  --     --   `shouldBe` Right ((Star :->*: Star) :->*: Star :->*: Star)
   
   describe "wfContext" $ do
     specify "nil is well-formed" $ do
@@ -221,13 +221,13 @@ polySpec = do
          splitCtx' (uni "a") ctx `shouldBe` Nothing
     it "works for context with el" $ do
       do let ctx = nil <+ uni "b"
-         splitCtx' (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", emptyCtx)
+         splitCtx' (uni "b") ctx `shouldBe` Just (mempty, uni "b", mempty)
       do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
          let ctx = nil <+ uni "b" <++ xs
-         splitCtx' (uni "b") ctx `shouldBe` Just (emptyCtx, uni "b", xs)
+         splitCtx' (uni "b") ctx `shouldBe` Just (mempty, uni "b", xs)
       do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
          let ctx = xs <+ uni "b"
-         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", emptyCtx)
+         splitCtx' (uni "b") ctx `shouldBe` Just (xs, uni "b", mempty)
       do let xs = nil <+ uni "x" <+ exists "y" <+ marker "x"
          let ys = nil <+ uni "z" <+ exists "u" <+ marker "v"
          let ctx = xs <+ uni "b" <++ ys
@@ -446,7 +446,7 @@ polySpec = do
          runCheck ctx ("x" @-> "x") (E.forAll ["a"] $ (E.forAll ["b"] "a") @->: (E.forAll ["b"] "a")) `shouldYield` nil
          runCheck ctx ("x" @-> "x") (E.forAll ["a"] $ (E.forAll ["b"] "a") @->: "a") `shouldYield` nil
          runCheck ctx ("x" @-> "x") (E.forAll ["a"] $ (E.forAll ["b"] "b") @->: "a") `shouldYield` nil
-         shouldFail $ runCheck (rd'' emptyCtx) [unsafeExpr|\x -> x|] [unsafeType|forall a b. (forall c. b) -> a|]
+         shouldFail $ runCheck (rd'' mempty) [unsafeExpr|\x -> x|] [unsafeType|forall a b. (forall c. b) -> a|]
       do let ctx = nil <+ "x" .: "Nat"
          runCheck (rd' ["Nat" |-> Star] ctx) ("y" @-> "x") (E.forAll ["a"] $ "a" @->: "Nat") `shouldYield` ctx
     
@@ -610,42 +610,44 @@ polySpec = do
          shouldFail $ runCheck (mk ctx) ("x" @-> "x") (E.forAll ["a","a"] $ "a" @->: "a") --  `shouldYield` (ctx)
 
 
-  describe "kindOf'" $ do
+  describe "kindOf" $ do
     let kinds = [ ("List"  |-> Star :->*: Star)
                 , ("Tuple" |-> Star :->*: Star :->*: Star)
                 , ("Nat"   |-> Star)
                 , ("a"     |-> Star)
                 , ("b"     |-> Star)
                 ]
-    -- let [listK, tupK, natK, aK, bK] = kinds
+    let runKindOf ks ty =
+          let (r, _, _) = runTypingM0 (kindOf ty) (mempty {trKinds = ks} :: TypingRead ()) 
+          in  r
 
     it "looks up kinds" $ do
-      kindOf' kinds "Nat" `shouldBe` Right Star
+      runKindOf kinds "Nat" `shouldBe` Right Star
 
     it "infers arrow types to be kind *" $ do
-      kindOf' kinds ("Nat" @->: "Nat") `shouldBe` Right Star
-      kindOf' kinds ("List" @@: "Nat" @->: "List" @@: "Nat") `shouldBe` Right Star
+      runKindOf kinds ("Nat" @->: "Nat") `shouldBe` Right Star
+      runKindOf kinds ("List" @@: "Nat" @->: "List" @@: "Nat") `shouldBe` Right Star
 
     it "fails when type not found in ctx" $ do
-      kindOf' @() [] "Nat" `shouldSatisfy` isLeft
+      runKindOf [] "Nat" `shouldSatisfy` isLeft
     
     it "fails with partially applied types in arrows" $ do
-      kindOf' kinds ("List" @->: "a") `shouldSatisfy` isLeft
+      runKindOf kinds ("List" @->: "a") `shouldSatisfy` isLeft
 
     it "infers lists" $ do
-      kindOf' kinds ("List" @@: "a") `shouldBe` Right Star
+      runKindOf kinds ("List" @@: "a") `shouldBe` Right Star
 
     it "infers tuples (curried)" $ do
-      kindOf' kinds ("Tuple" @@: "a") `shouldBe` Right (Star :->*: Star)
+      runKindOf kinds ("Tuple" @@: "a") `shouldBe` Right (Star :->*: Star)
 
     it "infers tuples" $ do
-      kindOf' kinds ("Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+      runKindOf kinds ("Tuple" @@: "a" @@: "b") `shouldBe` Right Star
 
     it "infers tuples of lists" $ do
-      kindOf' kinds ("Tuple" @@: ("List" @@: "a") @@: "b") `shouldBe` Right Star
+      runKindOf kinds ("Tuple" @@: ("List" @@: "a") @@: "b") `shouldBe` Right Star
 
     it "infers foralls" $ do
-      kindOf' kinds (E.forAll ["a"] $ "List" @@: "a") `shouldBe` Right Star
-      kindOf' kinds  (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
-      kindOf' kinds  (E.forAll ["a"] "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
-      kindOf' kinds  (E.forAll ["a"] "List" @@: "a" @->: "a") `shouldBe` Right Star
+      runKindOf kinds (E.forAll ["a"] $ "List" @@: "a") `shouldBe` Right Star
+      runKindOf kinds  (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+      runKindOf kinds  (E.forAll ["a"] "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
+      runKindOf kinds  (E.forAll ["a"] "List" @@: "a" @->: "a") `shouldBe` Right Star

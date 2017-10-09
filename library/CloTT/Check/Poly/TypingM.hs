@@ -49,15 +49,17 @@ data TypingRead a  =
      , trFree :: FreeCtx a
      , trKinds :: KindCtx a
      , trDestrs :: DestrCtx a
+     , trClocks :: ClockCtx a
      }
 
 instance Monoid (TypingRead a) where
-  mempty = TR mempty mempty mempty mempty
-  mappend (TR c1 f1 k1 d1) (TR c2 f2 k2 d2) =
+  mempty = TR mempty mempty mempty mempty mempty
+  mappend (TR c1 f1 k1 d1 clk1) (TR c2 f2 k2 d2 clk2) =
     TR { trCtx    = mappend c1 c2
        , trFree   = mappend f1 f2 
        , trKinds  = mappend k1 k2
        , trDestrs = mappend d1 d2
+       , trClocks = mappend clk1 clk2
        }
   
 
@@ -139,6 +141,11 @@ otherErr s = tyExcept $ Other s
 partialAliasApp :: Alias a -> TypingM a r
 partialAliasApp al = tyExcept $ PartialAliasApp al
 
+errIf :: TypingM a r -> (r -> Bool) -> (r -> TyExcept a) -> TypingM a ()
+errIf c p fl = do
+  r <- c
+  if p r then (tyExcept $ fl r) else pure ()
+
 newtype TypingM a r = Typ { unTypingM :: ExceptT (TypingErr a) (RWS (TypingRead a) (TypingWrite a) TypingState) r }
   deriving ( Functor
            , Applicative
@@ -155,7 +162,7 @@ runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
 runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
 
 initRead :: TypingRead a 
-initRead = TR { trFree = emptyFCtx, trCtx = emptyCtx, trKinds = emptyKCtx, trDestrs = mempty }
+initRead = TR { trFree = mempty, trCtx = mempty, trKinds = mempty, trDestrs = mempty, trClocks = mempty }
 
 getCtx :: TypingM a (TyCtx a)
 getCtx = asks trCtx
@@ -169,6 +176,9 @@ getDCtx = asks trDestrs
 getKCtx :: TypingM a (KindCtx a)
 getKCtx = asks trKinds
 
+getCCtx :: TypingM a (ClockCtx a)
+getCCtx = asks trClocks
+
 withCtx :: (TyCtx a -> TyCtx a) -> TypingM a r -> TypingM a r
 withCtx fn = local fn' where
   fn' rd = rd { trCtx = fn (trCtx rd) }
@@ -180,6 +190,10 @@ withFCtx fn = local fn' where
 withKCtx :: (KindCtx a -> KindCtx a) -> TypingM a r -> TypingM a r
 withKCtx fn = local fn' where
   fn' rd = rd { trKinds = fn (trKinds rd) }
+
+withCCtx :: (ClockCtx a -> ClockCtx a) -> TypingM a r -> TypingM a r
+withCCtx fn = local fn' where
+  fn' rd = rd { trClocks = fn (trClocks rd) }
 
 freshName :: TypingM a Name
 freshName = do 

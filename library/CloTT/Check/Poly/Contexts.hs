@@ -147,14 +147,27 @@ instance Pretty (TyCtx a) where
 instance Unann (TyCtx a) (TyCtx ()) where
   unann (Gamma xs) = Gamma $ map unann xs
 
-emptyCtx :: TyCtx a
-emptyCtx = Gamma []
+-- Clock context contains mappings from names to clocks.
+-- Since clocks are just names, we really just need a set here.
+-- But, we'll just use a Map from Name to Unit. Is that a hack? Certainly.
+newtype ClockCtx a = ClockCtx { unClockCtx :: M.Map Name () }
+  deriving (Show, Eq, Monoid, Data)
 
-emptyFCtx :: FreeCtx a
-emptyFCtx = FreeCtx (M.empty)
+instance Context (ClockCtx a) where
+  type Elem (ClockCtx a) = ()
+  type Key (ClockCtx a)  = Name
+  extend nm ty (ClockCtx m) = ClockCtx $ M.insert nm ty m
+  isMemberOf nm (ClockCtx m) = M.member nm m
+  query x (ClockCtx m) = M.lookup x m
 
-emptyKCtx :: KindCtx a
-emptyKCtx = KindCtx (M.empty)
+instance (IsList (ClockCtx a)) where
+  type Item (ClockCtx a) = Name
+  fromList xs = ClockCtx $ M.fromList (map (\x -> (x,())) xs)
+  toList (ClockCtx m) = M.keys m
+
+instance Pretty (ClockCtx a) where
+  pretty (ClockCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
+    fn (k, v) = pretty k 
 
 -- Lists are left-prepend but contexts are right-append
 -- It doesn't matter, so we just pretend that we right-append stuff,
@@ -168,7 +181,7 @@ infixl 4 <++
 Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 
 instance Monoid (TyCtx a) where
-  mempty = emptyCtx
+  mempty = Gamma []
   mappend = (<++)
 
 isInContext :: CtxElem a -> TyCtx a -> Bool
@@ -275,6 +288,7 @@ wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
 
 -- A type is wellformed
 -- this one, validType and kindOf should probably be merged somehow...
+-- DEPRECATED in favor of isWfType
 isWfTypeIn' :: Type a Poly -> KindCtx a -> TyCtx a -> Bool
 isWfTypeIn' (A ann ty) kctx ctx =
   -- trace ("isWfTypeIn'" ++ (show $ unann ty)) $

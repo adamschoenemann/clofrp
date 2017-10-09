@@ -142,42 +142,43 @@ insertAt at insertee = do
     Just ctx' -> pure ctx'
 
 -- Infer the kind of a type variable from how it is used in a type
--- Its not gonna work, I think tough... Instead, "spine-ify" first and
+-- Its not gonna work, I think though... Instead, "spine-ify" first and
 -- then filter
-inferVarKind :: KindCtx a -> Name -> Type a Poly -> Either String Kind
-inferVarKind kctx nm (A _ ty) =
-  case ty of
-    TFree v -> noInfo
-    TVar  v -> pure Star
-    TExists v -> noInfo
+-- inferVarKind :: KindCtx a -> Name -> Type a Poly -> Either String Kind
+-- inferVarKind kctx nm (A _ ty) =
+--   case ty of
+--     TFree v -> noInfo
+--     TVar  v -> pure Star
+--     TExists v -> noInfo
 
-    TApp (A _ (TVar v)) t2
-      | v == nm   -> do 
-        k <- kindOf' kctx t2
-        pure $ k :->*: Star
-      | otherwise -> inferVarKind kctx nm t2
+--     TApp (A _ (TVar v)) t2
+--       | v == nm   -> do 
+--         k <- kindOf' kctx t2
+--         pure $ k :->*: Star
+--       | otherwise -> inferVarKind kctx nm t2
 
-    TApp t1 t2 -> 
-      case inferVarKind kctx nm t1 of 
-        Left _ -> inferVarKind kctx nm t2
-        Right k -> case inferVarKind kctx nm t2 of
-          Left _ -> pure k
-          Right k' -> if k == k' then pure k else Left ("Conflicting kinds inferred for" ++ show nm)
+--     TApp t1 t2 -> 
+--       case inferVarKind kctx nm t1 of 
+--         Left _ -> inferVarKind kctx nm t2
+--         Right k -> case inferVarKind kctx nm t2 of
+--           Left _ -> pure k
+--           Right k' -> if k == k' then pure k else Left ("Conflicting kinds inferred for" ++ show nm)
 
-    t1 :->: t2 -> 
-      case inferVarKind kctx nm t1 of 
-        Left _ -> inferVarKind kctx nm t2
-        Right k -> case inferVarKind kctx nm t2 of
-          Left _ -> pure k
-          Right k' -> if k == k' then pure k else Left ("Conflicting kinds inferred for" ++ show nm)
+--     t1 :->: t2 -> 
+--       case inferVarKind kctx nm t1 of 
+--         Left _ -> inferVarKind kctx nm t2
+--         Right k -> case inferVarKind kctx nm t2 of
+--           Left _ -> pure k
+--           Right k' -> if k == k' then pure k else Left ("Conflicting kinds inferred for" ++ show nm)
     
-    Forall v tau -> inferVarKind kctx nm tau
-  where
-    noInfo = Left $ "Cannot infer kind of type-variable " ++ show nm
+--     Forall v tau -> inferVarKind kctx nm tau
+--   where
+--     noInfo = Left $ "Cannot infer kind of type-variable " ++ show nm
 
--- Infer the kind of a type expression
-kindOf' :: KindCtx a -> Type a Poly -> Either String Kind
-kindOf' kctx (A _ t) =
+
+kindOf :: Type a Poly -> TypingM a Kind
+kindOf (A _ t) = do
+  kctx <- getKCtx
   case t of
     TFree v -> maybe (notFound v) pure $ lookupKind v kctx
     
@@ -188,41 +189,89 @@ kindOf' kctx (A _ t) =
     TExists  v -> maybe (notFound v) pure $ lookupKind v kctx
 
     TApp t1 t2 -> do
-      k1 <- kindOf' kctx t1
-      k2 <- kindOf' kctx t2
+      k1 <- kindOf t1
+      k2 <- kindOf t2
       case (k1, k2) of
         (k11 :->*: k12, k2')
           | k11 == k2' -> pure k12
           | otherwise  -> 
-              Left $ "Expected " ++ pps t2 ++ " to have kind " ++ pps k11
-        (_k1', _) -> Left $ "Expected " ++ pps t1 ++ " to be a type constructor"
+              otherErr $ "Expected " ++ pps t2 ++ " to have kind " ++ pps k11
+        (_k1', _) -> otherErr $ "Expected " ++ pps t1 ++ " to be a type constructor"
 
     t1 :->: t2 -> do
-      k1 <- kindOf' kctx t1
-      k2 <- kindOf' kctx t2
+      k1 <- kindOf t1
+      k2 <- kindOf t2
       case (k1, k2) of
         (Star, Star) -> pure Star
-        (k1', k2')   -> Left $ "Both operands in arrow types must have kind *, but had " 
+        (k1', k2')   -> otherErr $ "Both operands in arrow types must have kind *, but had " 
                      ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
     
-    Forall v tau -> kindOf' (extend v Star kctx) tau
+    -- TODO: Infer kind of v instead of setting it to *
+    Forall v tau -> withKCtx (\g -> extend v Star g) $ kindOf tau
   where
-    notFound v = Left $ "Type " ++ pps v ++ " not found in context."
+    notFound = nameNotFound
 
--- Types are only valid if they have kind *
-validType' :: KindCtx a -> Type a Poly -> Bool
-validType' kctx t = do
-  case kindOf' kctx t of
-    Right Star -> True
-    Right k    -> trace ((show $ unann t) ++ " is not valid") $ False
-    Left  err  -> trace err $ False
+-- A type is wellformed
+-- this one, validType and kindOf should probably be merged somehow...
+isWfType :: Type a Poly -> TypingM a ()
+isWfType (A ann ty) = do
+  kctx <- getKCtx
+  ctx <- getCtx
+  case ty of
+    -- UFreeWF
+    TFree x
+      | x `isMemberOf` kctx -> pure ()
+      | otherwise           -> nameNotFound x
+
+    -- UVarWF
+    TVar x 
+      | Just _ <- ctxFind (varPred x) ctx -> pure ()
+      | otherwise                         -> nameNotFound x
+
+    -- EvarWF and SolvedEvarWF
+    TExists alpha 
+      | Just _ <- ctxFind (expred $ alpha) ctx -> pure ()
+      | otherwise                              -> nameNotFound alpha
+
+    -- ArrowWF
+    t1 :->: t2 -> do 
+      errIf (kindOf t1) (/= Star) (const $ Other $ show $ pretty t1 <+> "must have kind *")
+      errIf (kindOf t2) (/= Star) (const $ Other $ show $ pretty t2 <+> "must have kind *")
+      isWfType t1 *> isWfType t2
+
+    -- ForallWF
+    Forall x t 
+      | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context"
+      | otherwise                         -> withCtx (\g -> g <+ Uni x) $ isWfType t
+
+    -- TAppWF. FIXME Should check correct kinds as well.
+    TApp t1 t2 -> do
+      errIf (kindOf t1) (== Star) (const $ Other $ show $ pretty t1 <+> "must be a type-constructor")
+      isWfType t1 *> isWfType t2
+
+    -- ClockWF
+    Clock kappa t -> do
+      clks <- getCCtx
+      if kappa `isMemberOf` clks
+        then otherErr $ show $ pretty kappa <+> "is already in clock-context"
+        else withCCtx (extend kappa ()) $ isWfType t
+
+  where 
+    expred alpha = \case
+      Exists alpha' -> alpha == alpha'
+      alpha' := _   -> alpha == alpha' 
+      _         -> False
+
+    varPred x = \case
+      Uni x' -> x == x'
+      _      -> False
 
 validType :: KindCtx a -> Type a Poly -> TypingM a ()
 validType kctx t = do
-  case kindOf' kctx t of
-    Right Star -> pure ()
-    Right k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
-    Left err   -> otherErr $ err ++ " When validating " ++ pps t ++ " in ktcx" ++ pps kctx
+  k <- withKCtx (const kctx) $ kindOf t
+  case k of
+    Star -> pure ()
+    k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
 
 asMonotypeEither :: Type a s -> Either String (Type a Mono)
 asMonotypeEither = maybe (Left "asMonotype") Right . asMonotype
@@ -413,33 +462,19 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   subtypeOf' (TExists ahat) _
     | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do 
-      ctx <- getCtx
-      kctx <- getKCtx
-      if ((A ann1 $ TExists ahat) `isWfTypeIn'` kctx) ctx  -- also check if ahat is in free vars of ty2
-        then do 
-          root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2 <+> "in" <+> pretty ctx
-          r <- branch (ahat `instL` ty2)
-          pure r
-        else do
-          root $ "[InstantiateL]" <+> pretty ahat <+> ":<=" <+> pretty ty2 <+> "|- NameNotFound"
-                 <+> pretty ahat <+> " in " <+> pretty ctx
-          nameNotFound ahat
+        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
+        _ <- isWfType (A ann1 $ TExists ahat)
+        r <- branch (ahat `instL` ty2)
+        pure r
 
   -- <:InstantiateR
   subtypeOf' _ (TExists ahat)
     | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
     | otherwise = do 
-      ctx <- getCtx
-      kctx <- getKCtx
-      if ((A ann2 $ TExists ahat) `isWfTypeIn'` kctx) ctx 
-        then do 
-          root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
-          r <- branch (ty1 `instR` ahat)
-          pure r
-        else do
-          root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> pretty ahat <+> "|- NameNotFound"
-                 <+> pretty ahat <+> "in" <+> pretty ctx
-          nameNotFound ahat
+        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
+        _ <- isWfType (A ann2 $ TExists ahat)
+        r <- branch (ty1 `instR` ahat)
+        pure r
   
   -- <:TApp
   subtypeOf' (TApp a1 a2) (TApp b1 b2) = do
@@ -683,7 +718,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
         a1 <- freshName
         a2 <- freshName
         let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
-        ctx' <- insertAt (Exists alpha) (emptyCtx <+ Exists a2 <+ Exists a1 <+ alpha := a1toa2)
+        ctx' <- insertAt (Exists alpha) (mempty <+ Exists a2 <+ Exists a1 <+ alpha := a1toa2)
         delta <- branch $ check e (A tann $ TExists a1)
         pure (A tann $ TExists a2, delta)
       else
