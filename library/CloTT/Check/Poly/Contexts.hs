@@ -288,7 +288,7 @@ wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
 
 -- A type is wellformed
 -- this one, validType and kindOf should probably be merged somehow...
--- DEPRECATED in favor of isWfType
+-- DEPRECATED in favor of checkWfType
 isWfTypeIn' :: Type a Poly -> KindCtx a -> TyCtx a -> Bool
 isWfTypeIn' (A ann ty) kctx ctx =
   -- trace ("isWfTypeIn'" ++ (show $ unann ty)) $

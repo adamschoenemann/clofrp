@@ -213,8 +213,8 @@ kindOf (A _ t) = do
 
 -- A type is wellformed
 -- this one, validType and kindOf should probably be merged somehow...
-isWfType :: Type a Poly -> TypingM a ()
-isWfType (A ann ty) = do
+checkWfType :: Type a Poly -> TypingM a ()
+checkWfType (A ann ty) = do
   kctx <- getKCtx
   ctx <- getCtx
   case ty of
@@ -237,24 +237,24 @@ isWfType (A ann ty) = do
     t1 :->: t2 -> do 
       errIf (kindOf t1) (/= Star) (const $ Other $ show $ pretty t1 <+> "must have kind *")
       errIf (kindOf t2) (/= Star) (const $ Other $ show $ pretty t2 <+> "must have kind *")
-      isWfType t1 *> isWfType t2
+      checkWfType t1 *> checkWfType t2
 
     -- ForallWF
     Forall x t 
       | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context"
-      | otherwise                         -> withCtx (\g -> g <+ Uni x) $ isWfType t
+      | otherwise                         -> withCtx (\g -> g <+ Uni x) $ checkWfType t
 
     -- TAppWF. FIXME Should check correct kinds as well.
     TApp t1 t2 -> do
       errIf (kindOf t1) (== Star) (const $ Other $ show $ pretty t1 <+> "must be a type-constructor")
-      isWfType t1 *> isWfType t2
+      checkWfType t1 *> checkWfType t2
 
     -- ClockWF
     Clock kappa t -> do
       clks <- getCCtx
       if kappa `isMemberOf` clks
         then otherErr $ show $ pretty kappa <+> "is already in clock-context"
-        else withCCtx (extend kappa ()) $ isWfType t
+        else withCCtx (extend kappa ()) $ checkWfType t
 
   where 
     expred alpha = \case
@@ -463,7 +463,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do 
         root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
-        _ <- isWfType (A ann1 $ TExists ahat)
+        _ <- checkWfType (A ann1 $ TExists ahat)
         r <- branch (ahat `instL` ty2)
         pure r
 
@@ -472,7 +472,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
     | otherwise = do 
         root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
-        _ <- isWfType (A ann2 $ TExists ahat)
+        _ <- checkWfType (A ann2 $ TExists ahat)
         r <- branch (ty1 `instR` ahat)
         pure r
   
