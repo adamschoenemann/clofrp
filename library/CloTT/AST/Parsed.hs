@@ -217,3 +217,17 @@ unannConstr (A _ c) =
 -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
 quantify :: [Name] -> Type a Poly -> Type a Poly
 quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\nm t' -> A ann $ Forall nm t') (A ann t) bound) else id
+
+-- substitute type for name in expr (traverses and substitutes in annotations)
+substTVarInExpr :: Type a Poly -> Name -> Expr a -> Expr a 
+substTVarInExpr new nm = go where
+  go (A a e') = A a $ go' e'
+  go' e' = case e' of
+    Var nm -> e'
+    Ann e t -> Ann e (subst new nm t)
+    App e1 e2 -> App (go e1) (go e2)
+    Lam nm mty e -> Lam nm (subst new nm <$> mty) (go e)
+    TickAbs nm kappa e -> TickAbs nm kappa (go e)
+    Tuple e1 e2 -> Tuple (go e1) (go e2)
+    Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
+    Prim p -> e'

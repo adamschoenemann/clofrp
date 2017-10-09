@@ -269,37 +269,40 @@ polySpec = do
       let ctx = nil <+ exists "b" <++ t <+ exists "a"
       before' (exists "a") (exists "b") ctx `shouldBe` False
 
-  describe "assign'" $ do
+  describe "assign" $ do
     let kctx = ["Unit" |-> Star]
+    let runAssign nm ty ks cs = 
+          let (r, _, _) = runTypingM0 (assign nm ty) (mempty {trKinds = ks, trCtx = cs})
+          in  r
     it "fails for empty context" $ do
       let ctx = nil
-      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
+      runAssign "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "fails for singleton context without 'a^'" $ do
       let ctx = nil <+ exists "b"
-      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
+      runAssign "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "fails for singleton context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a"
-      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
+      runAssign "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "fails for context without 'a^' but with 'a'" $ do
       let ctx = nil <+ uni "a" <+ exists "b" <+ marker "c"
-      assign' "a" "Unit" kctx ctx `shouldSatisfy` isLeft
+      runAssign "a" "Unit" kctx ctx `shouldSatisfy` isLeft
 
     it "works for context with 'a^'" $ do
       do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
+         runAssign "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
       do let t   = nil 
          let t'  = nil <+ marker "c"
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
+         runAssign "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
       do let t   = nil <+ uni "d" <+ exists "b"
          let t'  = nil 
          let ctx = t <+ exists "a" <++ t'
-         assign' "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
+         runAssign "a" "Unit" kctx ctx `shouldBe` Right (t <+ "a" := "Unit" <++ t')
          
   describe "insertAt'" $ do
     it "fails with context without elem" $ do

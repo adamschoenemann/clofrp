@@ -249,18 +249,6 @@ before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False wher
     | otherwise = comesBefore x y as True False
   comesBefore _ _ _ _ _ = False
 
--- assign an unsolved variable to a type in a context
--- TODO: Optimize 
-assign' :: Name -> Type a Mono -> KindCtx a -> TyCtx a -> Either String (TyCtx a)
-assign' nm ty kctx (Gamma ctx) =
-  case foldr fn ([], False) ctx of
-    (xs, True)
-      | wfContext kctx (Gamma xs) -> Right (Gamma xs)
-      | otherwise                 -> Left ("Ctx not well-formed: " ++ show (pretty (Gamma xs)))
-    (xs, False)                   -> Left "Didn't assign anything" 
-  where
-    fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
-    fn x (xs, b)                        = (x : xs, b)
 
 insertAt' :: CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
 insertAt' at insertee into = do

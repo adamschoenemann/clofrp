@@ -96,12 +96,12 @@ instance Monoid a => Show (ElabAlias a) where
 -}
 
 elabAlias :: a -> Alias a -> ElabAlias a
-elabAlias ann al = go 0 (deb al) where 
+elabAlias ann = go 0 . deb where 
 
   deb al@(Alias {alName, alBound, alExpansion}) =
     al { alExpansion = deBruijnify ann alBound alExpansion } 
 
-  go i (Alias {alName, alBound, alExpansion}) =
+  go i al@(Alias {alName, alBound, alExpansion}) =
     case alBound of
       [] -> Done alExpansion
       _:xs -> Ex alName $ \t ->
@@ -180,9 +180,9 @@ expandAliases als t =
             (Ex nm _, _)         -> wrong nm
             (_, Ex nm _)         -> wrong nm
 
-        Forall n t -> 
-          go t >>= \case
-            Done t' -> done $ A ann $ Forall n t'
+        Forall n t1 -> 
+          go t1 >>= \case
+            Done t1' -> done $ A ann $ Forall n t1'
             Ex nm _ -> wrong nm
 
     (c1, c2) &&& fn = do
@@ -276,4 +276,4 @@ checkProg :: Prog a -> TypingM a ()
 checkProg = (checkElabedProg =<<) . elabProg
 
 runCheckProg :: TypingRead a -> Prog a -> TypingMRes a ()
-runCheckProg rd prog = runTypingM (checkProg prog) rd initState
+runCheckProg rd p = runTypingM (checkProg p) rd initState

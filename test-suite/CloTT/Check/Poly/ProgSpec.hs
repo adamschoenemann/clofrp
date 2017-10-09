@@ -65,6 +65,40 @@ progSpec = do
         -- bar = app foo Unit.
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "succeeds for type annotations (1)" $ do
+      let prog = [unsafeProg|
+        id : forall a. a -> a.
+        id = \x -> the (a) x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for type annotations (2)" $ do
+      let prog = [unsafeProg|
+        data NEList a = One a | Cons a (NEList a).
+        foo : forall b. (forall a. NEList a) -> b.
+        foo = \xs -> 
+          case xs of
+            | One x -> the (b) x
+            | Cons x xs' -> the (b) x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for type annotations (3)" $ do
+      let prog = [unsafeProg|
+        data Either a b = Left a | Right b.
+        data A = MkA.
+        data B = MkB.
+        data Bool = True | False.
+
+        foo : Bool -> Either A B.
+        foo = \b ->
+          case the (forall a. a -> a) (\x -> x) of
+            | id -> case id b of
+              | True -> Right (id MkA)
+              | False -> Left (id MkB).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for monomorphic patterns (1)" $ do
       let prog = [unsafeProg|

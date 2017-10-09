@@ -31,6 +31,7 @@ import Data.Foldable (foldlM, foldrM)
 import Debug.Trace
 import Data.String (fromString)
 import Control.Applicative ((<|>))
+import Control.Monad.Except (catchError, throwError)
 import Data.Text.Prettyprint.Doc
 import Data.List (break, find)
 import Data.Maybe (isJust)
@@ -102,39 +103,9 @@ splitCtx el ctx =
       -- traceM $ "splitCtx " ++ show el ++ ":  " ++ show ctx ++ " ---> " ++ show x
       pure x
 
-subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
-subst x forY (A a inTy) = 
-  case inTy of
-    TFree y     | y == forY  -> x
-                | otherwise -> A a $ TFree y
-
-    TVar y      | y == forY  -> x
-                | otherwise -> A a $ TVar y
-
-    TExists y   | y == forY  -> x
-                | otherwise -> A a $ TExists y
-
-    Forall y t  | y == forY  -> A a $ Forall y t 
-                | otherwise -> A a $ Forall y (subst x forY t)
-
-    t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
-    
-    t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
-    
-
-
 before :: CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
-assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
-assign nm ty = do
-  ctx <- getCtx
-  kctx <- getKCtx
-  case assign' nm ty kctx ctx of
-    Left err  -> root "assign" *> otherErr err
-    Right ctx' -> do 
-      -- traceM $ showW 80 $ "assign" <+> pretty nm <+> pretty ty <+> pretty ctx <+> "---->" <+> pretty ctx'
-      pure ctx'
 
 insertAt :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a)
 insertAt at insertee = do
@@ -316,126 +287,143 @@ validType kctx t = do
     Star -> pure ()
     k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
 
-asMonotypeEither :: Type a s -> Either String (Type a Mono)
-asMonotypeEither = maybe (Left "asMonotype") Right . asMonotype
+-- assign an unsolved variable to a type in a context
+-- TODO: Optimize 
+assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
+assign nm ty = do
+  Gamma ctx <- getCtx
+  case foldr fn ([], False) ctx of
+    (xs, True) -> do
+      _ <- wfContext' (Gamma xs)
+      pure (Gamma xs)
+    (xs, False)                   -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything" 
+  where
+    fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
+    fn x (xs, b)                        = (x : xs, b)
+
+asMonotypeTM :: Type a s -> TypingM a (Type a Mono)
+asMonotypeTM = maybe (otherErr "asMonotype") pure . asMonotype
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
-instL ahat ty@(A a ty') = do 
-  ctx <- getCtx
-  kctx <- getKCtx
-  case (\t -> assign' ahat t kctx ctx) =<< asMonotypeEither ty of 
-    Right ctx' -> do 
-      root $ "[InstLSolve]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
-      pure ctx'
+instL ahat ty@(A a ty') = 
+  let solve = do
+        mty <- asMonotypeTM ty
+        ctx' <- assign ahat mty 
+        root $ "[InstLSolve]" <+> pretty ty <+> ":<=" <+> pretty ahat
+        pure ctx'
+  in solve `catchError` \err -> 
+      case ty' of
+        -- InstLReach
+        TExists bhat -> do
+          root $ "[InstLReach]" <+> "^" <> pretty bhat <+> "=" <+> "^" <> pretty ahat
+          Exists ahat `before` Exists bhat >>= \case
+            True -> assign bhat (A a $ TExists ahat)
+            False -> otherErr $ "[InstLReach] error"
 
-    Left err  -> case ty' of
-      -- InstLReach
-      TExists bhat -> do
-        root $ "[InstLReach]" <+> "^" <> pretty bhat <+> "=" <+> "^" <> pretty ahat
-        Exists ahat `before` Exists bhat >>= \case
-          True -> assign bhat (A a $ TExists ahat)
-          False -> otherErr $ "[InstLReach] error"
+        -- InstLArr
+        t1 :->: t2 -> do
+          ctx <- getCtx
+          root $ "[InstLArr]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
+          af1 <- freshName
+          af2 <- freshName
+          let ahat1 = exists af1
+          let ahat2 = exists af2
+          let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
+          ctx' <- insertAt (exists ahat) $ mempty <+ ahat1 <+ ahat2 <+ ahat := arr
+          omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
+          substed <- substCtx omega t2
+          r <- withCtx (const omega) $ branch (af2 `instL` substed)
+          pure r
+        
+        -- InstLAllR
+        Forall beta bty -> do
+          ctx <- getCtx
+          root $ "[InstLAllR]" <+> pretty ahat <+> ":<=" <+> pretty bty <+> "in" <+> pretty ctx
+          beta' <- freshName
+          let bty' = subst (A a $ TFree beta') beta bty
+          ctx' <- withCtx (\g -> g <+ uni beta') $ branch (ahat `instL` bty')
+          (delta, _, delta') <- splitCtx (uni beta') ctx'
+          pure delta
 
-      -- InstLArr
-      t1 :->: t2 -> do
-        root $ "[InstLArr]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
-        af1 <- freshName
-        af2 <- freshName
-        let ahat1 = exists af1
-        let ahat2 = exists af2
-        let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-        ctx' <- insertAt (exists ahat) $ mempty <+ ahat1 <+ ahat2 <+ ahat := arr
-        omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
-        substed <- substCtx omega t2
-        r <- withCtx (const omega) $ branch (af2 `instL` substed)
-        pure r
-      
-      -- InstLAllR
-      Forall beta bty -> do
-        root $ "[InstLAllR]" <+> pretty ahat <+> ":<=" <+> pretty bty <+> "in" <+> pretty ctx
-        beta' <- freshName
-        let bty' = subst (A a $ TFree beta') beta bty
-        ctx' <- withCtx (\g -> g <+ uni beta') $ branch (ahat `instL` bty')
-        (delta, _, delta') <- splitCtx (uni beta') ctx'
-        pure delta
-
-      -- InstLTApp. Identical to InstLArr
-      TApp t1 t2 -> do
-        root $ "[InstLTApp]" <+> pretty ty <+> ":<=" <+> pretty ahat
-        af1 <- freshName
-        af2 <- freshName
-        let ahat1 = exists af1
-        let ahat2 = exists af2
-        let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
-        ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
-        omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
-        substed <- substCtx omega t2
-        r <- withCtx (const omega) $ branch (af2 `instL` substed)
-        pure r
-      
-      _ -> do
-        root $ "[InstLError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
-        otherErr $ showW 80 $ "[instL] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
+        -- InstLTApp. Identical to InstLArr
+        TApp t1 t2 -> do
+          root $ "[InstLTApp]" <+> pretty ty <+> ":<=" <+> pretty ahat
+          af1 <- freshName
+          af2 <- freshName
+          let ahat1 = exists af1
+          let ahat2 = exists af2
+          let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
+          ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
+          omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
+          substed <- substCtx omega t2
+          r <- withCtx (const omega) $ branch (af2 `instL` substed)
+          pure r
+        
+        _ -> do
+          root $ "[InstLError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
+          throwError err
 
 
 instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
-instR ty@(A a ty') ahat = do
-  ctx <- getCtx
-  kctx <- getKCtx
-  case (\t -> assign' ahat t kctx ctx) =<< asMonotypeEither ty of
-    Right ctx' -> do
-      root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
-      pure ctx'
-      
-    Left err -> case ty' of
-      -- InstRReach
-      TExists bhat -> do 
-        root $ "InstRReach"
-        Exists ahat `before` Exists bhat >>= \case
-          True -> assign bhat (A a $ TExists ahat)
-          False -> otherErr $ "InstRReach"
+instR ty@(A a ty') ahat = 
+  let solve = do
+        mty <- asMonotypeTM ty
+        ctx' <- assign ahat mty 
+        root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
+        pure ctx'
+  in  solve `catchError` \err ->
+        case ty' of
+          -- InstRReach
+          TExists bhat -> do 
+            root $ "InstRReach"
+            Exists ahat `before` Exists bhat >>= \case
+              True -> assign bhat (A a $ TExists ahat)
+              False -> otherErr $ "InstRReach"
 
-      -- InstRArr
-      t1 :->: t2 -> do
-        root $ "InstRArr"
-        af1 <- freshName
-        af2 <- freshName
-        let ahat1 = exists af1
-        let ahat2 = exists af2
-        let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-        ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := arr)
-        omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
-        substed <- substCtx omega t2
-        r <- withCtx (const omega) $ branch (substed `instR` af2)
-        pure r
-      
-      -- InstRAllL
-      Forall beta bty -> do
-        root $ "[InstRAllL]"
-        beta' <- freshName
-        let substedB = subst (A a $ TExists beta') beta bty
-        ctx' <- withCtx (\g -> g <+ marker beta' <+ exists beta') $ branch (substedB `instR` ahat)
-        (delta, _, delta') <- splitCtx (marker beta') ctx'
-        pure delta
-      
-      -- InstRTApp. Identical to InstRArr
-      TApp t1 t2 -> do
-        root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat
-        af1 <- freshName
-        af2 <- freshName
-        let ahat1 = exists af1
-        let ahat2 = exists af2
-        let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
-        ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
-        omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
-        substed <- substCtx omega t2
-        r <- withCtx (const omega) $ branch (substed `instR` af2)
-        pure r
-      
-      _ -> otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
+          -- InstRArr
+          t1 :->: t2 -> do
+            root $ "InstRArr"
+            af1 <- freshName
+            af2 <- freshName
+            let ahat1 = exists af1
+            let ahat2 = exists af2
+            let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
+            ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := arr)
+            omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
+            substed <- substCtx omega t2
+            r <- withCtx (const omega) $ branch (substed `instR` af2)
+            pure r
+          
+          -- InstRAllL
+          Forall beta bty -> do
+            root $ "[InstRAllL]"
+            beta' <- freshName
+            let substedB = subst (A a $ TExists beta') beta bty
+            ctx' <- withCtx (\g -> g <+ marker beta' <+ exists beta') $ branch (substedB `instR` ahat)
+            (delta, _, delta') <- splitCtx (marker beta') ctx'
+            pure delta
+          
+          -- InstRTApp. Identical to InstRArr
+          TApp t1 t2 -> do
+            root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            af1 <- freshName
+            af2 <- freshName
+            let ahat1 = exists af1
+            let ahat2 = exists af2
+            let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
+            ctx' <- insertAt (exists ahat) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
+            omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
+            substed <- substCtx omega t2
+            r <- withCtx (const omega) $ branch (substed `instR` af2)
+            pure r
+          
+          _ -> do
+            root $ "[InstRError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
+            throwError err
+            -- otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
 
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- A is a subtype of B iff A is more polymorphic than B
@@ -544,8 +532,12 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     ctx <- getCtx
     root $ "[∀I]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
     alpha' <- freshName
-    let aty' = subst (A tann $ TVar alpha') alpha aty
-    (delta, _, _) <- splitCtx (Uni alpha') =<< withCtx (\g -> g <+ Uni alpha') (branch $ check e aty')
+    let alphat = A tann $ TVar alpha'
+    let aty' = subst alphat alpha aty
+    -- FIXME: We need to traverse e and substitute alpha for a fresh name in order to make type annotations
+    -- with type variables work. This is horribly ineffecient, but will do for now
+    let e'   = substTVarInExpr alphat alpha e
+    (delta, _, _) <- splitCtx (Uni alpha') =<< withCtx (\g -> g <+ Uni alpha') (branch $ check e' aty')
     pure delta
   
   -- ->I
@@ -575,7 +567,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     btysubst <- substCtx theta ty
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
   
-  -- sanityCheck :: Type a Poly -> TypingM a ()
   sanityCheck ty = do
     kctx <- getKCtx
     ctx <- getCtx
@@ -631,7 +622,9 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- Anno
   synthesize' (Ann e ty) = do
     root $ "[Anno]" <+> pretty e <+> ":" <+> pretty ty
-    _ <- branch $ check e ty
+    ctx <- getCtx
+    ty' <- substCtx ctx ty
+    _ <- branch $ check e ty'
     (ty, ) <$> getCtx
   
   -- ->L=>

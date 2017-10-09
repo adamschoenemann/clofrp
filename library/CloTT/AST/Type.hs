@@ -157,3 +157,22 @@ asMonotype (A a ty) =
     t1 :->: t2 -> (\x y -> A a (x :->: y)) <$> asMonotype t1 <*> asMonotype t2
     
     Forall _ _ -> Nothing
+
+subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
+subst x forY (A a inTy) = 
+  case inTy of
+    TFree y     | y == forY  -> x
+                | otherwise -> A a $ TFree y
+
+    TVar y      | y == forY  -> x
+                | otherwise -> A a $ TVar y
+
+    TExists y   | y == forY  -> x
+                | otherwise -> A a $ TExists y
+
+    Forall y t  | y == forY  -> A a $ Forall y t 
+                | otherwise -> A a $ Forall y (subst x forY t)
+
+    t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
+    
+    t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
