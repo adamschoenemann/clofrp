@@ -456,7 +456,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     cannotSubtype ty1 ty2
 
 check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
-check e@(A eann e') ty@(A tann ty') = check' e' ty' where
+check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- 1I (PrimI)
   check' (Prim p) _ 
     | ty' =%= inferPrim p = root "[PrimI]" *> getCtx
@@ -496,6 +496,16 @@ check e@(A eann e') ty@(A tann ty') = check' e' ty' where
     atysubst <- substCtx theta aty
     btysubst <- substCtx theta ty
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
+  
+  -- sanityCheck :: Type a Poly -> TypingM a ()
+  sanityCheck ty = do
+    kctx <- getKCtx
+    ctx <- getCtx
+    if wfContext kctx ctx
+      then if isWfTypeIn' ty kctx ctx
+           then pure ()
+           else otherErr (show $ pretty ty <+> "is not well-formed")
+      else otherErr (show $ pretty ctx <+> "is not well-formed")
   
   -- just introduce forall-quantified variables as existentials
   -- in the current context
@@ -546,7 +556,6 @@ synthesize expr@(A ann expr') = synthesize' expr' where
             notWfType ty
 
       Nothing -> root "[Var]" *> nameNotFound nm
-
   
   -- Anno
   synthesize' (Ann e ty) = do

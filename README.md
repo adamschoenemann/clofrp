@@ -11,12 +11,25 @@ For my master's thesis at ITU
 - Parse and desugar multi-param lambdas
 - Optimize type-checking in general
 - Make sure everything is sane by checking context-wellformedness more and checking that no impredicativeness takes place
+  - Note: Assigning an existential to a partially-applied type-constructor is fine
 - Add the actual CloTT primitives and rules
 - Support (co)-inductive and guarded types
 - Implement primitive recursion and guarded recursion 
 - Think of a module strategy
 - Integrate with Haskell
 - Write a demo (Pong or Pacman if crazy)
+- Expand type-aliases in type annotations
+- Parse (:) syntax for type annotations instead of `the (A) e`
+- application-synthesis leaves solved existentials in context (as it must to curried functions)
+  but this pollutes the context after the application. We'd probably need to treat application as
+  "spines" to fix this..
+- Clean up error messages
+  - Remove most uses of `Other` in favor of semantic variants
+  - Add ability to decorate errors
+  - Add source-location to errors
+  - Parsing and checking is pretty laissez faire with propagating and maintaining annotations, leading
+    to possibly incorrect source-locations in errors
+
 
 ## Type Aliases
 - Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:
@@ -28,4 +41,3 @@ For my master's thesis at ITU
       arguments
     - We can then substitute the arguments (after they've been expanded as well)for the bound variables in
       the alias definition and replace it directly into the AST.
-      

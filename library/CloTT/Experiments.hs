@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TypeApplications #-}
 
+
+module CloTT.Experiments where
 -- This is just to keep some experiments around
 
 -- Primitive recursion encoded with functors

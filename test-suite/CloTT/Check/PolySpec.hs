@@ -140,6 +140,7 @@ polySpec = do
       --    assertPartial $ expandAliases @() aliases ("Id" @@: ("Arr" @@: "Int"))
 
 
+  -- NOTE: Work in progress (for higher-kinded types)
   describe "inferVarKind" $ do
     it "should work for just the variable" $ do
       inferVarKind @() mempty "a" ("a") `shouldBe` Right Star
@@ -157,8 +158,8 @@ polySpec = do
       inferVarKind ["List" |-> (Star :->*: Star)] "a" ("List" @@: ("List" @@: "a")) `shouldBe` Right Star
     it "should work for a List" $ do
       inferVarKind ["List" |-> (Star :->*: Star)] "a" ("a" @@: "List") `shouldBe` Right ((Star :->*: Star) :->*: Star)
-    it "should work for a List Int" $ do
-      pending
+    -- it "should work for a List Int" $ do
+    --   pending
       -- inferVarKind ["Int" |-> Star, "List" |-> (Star :->*: Star)] "a" ("a" @@: "List" @@: "Int")
       --   `shouldBe` Right ((Star :->*: Star) :->*: Star :->*: Star)
   
@@ -435,7 +436,7 @@ polySpec = do
          runCheck ctx ("x" @-> "y" @-> E.true) ("Nat" @->: "Nat" @->: "Bool") `shouldYield` nil
          shouldFail $ runCheck ctx ("x" @-> "x" :: E.Expr ()) ("Nat") 
       do let ctx = nil <+ "x" .: "Nat"
-         runCheck (rd' ["Nat" |-> Star] ctx) ("y" @-> "x") ("Bool" @->: "Nat") `shouldYield` ctx
+         runCheck (rd' ["Nat" |-> Star, "Bool" |-> Star] ctx) ("y" @-> "x") ("Bool" @->: "Nat") `shouldYield` ctx
 
     it "checks lambdas with poly-types" $ do
       do let ctx = rd'' nil
@@ -600,6 +601,12 @@ polySpec = do
          runCheck (mk ctx) ("x" @@ E.nat 10 @@ E.true) ("Nat") `shouldYield` ctx
       do let ctx = nil <+ "x" .: (("Nat" @->: "Bool") @->: "Bool")
          runCheck (mk ctx) ("x" @@ ("y" @-> E.true)) ("Bool") `shouldYield` ctx
+    
+    it "rejects invalid foralls" $ do
+      let mk = rd' ["Bool" |-> Star, "Nat" |-> Star]
+      do let ctx = nil 
+         shouldFail $ runCheck (mk ctx) ("x" @-> "x") (E.forAll ["a","a"] $ "a" @->: "a") --  `shouldYield` (ctx)
+
 
   describe "kindOf'" $ do
     let kinds = [ ("List"  |-> Star :->*: Star)

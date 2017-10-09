@@ -282,13 +282,15 @@ isWfTypeIn' (A ann ty) kctx ctx =
     -- UFreeWF
     TFree x -> x `isMemberOf` kctx
     -- UVarWF
-    TVar x -> isJust $ ctxFind (freePred x) ctx
+    TVar x -> isJust $ ctxFind (varPred x) ctx
     -- EvarWF and SolvedEvarWF
     TExists alpha -> isJust $ ctxFind (expred $ alpha) ctx
     -- ArrowWF
     t1 :->: t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
     -- ForallWF
-    Forall x t -> isWfTypeIn' t kctx (ctx <+ Uni x)
+    Forall x t 
+      | Just _ <- ctxFind (varPred x) ctx -> False
+      | otherwise                         -> isWfTypeIn' t kctx (ctx <+ Uni x)
     -- TAppWF. FIXME Should check kinds correct kinds as well.
     TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
   where 
@@ -297,6 +299,6 @@ isWfTypeIn' (A ann ty) kctx ctx =
       alpha' := _   -> alpha == alpha' 
       _         -> False
 
-    freePred x = \case
+    varPred x = \case
       Uni x' -> x == x'
       _      -> False
