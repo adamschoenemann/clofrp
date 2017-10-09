@@ -291,8 +291,10 @@ isWfTypeIn' (A ann ty) kctx ctx =
     Forall x t 
       | Just _ <- ctxFind (varPred x) ctx -> False
       | otherwise                         -> isWfTypeIn' t kctx (ctx <+ Uni x)
-    -- TAppWF. FIXME Should check kinds correct kinds as well.
+    -- TAppWF. FIXME Should check correct kinds as well.
     TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
+    -- ClockWF
+    -- Clock kappa t
   where 
     expred alpha = \case
       Exists alpha' -> alpha == alpha'

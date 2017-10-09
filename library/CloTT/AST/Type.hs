@@ -38,6 +38,7 @@ data Type' :: * -> TySort -> * where
   TApp    :: Type a s    -> Type a s    -> Type' a s
   (:->:)  :: Type a s    -> Type a s    -> Type' a s
   Forall  :: Name        -> Type a Poly -> Type' a Poly
+  Clock   :: Name        -> Type a Poly -> Type' a Poly
 
 deriving instance Eq a       => Eq (Type' a s)
 deriving instance Data a     => Data (Type' a Poly)
