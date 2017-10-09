@@ -32,6 +32,8 @@ import Debug.Trace
 import Data.String (fromString)
 import Control.Applicative ((<|>))
 import Data.Text.Prettyprint.Doc
+import Data.List (break, find)
+import Data.Maybe (isJust)
 
 import CloTT.AST.Name
 import CloTT.Context
@@ -181,7 +183,7 @@ kindOf (A _ t) = do
   kctx <- getKCtx
   ctx <- getCtx
   case t of
-    TFree v -> maybe (notFound v) pure $ lookupKind v kctx
+    TFree v -> maybe (notFound v) pure $ query v kctx
     
     -- TODO: should look up kind in local kctx
     TVar v 
@@ -189,9 +191,14 @@ kindOf (A _ t) = do
       | otherwise            -> notFound v
 
     -- TODO: should look up kind in local kctx
-    TExists  v 
-      | ctx `containsEVar` v -> pure Star
-      | otherwise            -> notFound v
+    -- I have a hack in place, where, iff the existential is already assigned
+    -- I infer its kind from its assigned type
+    TExists  v -> do
+      case findAssigned v ctx of
+        Just mty -> withCtx (dropTil (v := mty)) $ kindOf (asPolytype mty)
+        Nothing 
+          | ctx `containsEVar` v -> pure Star
+          | otherwise            -> notFound v
 
     TApp t1 t2 -> do
       k1 <- kindOf t1
@@ -270,6 +277,37 @@ checkWfType ty@(A ann ty') = do
     varPred x = \case
       Uni x' -> x == x'
       _      -> False
+
+-- Check if a context is well-formed
+-- will completely ignore trCtx in the TypingM monad
+-- TODO: Also fail ctx such as [a := tau, a] or [a, a := tau]
+wfContext' :: forall a. TyCtx a -> TypingM a ()
+wfContext' (Gamma ctx) = foldrM fn [] ctx *> pure () where
+  fn :: CtxElem a -> [CtxElem a] -> TypingM a [CtxElem a]
+  fn el acc = do 
+    _ <- withCtx (const $ Gamma acc) $ checkIt el 
+    pure (el : acc)
+
+  elem' f xs = isJust $ find (\x -> f (unann x)) xs
+
+  checkIt el = case el of
+    Uni nm          -> notInDom nm el
+    Exists nm       -> notInDom nm el
+    nm `HasType` ty -> notInDom nm el *> checkWfType (asPolytype ty)
+    nm := ty        -> notInDom nm el *> checkWfType (asPolytype ty)
+    Marker nm       -> do 
+      _ <- notInDom nm el 
+      Gamma ctx <- getCtx
+      if ((\x -> Marker nm == x) `elem'` ctx)
+        then notWfContext (Marker nm) 
+        else pure ()
+
+  -- TODO: fix this to account for HasType constructor as well
+  notInDom nm el = do
+    Gamma ctx <- getCtx
+    if (\x -> Uni nm == x || Exists nm == x) `elem'` ctx
+      then notWfContext el
+      else pure ()
 
 validType :: KindCtx a -> Type a Poly -> TypingM a ()
 validType kctx t = do
@@ -582,16 +620,11 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   synthesize' (Var nm) = do
     ctx <- getCtx
     fctx <- getFCtx
-    kctx <- getKCtx
     case (nm `hasTypeInCtx` ctx <|> nm `hasTypeInFCtx` fctx) of
-      Just ty 
-        | (ty `isWfTypeIn'` kctx) ctx -> do 
-            root $ "[Var]" <+> pretty expr <+> "=>" <+> pretty ty
-            pure (ty, ctx)
-        | otherwise -> do
-            root $ "[Var]" <+> pretty nm <+> ":" <+> pretty ty <+> "is not wellformed"
-                   <+> "in kctx: " <+> pretty kctx <+> softline <> "in ctx:" <+> pretty ctx
-            notWfType ty
+      Just ty -> do
+        root $ "[Var]" <+> pretty expr <+> "=>" <+> pretty ty
+        _ <- checkWfType ty
+        pure (ty, ctx)
 
       Nothing -> root "[Var]" *> nameNotFound nm
   

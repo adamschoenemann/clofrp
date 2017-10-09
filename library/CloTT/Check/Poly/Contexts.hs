@@ -20,6 +20,7 @@ import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 import Data.List (break, find)
 import Data.Maybe (isJust)
+import Data.Foldable (foldrM)
 
 import CloTT.Check.Poly.Destr
 import CloTT.AST.Parsed hiding (exists)
@@ -194,7 +195,6 @@ isInKContext :: Name -> KindCtx a -> Bool
 isInKContext = isMemberOf
 
 
-
 findMap :: (a -> Maybe b) -> [a] -> Maybe b
 findMap fn = foldr fun Nothing where
   fun x acc = 
@@ -220,9 +220,6 @@ hasTypeInCtx nm (Gamma xs) = findMap fn xs where
 
 hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a Poly)
 hasTypeInFCtx nm (FreeCtx m) = M.lookup nm m
-
-lookupKind :: Name -> KindCtx a -> Maybe (Kind)
-lookupKind nm (KindCtx m) = M.lookup nm m
 
 -- | drop until an element `el` is encountered in the context. Also drops `el`
 dropTil :: CtxElem a -> TyCtx a -> TyCtx a
@@ -271,6 +268,7 @@ insertAt' at insertee into = do
   pure $ l <++ insertee <++ r
 
 -- Check if a context is well-formed
+-- DEPRECATE
 wfContext :: forall a. KindCtx a -> TyCtx a -> Bool
 wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
   fn :: CtxElem a -> Maybe [CtxElem a] -> Maybe [CtxElem a]
@@ -285,6 +283,8 @@ wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
     Marker nm       -> notInDom nm && not ((\x -> Marker nm == x) `elem'` acc)
     where
       notInDom nm = not $ (\x -> Uni nm == x || Exists nm == x) `elem'` acc
+
+
 
 containsEVar :: TyCtx a -> Name -> Bool
 containsEVar ctx alpha = isJust $ ctxFind expred ctx where

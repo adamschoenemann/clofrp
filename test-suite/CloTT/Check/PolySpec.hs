@@ -166,41 +166,44 @@ polySpec = do
   --     --   `shouldBe` Right ((Star :->*: Star) :->*: Star :->*: Star)
   
   describe "wfContext" $ do
+    let runWfContext ks ctx = 
+          runTypingM0 (wfContext' ctx) (mempty {trKinds = ks, trCtx = ctx})
+
     specify "nil is well-formed" $ do
-      wfContext mempty nil `shouldBe` True
+      runWfContext mempty nil `shouldYield` ()
     specify "nil <+ a is well-formed" $ do
-      wfContext mempty (nil <+ uni "a") `shouldBe` True
-      wfContext mempty (nil <+ exists "a") `shouldBe` True
+      runWfContext mempty (nil <+ uni "a") `shouldYield` ()
+      runWfContext mempty (nil <+ exists "a") `shouldYield` ()
     specify "nil <+ a := ty is well-formed" $ do
-      wfContext stdkinds (nil <+ "a" := "Unit") `shouldBe` True
-      wfContext mempty (nil <+ "a" := "Unit") `shouldBe` False
+      runWfContext stdkinds (nil <+ "a" := "Unit") `shouldYield` ()
+      shouldFail $ runWfContext mempty (nil <+ "a" := "Unit")
     specify "nil <+ a : ty is well-formed" $ do
-      wfContext stdkinds (nil <+ "a" .: "Unit") `shouldBe` True
-      wfContext mempty (nil <+ "a" .: "Unit") `shouldBe` False
+      runWfContext stdkinds (nil <+ "a" .: "Unit") `shouldYield` ()
+      shouldFail $ runWfContext mempty (nil <+ "a" .: "Unit")
     specify "nil <+ a <+ x : a is well-formed" $ do
-      wfContext mempty (nil <+ uni "a" <+ "x" .: "a") `shouldBe` True
+      runWfContext mempty (nil <+ uni "a" <+ "x" .: "a") `shouldYield` ()
     specify "nil <+ ^a <+ x : ^a is well-formed" $ do
-      wfContext mempty (nil <+ exists "a" <+ "x" .: E.exists "a") `shouldBe` True
+      runWfContext mempty (nil <+ exists "a" <+ "x" .: E.exists "a") `shouldYield` ()
     specify "nil <+ ^a <+ ^b = ^a is well-formed" $ do
-      wfContext mempty (nil <+ exists "a" <+ "b" := E.exists "a") `shouldBe` True
+      runWfContext mempty (nil <+ exists "a" <+ "b" := E.exists "a") `shouldYield` ()
     specify "`nil <+ ^a <+ ^b = Either Unit <+ ^c = ∃b ∃a` is well-formed" $ do
       let Just cass = E.asMonotype (E.exists "b" @@: E.exists "a")
       let Just eapp = E.asMonotype ("Either" @@: "Unit")
       let kctx = ["Unit" |-> Star, "Either" |-> Star :->*: Star :->*: Star]
-      wfContext kctx (nil <+ exists "a" <+ "b" := eapp <+ "c" := cass) `shouldBe` True
+      runWfContext kctx (nil <+ exists "a" <+ "b" := eapp <+ "c" := cass) `shouldYield` ()
 
     specify "nil <+ a <+ a is not well-formed" $ do
-      wfContext mempty (nil <+ exists "a" <+ exists "a") `shouldBe` False
-      wfContext mempty (nil <+ exists "a" <+ uni "a") `shouldBe` False
-      wfContext mempty (nil <+ uni "a" <+ exists "a") `shouldBe` False
-      wfContext mempty (nil <+ uni "a" <+ uni "a") `shouldBe` False
+      shouldFail $ runWfContext mempty (nil <+ exists "a" <+ exists "a")
+      shouldFail $ runWfContext mempty (nil <+ exists "a" <+ uni "a")
+      shouldFail $ runWfContext mempty (nil <+ uni "a" <+ exists "a")
+      shouldFail $ runWfContext mempty (nil <+ uni "a" <+ uni "a")
     specify "nil <+ a <+ a : ty is not well-formed" $ do
-      wfContext mempty (nil <+ exists "a" <+ "a" .: "Unit") `shouldBe` False
-      wfContext mempty (nil <+ uni "a" <+ "a" .: "Unit") `shouldBe` False
+      shouldFail $ runWfContext mempty (nil <+ exists "a" <+ "a" .: "Unit")
+      shouldFail $ runWfContext mempty (nil <+ uni "a" <+ "a" .: "Unit")
     specify "nil <+ ^a = ^b is not well-formed" $ do
-      wfContext mempty (nil <+ "a" := E.exists "b") `shouldBe` False
+      shouldFail $ runWfContext mempty (nil <+ "a" := E.exists "b")
     specify "nil <+ ^a = b is not well-formed" $ do
-      wfContext mempty (nil <+ "a" := "b") `shouldBe` False
+      shouldFail $ runWfContext mempty (nil <+ "a" := "b")
 
   describe "<++" $ do
     it "should work" $ do

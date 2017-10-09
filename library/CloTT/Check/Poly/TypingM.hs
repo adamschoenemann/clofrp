@@ -81,6 +81,7 @@ data TyExcept a
   | CannotSynthesize (Expr a)
   | CannotAppSynthesize (Type a Poly) (Expr a)
   | NotWfType (Type a Poly)
+  | NotWfContext (CtxElem a)
   | PartialAliasApp (Alias a)
   | Other String
   deriving (Show, Eq)
@@ -94,6 +95,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     CannotSynthesize e       -> CannotSynthesize (unann e)
     CannotAppSynthesize ty e -> CannotAppSynthesize (unann ty) (unann e)
     NotWfType ty             -> NotWfType (unann ty)
+    NotWfContext el          -> NotWfContext (unann el)
     PartialAliasApp al       -> PartialAliasApp (unann al)
     Other s                  -> Other s
 
@@ -106,6 +108,7 @@ instance Pretty (TyExcept a) where
     CannotSynthesize e       -> "Cannot synthesize" <+> pretty e
     CannotAppSynthesize ty e -> "Cannot app_synthesize" <+> pretty ty <+> "•" <+> pretty e
     NotWfType ty             -> pretty ty <+> "is not well-formed"
+    NotWfContext el          -> "Context is not well-formed due to" <+> pretty el
     PartialAliasApp al       -> "Partial type-alias application of alias " <+> pretty al
     Other s                  -> "Other error:" <+> fromString s
 
@@ -131,6 +134,9 @@ nameNotFound nm = tyExcept $ NameNotFound nm
 
 notWfType :: Type a Poly -> TypingM a r
 notWfType ty = tyExcept $ NotWfType ty
+
+notWfContext :: CtxElem a -> TypingM a r
+notWfContext el = tyExcept $ NotWfContext el
 
 cannotSplit :: CtxElem a -> TyCtx a -> TypingM a r
 cannotSplit el ctx = tyExcept $ CannotSplit el ctx
