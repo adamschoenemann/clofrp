@@ -7,6 +7,8 @@ For my master's thesis at ITU
 
 ## TODO
 - Support higher-kinded types (should be not that hard)
+  - Infer kind of tvar syntactically
+  - Maintain the kind-info either in kind-ctx or annotate with kind in TyCtx
 - Check/infer lambdas with annotated type-params
 - Parse and desugar multi-param lambdas ✓
 - Syntax sugar for tuples/units/lists?

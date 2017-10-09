@@ -286,6 +286,19 @@ wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
     where
       notInDom nm = not $ (\x -> Uni nm == x || Exists nm == x) `elem'` acc
 
+containsEVar :: TyCtx a -> Name -> Bool
+containsEVar ctx alpha = isJust $ ctxFind expred ctx where
+    expred = \case
+      Exists alpha' -> alpha == alpha'
+      alpha' := _   -> alpha == alpha' 
+      _             -> False
+
+containsTVar :: TyCtx a -> Name -> Bool
+containsTVar ctx alpha = isJust $ ctxFind varPred ctx where
+    varPred = \case
+      Uni alpha' -> alpha == alpha'
+      _          -> False
+
 -- A type is wellformed
 -- this one, validType and kindOf should probably be merged somehow...
 -- DEPRECATED in favor of checkWfType
@@ -294,27 +307,19 @@ isWfTypeIn' (A ann ty) kctx ctx =
   -- trace ("isWfTypeIn'" ++ (show $ unann ty)) $
   case ty of
     -- UFreeWF
-    TFree x -> x `isMemberOf` kctx
+    TFree alpha -> alpha `isMemberOf` kctx
     -- UVarWF
-    TVar x -> isJust $ ctxFind (varPred x) ctx
+    TVar alpha -> ctx `containsTVar` alpha
     -- EvarWF and SolvedEvarWF
-    TExists alpha -> isJust $ ctxFind (expred $ alpha) ctx
+    TExists alpha -> ctx `containsEVar` alpha
     -- ArrowWF
     t1 :->: t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
     -- ForallWF
-    Forall x t 
-      | Just _ <- ctxFind (varPred x) ctx -> False
-      | otherwise                         -> isWfTypeIn' t kctx (ctx <+ Uni x)
+    Forall alpha t 
+      | ctx `containsTVar` alpha -> False
+      | otherwise                -> isWfTypeIn' t kctx (ctx <+ Uni alpha)
     -- TAppWF. FIXME Should check correct kinds as well.
     TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
     -- ClockWF
     -- Clock kappa t
-  where 
-    expred alpha = \case
-      Exists alpha' -> alpha == alpha'
-      alpha' := _   -> alpha == alpha' 
-      _         -> False
 
-    varPred x = \case
-      Uni x' -> x == x'
-      _      -> False

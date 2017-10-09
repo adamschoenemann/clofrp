@@ -179,14 +179,19 @@ insertAt at insertee = do
 kindOf :: Type a Poly -> TypingM a Kind
 kindOf (A _ t) = do
   kctx <- getKCtx
+  ctx <- getCtx
   case t of
     TFree v -> maybe (notFound v) pure $ lookupKind v kctx
     
-    -- should look up kind in local kctx
-    TVar  v -> maybe (notFound v) pure $ lookupKind v kctx
+    -- TODO: should look up kind in local kctx
+    TVar v 
+      | ctx `containsTVar` v -> pure Star
+      | otherwise            -> notFound v
 
-    -- should look up kind in local kctx
-    TExists  v -> maybe (notFound v) pure $ lookupKind v kctx
+    -- TODO: should look up kind in local kctx
+    TExists  v 
+      | ctx `containsEVar` v -> pure Star
+      | otherwise            -> notFound v
 
     TApp t1 t2 -> do
       k1 <- kindOf t1
@@ -207,31 +212,31 @@ kindOf (A _ t) = do
                      ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
     
     -- TODO: Infer kind of v instead of setting it to *
-    Forall v tau -> withKCtx (\g -> extend v Star g) $ kindOf tau
+    Forall v tau -> withCtx (\g -> g <+ Uni v) $ kindOf tau
   where
     notFound = nameNotFound
 
 -- A type is wellformed
 -- this one, validType and kindOf should probably be merged somehow...
 checkWfType :: Type a Poly -> TypingM a ()
-checkWfType (A ann ty) = do
+checkWfType ty@(A ann ty') = do
   kctx <- getKCtx
   ctx <- getCtx
-  case ty of
+  case ty' of
     -- UFreeWF
     TFree x
       | x `isMemberOf` kctx -> pure ()
-      | otherwise           -> nameNotFound x
+      | otherwise           -> notWfType ty
 
     -- UVarWF
     TVar x 
       | Just _ <- ctxFind (varPred x) ctx -> pure ()
-      | otherwise                         -> nameNotFound x
+      | otherwise                         -> notWfType ty
 
     -- EvarWF and SolvedEvarWF
     TExists alpha 
       | Just _ <- ctxFind (expred $ alpha) ctx -> pure ()
-      | otherwise                              -> nameNotFound alpha
+      | otherwise                              -> notWfType ty
 
     -- ArrowWF
     t1 :->: t2 -> do 
@@ -537,9 +542,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     kctx <- getKCtx
     ctx <- getCtx
     if wfContext kctx ctx
-      then if isWfTypeIn' ty kctx ctx
-           then pure ()
-           else otherErr (show $ pretty ty <+> "is not well-formed")
+      then checkWfType ty 
       else otherErr (show $ pretty ctx <+> "is not well-formed")
   
   -- just introduce forall-quantified variables as existentials

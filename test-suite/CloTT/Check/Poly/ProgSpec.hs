@@ -58,11 +58,11 @@ progSpec = do
       let prog = [unsafeProg|
         foo : forall a. a -> a.
         foo = \x -> x.
-        app : forall a b. (a -> b) -> a -> b.
-        app = \f -> \x -> f x.
-        data Unit = Unit.
-        bar : Unit.
-        bar = app foo Unit.
+        -- app : forall a b. (a -> b) -> a -> b.
+        -- app = \f -> \x -> f x.
+        -- data Unit = Unit.
+        -- bar : Unit.
+        -- bar = app foo Unit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 

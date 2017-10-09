@@ -617,37 +617,40 @@ polySpec = do
                 , ("a"     |-> Star)
                 , ("b"     |-> Star)
                 ]
-    let runKindOf ks ty =
-          let (r, _, _) = runTypingM0 (kindOf ty) (mempty {trKinds = ks} :: TypingRead ()) 
+    let runKindOf ks ctx ty =
+          let (r, _, _) = runTypingM0 (kindOf ty) (mempty {trKinds = ks, trCtx = ctx} :: TypingRead ()) 
           in  r
 
     it "looks up kinds" $ do
-      runKindOf kinds "Nat" `shouldBe` Right Star
+      runKindOf kinds mempty "Nat" `shouldBe` Right Star
 
     it "infers arrow types to be kind *" $ do
-      runKindOf kinds ("Nat" @->: "Nat") `shouldBe` Right Star
-      runKindOf kinds ("List" @@: "Nat" @->: "List" @@: "Nat") `shouldBe` Right Star
+      runKindOf kinds mempty ("Nat" @->: "Nat") `shouldBe` Right Star
+      runKindOf kinds mempty ("List" @@: "Nat" @->: "List" @@: "Nat") `shouldBe` Right Star
 
     it "fails when type not found in ctx" $ do
-      runKindOf [] "Nat" `shouldSatisfy` isLeft
+      runKindOf [] mempty "Nat" `shouldSatisfy` isLeft
     
+    let a = mempty <+ Uni "a"
+    let ab = mempty <+ Uni "a" <+ Uni "b"
     it "fails with partially applied types in arrows" $ do
-      runKindOf kinds ("List" @->: "a") `shouldSatisfy` isLeft
+      runKindOf kinds a ("List" @->: "a") `shouldSatisfy` isLeft
+      runKindOf kinds ab ("Tuple" @@: "a" @->: "b") `shouldSatisfy` isLeft
 
     it "infers lists" $ do
-      runKindOf kinds ("List" @@: "a") `shouldBe` Right Star
+      runKindOf kinds a ("List" @@: "a") `shouldBe` Right Star
 
     it "infers tuples (curried)" $ do
-      runKindOf kinds ("Tuple" @@: "a") `shouldBe` Right (Star :->*: Star)
+      runKindOf kinds a ("Tuple" @@: "a") `shouldBe` Right (Star :->*: Star)
 
     it "infers tuples" $ do
-      runKindOf kinds ("Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+      runKindOf kinds ab ("Tuple" @@: "a" @@: "b") `shouldBe` Right Star
 
     it "infers tuples of lists" $ do
-      runKindOf kinds ("Tuple" @@: ("List" @@: "a") @@: "b") `shouldBe` Right Star
+      runKindOf kinds ab ("Tuple" @@: ("List" @@: "a") @@: "b") `shouldBe` Right Star
 
     it "infers foralls" $ do
-      runKindOf kinds (E.forAll ["a"] $ "List" @@: "a") `shouldBe` Right Star
-      runKindOf kinds  (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
-      runKindOf kinds  (E.forAll ["a"] "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
-      runKindOf kinds  (E.forAll ["a"] "List" @@: "a" @->: "a") `shouldBe` Right Star
+      runKindOf kinds mempty (E.forAll ["a"] $ "List" @@: "a") `shouldBe` Right Star
+      runKindOf kinds mempty (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
+      runKindOf kinds mempty (E.forAll ["a"] $ "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
+      runKindOf kinds mempty (E.forAll ["a"] $ "List" @@: "a" @->: "a") `shouldBe` Right Star
