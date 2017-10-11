@@ -566,6 +566,22 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     markerName <- freshName
     cty <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty' clauses ty
     pure delta
+  
+  -- ClockAbs
+  check' (ClockAbs k body) (Clock k' t)
+    | k == k' = do
+        root "[ClockAbs]"
+        (k `isMemberOf`) <$> getCCtx >>= \case
+          True -> otherErr $ show $ pretty k <+> "is already in clock context"
+          _     -> do 
+            -- alpha rename
+            kappa <- freshName
+            let tsubst    = subst (A tann $ TVar kappa) k t
+            let bodysubst = substClockVarInExpr (A eann $ ClockVar kappa) k body
+            withCCtx (\g -> extend kappa () g) $ branch $ check bodysubst tsubst
+    | otherwise = do 
+        root "[ClockAbs]"
+        otherErr $ show $ "Clock" <+> pretty k <+> "must be named" <+> pretty k'
 
   -- Sub
   check' _ _ = do

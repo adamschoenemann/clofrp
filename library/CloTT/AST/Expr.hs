@@ -30,16 +30,17 @@ import CloTT.AST.Pat
 type Expr a = Annotated a (Expr' a)
 
 data Expr' a
-  = Var Name
-  | ClockVar Name
-  | TickVar Name
-  | Ann (Expr a) (Type a Poly)
-  | App (Expr a) (Expr a)
-  | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx. e OR λ(x : A). e
-  | TickAbs Name Name (Expr a) -- λ(α : κ). e
+  = Var Name -- a
+  | ClockVar Name -- [a]
+  | TickVar Name -- {a}
+  | Ann (Expr a) (Type a Poly) -- the τ a
+  | App (Expr a) (Expr a) -- e1 e2
+  | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx -> e OR λ(x : A) -> e
+  | TickAbs Name Name (Expr a) -- λ(α : κ) -> e
+  | ClockAbs Name (Expr a) -- /\κ -> e
   | Tuple (Expr a) (Expr a) -- not really used right now
-  | Case (Expr a) [(Pat a, Expr a)]
-  | Prim P.Prim
+  | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
+  | Prim P.Prim -- primitive (will probably just include numbers in the end)
  
 deriving instance Eq a       => Eq (Expr' a)
 deriving instance Data a     => Data (Expr' a)
@@ -58,7 +59,8 @@ prettyE' pars = \case
     let tyann = maybe "" (\t -> space <> ":" <+> pretty t) mty
     in  parensIf $ "\\" <> pretty nm <> tyann <+> "->" <+> prettyE False e
   
-  TickAbs nm kappa e -> "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
+  TickAbs  nm kappa e -> "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
+  ClockAbs kappa e -> "/\\" <> pretty kappa <+> "->" <+> pretty e
 
   Tuple e1 e2 -> parens (prettyE False e1 <> comma <+> prettyE False e2)
 
@@ -108,6 +110,7 @@ unannE' = \case
   App e1 e2 -> App (unannE e1) (unannE e2)
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannE e)
   TickAbs nm kappa e -> TickAbs nm kappa (unannE e)
+  ClockAbs kappa e -> ClockAbs kappa (unannE e)
   Tuple e1 e2 -> Tuple (unannE e1) (unannE e2)
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
   Prim p -> Prim p

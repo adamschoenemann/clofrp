@@ -17,6 +17,7 @@ import CloTT.ParserSpec
 import CloTT.QuasiQuoterSpec
 import CloTT.Check.PolySpec
 import CloTT.Check.Poly.ProgSpec
+import CloTT.Check.Poly.ClockSpec
 import CloTT.AST.PrettySpec
 
 
@@ -28,5 +29,6 @@ main = do
   decl <- testSpec "declarations" declSpec
   pretty <- testSpec "pretty" prettySpec
   checkProg <- testSpec "checkProg" progSpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, poly, decl, pretty, checkProg]
+  clocks <- testSpec "clockSpec" clockSpec
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, poly, decl, pretty, checkProg, clocks]
   Test.Tasty.defaultMain group

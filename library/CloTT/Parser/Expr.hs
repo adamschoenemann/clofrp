@@ -31,6 +31,14 @@ tuple = ann <*> parens ((\e1 e2 -> E.Tuple e1 e2) <$> expr <* comma <*> expr)
 lname :: Parser Name
 lname = UName <$> lidentifier
 
+clockabs :: Parser Expr
+clockabs = do
+  ps <- symbol "/\\" *> many1 param
+  bd <- reservedOp "->" *> expr
+  pure $ foldr (\(A.A ann kappa) acc -> A.A ann $ E.ClockAbs kappa acc) bd ps
+  where
+    param = ann <*> lname
+
 tickabs :: Parser Expr
 tickabs = do
   ps <- symbol "\\\\" *> many1 param
@@ -94,7 +102,7 @@ atom =   nat
      <|> parens expr
 
 expr :: Parser Expr
-expr = try tickabs <|> lam <|> buildExpressionParser table atom where
+expr = clockabs <|> try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
     [ [Infix spacef AssocLeft]
     ]
