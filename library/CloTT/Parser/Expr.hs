@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module CloTT.Parser.Expr where
 
@@ -11,6 +12,7 @@ import qualified CloTT.AST.Prim   as P
 import           CloTT.Parser.Lang
 import qualified CloTT.Parser.Type as T
 import           CloTT.AST.Name
+import           CloTT.Pretty ((<+>), pretty)
 
 type Expr = E.Expr SourcePos
 type Pat  = E.Pat  SourcePos
@@ -87,14 +89,34 @@ expr :: Parser Expr
 expr = try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
     [ [Infix spacef AssocLeft]
+    , [Postfix (try clockf)]
     ]
+
   spacef :: Parser (Expr -> Expr -> Expr)
   spacef =
     ws *> notFollowedBy (choice . map reservedOp $ opNames) *> app
        <?> "space application"
+
+  clockf :: Parser (Expr -> Expr)
+  clockf = do 
+    p <- getPosition
+    -- nasty hack to make it behave "infixl" ish 
+    nms <- many1 (ann <*> (symbol "[" *> lname <* symbol "]"))
+    pure (\e -> foldl (\acc (A.A ann nm) -> A.A ann $ E.ClockApp acc nm) e nms)
+
   app :: Parser (Expr -> Expr -> Expr)
   app = fn <$> getPosition where
-    fn p (A.A p1 e1) e2 = A.A p $ E.App (A.A p1 e1) e2
+    fn p e1 e2 = A.A p $ E.App e1 e2
+
+  -- capp :: Parser (Expr -> Expr -> Expr)
+  -- capp = do
+  --   p <- getPosition
+  --   pure fn >>= \case
+  --     Left err -> parseFail err
+  --     Right e  -> pure 
+  --   where
+  --     fn e1 (A.A _ (E.Var nm)) = A.A p $ E.ClockApp e1 (nm)
+  --     fn e1 e2                 = parserFail $ show $ "Expected" <+> pretty e2 <+> "to be a clock variable"
 
 parseExpr :: String -> Either ParseError Expr
 parseExpr = parse expr "parseExpr"

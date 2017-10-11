@@ -35,6 +35,7 @@ data Expr' a
   | App (Expr a) (Expr a)
   | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx. e OR λ(x : A). e
   | TickAbs Name Name (Expr a) -- λ(α : κ). e
+  | ClockApp (Expr a) Name -- e[κ]
   | Tuple (Expr a) (Expr a) -- not really used right now
   | Case (Expr a) [(Pat a, Expr a)]
   | Prim P.Prim
@@ -49,6 +50,7 @@ prettyE' pars = \case
   Var nm -> pretty nm
   Ann e t -> parensIf $ "the" <+> parens (pretty t) <+> prettyE False e
   App e1 e2 -> parensIf $ prettyE False e1 <+> prettyE True e2
+  ClockApp e1 kappa -> parensIf $ prettyE False e1 <+> brackets (pretty kappa)
 
   Lam nm mty e -> 
     let tyann = maybe "" (\t -> space <> ":" <+> pretty t) mty
@@ -95,6 +97,7 @@ unannE' = \case
   Var nm -> Var nm
   Ann e t -> Ann (unannE e) (unannT t)
   App e1 e2 -> App (unannE e1) (unannE e2)
+  ClockApp e1 kappa -> ClockApp (unannE e1) kappa
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannE e)
   TickAbs nm kappa e -> TickAbs nm kappa (unannE e)
   Tuple e1 e2 -> Tuple (unannE e1) (unannE e2)

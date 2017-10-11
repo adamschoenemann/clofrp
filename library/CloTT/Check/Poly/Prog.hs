@@ -20,7 +20,6 @@ import Data.Monoid
 import Data.Foldable
 import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
-import Debug.Trace
 import CloTT.Pretty hiding ((<>))
 
 import CloTT.Annotated (Annotated(..))
@@ -136,6 +135,7 @@ checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (a
         checkRecAl name t2
 
       Forall n t -> checkRecAl name t
+      Clock  n t -> checkRecAl name t
             
 
 
@@ -183,6 +183,11 @@ expandAliases als t =
         Forall n t1 -> 
           go t1 >>= \case
             Done t1' -> done $ A ann $ Forall n t1'
+            Ex nm _ -> wrong nm
+
+        Clock  n t1 -> 
+          go t1 >>= \case
+            Done t1' -> done $ A ann $ Clock n t1'
             Ex nm _ -> wrong nm
 
     (c1, c2) &&& fn = do
