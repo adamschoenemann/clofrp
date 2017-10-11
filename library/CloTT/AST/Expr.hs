@@ -87,7 +87,7 @@ instance IsString (Expr ()) where
     [] -> error "illegal empty name"
     xs 
       | length xs > 2, head xs == '[', last xs == ']' -> ClockVar . UName . tail . init $ xs
-      | length xs > 2, head xs == '<', last xs == '>' -> TickVar . UName . tail . init $ xs
+      | length xs > 2, head xs == '{', last xs == '}' -> TickVar . UName . tail . init $ xs
       | otherwise -> Var . UName $ xs
 
 instance Unann (Expr a) (Expr ()) where

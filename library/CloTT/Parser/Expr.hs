@@ -54,10 +54,10 @@ var :: Parser Expr
 var = ann <*> (E.Var . UName <$> identifier)
 
 tickvar :: Parser Expr
-tickvar = ann <*> (E.TickVar <$> between (symbol "<") (symbol ">") lname)
+tickvar = ann <*> (E.TickVar <$> braces lname)
 
 clockvar :: Parser Expr
-clockvar = ann <*> (E.ClockVar <$> between (symbol "[") (symbol "]") lname)
+clockvar = ann <*> (E.ClockVar <$> brackets lname)
 
 anno :: Parser Expr
 anno = ann <*> ((\t e -> E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)

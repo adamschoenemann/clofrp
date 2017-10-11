@@ -105,10 +105,10 @@ identp p = do
 
 reserved   = Tok.reserved   lexer -- parses a reserved name
 reservedOp = Tok.reservedOp lexer -- parses an operator
-parens     = Tok.parens     lexer -- parses surrounding parenthesis:
-                                    --   parens p
-                                    -- takes care of the parenthesis and
-                                    -- uses p to parse what's inside them
+parens     = Tok.parens     lexer -- parses surrounding parenthesis
+brackets   = Tok.brackets   lexer -- parses surrounding parenthesis
+braces     = Tok.braces     lexer -- parses surrounding parenthesis
+angles     = Tok.angles     lexer -- parses surrounding parenthesis
 integer    = Tok.integer    lexer -- parses an integer
 natural    = Tok.natural    lexer
 ws         = Tok.whiteSpace lexer -- parses whitespace
