@@ -53,6 +53,12 @@ lam = do
 var :: Parser Expr
 var = ann <*> (E.Var . UName <$> identifier)
 
+tickvar :: Parser Expr
+tickvar = ann <*> (E.TickVar <$> between (symbol "<") (symbol ">") lname)
+
+clockvar :: Parser Expr
+clockvar = ann <*> (E.ClockVar <$> between (symbol "[") (symbol "]") lname)
+
 anno :: Parser Expr
 anno = ann <*> ((\t e -> E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)
 
@@ -81,6 +87,8 @@ atom =   nat
      <|> bool
      <|> try tuple
      <|> var
+     <|> tickvar
+     <|> clockvar
      <|> anno
      <|> casep
      <|> parens expr
@@ -89,7 +97,6 @@ expr :: Parser Expr
 expr = try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
     [ [Infix spacef AssocLeft]
-    , [Postfix (try clockf)]
     ]
 
   spacef :: Parser (Expr -> Expr -> Expr)
@@ -97,26 +104,16 @@ expr = try tickabs <|> lam <|> buildExpressionParser table atom where
     ws *> notFollowedBy (choice . map reservedOp $ opNames) *> app
        <?> "space application"
 
-  clockf :: Parser (Expr -> Expr)
-  clockf = do 
-    p <- getPosition
-    -- nasty hack to make it behave "infixl" ish 
-    nms <- many1 (ann <*> (symbol "[" *> lname <* symbol "]"))
-    pure (\e -> foldl (\acc (A.A ann nm) -> A.A ann $ E.ClockApp acc nm) e nms)
+  -- clockf :: Parser (Expr -> Expr)
+  -- clockf = do 
+  --   p <- getPosition
+  --   -- nasty hack to make it behave "infixl" ish 
+  --   nms <- many1 (ann <*> (symbol "[" *> lname <* symbol "]"))
+  --   pure (\e -> foldl (\acc (A.A ann nm) -> A.A ann $ E.ClockApp acc nm) e nms)
 
   app :: Parser (Expr -> Expr -> Expr)
   app = fn <$> getPosition where
     fn p e1 e2 = A.A p $ E.App e1 e2
-
-  -- capp :: Parser (Expr -> Expr -> Expr)
-  -- capp = do
-  --   p <- getPosition
-  --   pure fn >>= \case
-  --     Left err -> parseFail err
-  --     Right e  -> pure 
-  --   where
-  --     fn e1 (A.A _ (E.Var nm)) = A.A p $ E.ClockApp e1 (nm)
-  --     fn e1 e2                 = parserFail $ show $ "Expected" <+> pretty e2 <+> "to be a clock variable"
 
 parseExpr :: String -> Either ParseError Expr
 parseExpr = parse expr "parseExpr"

@@ -161,10 +161,6 @@ debrjn = A () . TVar . DeBruijn
 tAbs :: (Name, Name) -> Expr () -> Expr ()
 tAbs (a, k) e = A () $ TickAbs a k e
 
-infixl 9 `capp`
-capp :: Expr () -> Name -> Expr ()
-capp e n = A () $ ClockApp e n
-
 infixr 2 @->
 infixr 2 @:->
 infixl 9 @@
@@ -232,6 +228,8 @@ substTVarInExpr new nm = go where
   go (A a e') = A a $ go' e'
   go' e' = case e' of
     Var _ -> e'
+    ClockVar _ -> e'
+    TickVar _ -> e'
     Ann e t -> Ann e (subst new nm t)
     App e1 e2 -> App (go e1) (go e2)
     Lam v mty e -> Lam v (subst new nm <$> mty) (go e)

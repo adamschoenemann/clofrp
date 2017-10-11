@@ -70,19 +70,19 @@ parserSpec = do
 
   it "success: clock application (1)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "e1 [k]"
-       e `shouldBe` "e1" `E.capp` "k"
+       e `shouldBe` "e1" @@ "[k]"
   it "success: clock application (2)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "(e1 [k1]) [k2]"
-       e `shouldBe` "e1" `E.capp` "k1" `E.capp` "k2"
+       e `shouldBe` "e1" @@ "[k1]" @@ "[k2]"
   it "success: clock application (3)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "e1 [k1] [k2]"
-       e `shouldBe` "e1" `E.capp` "k1" `E.capp` "k2"
+       e `shouldBe` "e1" @@ "[k1]" @@ "[k2]"
   it "success: clock application (4)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "(e1 [k1] [k2]) e2"
-       e `shouldBe` ("e1" `E.capp` "k1" `E.capp` "k2") @@ "e2"
+       e `shouldBe` ("e1" @@ "[k1]" @@ "[k2]") @@ "e2"
   it "success: clock application (5)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "(e1 e2 [k2]) e2"
-       e `shouldBe` ("e1" @@ "e2" `E.capp` "k2") @@ "e2"
+       e `shouldBe` ("e1" @@ "e2" @@ "[k2]") @@ "e2"
   
   it "parses annotations" $ do
     case E.unannE <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of

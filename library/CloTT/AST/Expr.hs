@@ -31,11 +31,12 @@ type Expr a = Annotated a (Expr' a)
 
 data Expr' a
   = Var Name
+  | ClockVar Name
+  | TickVar Name
   | Ann (Expr a) (Type a Poly)
   | App (Expr a) (Expr a)
   | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx. e OR λ(x : A). e
   | TickAbs Name Name (Expr a) -- λ(α : κ). e
-  | ClockApp (Expr a) Name -- e[κ]
   | Tuple (Expr a) (Expr a) -- not really used right now
   | Case (Expr a) [(Pat a, Expr a)]
   | Prim P.Prim
@@ -48,9 +49,10 @@ deriving instance Typeable a => Typeable (Expr' a)
 prettyE' :: Bool -> Expr' a -> Doc ann
 prettyE' pars = \case 
   Var nm -> pretty nm
+  ClockVar nm -> brackets $ pretty nm
+  TickVar  nm -> "<" <> pretty nm <> ">"
   Ann e t -> parensIf $ "the" <+> parens (pretty t) <+> prettyE False e
   App e1 e2 -> parensIf $ prettyE False e1 <+> prettyE True e2
-  ClockApp e1 kappa -> parensIf $ prettyE False e1 <+> brackets (pretty kappa)
 
   Lam nm mty e -> 
     let tyann = maybe "" (\t -> space <> ":" <+> pretty t) mty
@@ -81,7 +83,12 @@ instance Show (Expr' a) where
   show = show . pretty
 
 instance IsString (Expr ()) where
-  fromString = A () . Var . UName
+  fromString input = A () $ case input of
+    [] -> error "illegal empty name"
+    xs 
+      | length xs > 2, head xs == '[', last xs == ']' -> ClockVar . UName . tail . init $ xs
+      | length xs > 2, head xs == '<', last xs == '>' -> TickVar . UName . tail . init $ xs
+      | otherwise -> Var . UName $ xs
 
 instance Unann (Expr a) (Expr ()) where
   unann = unannE
@@ -94,10 +101,11 @@ instance Unann (Expr' a) (Expr' ()) where
 
 unannE' :: Expr' a -> Expr' ()
 unannE' = \case
-  Var nm -> Var nm
+  Var nm      -> Var nm
+  ClockVar nm -> ClockVar nm
+  TickVar nm  -> TickVar nm
   Ann e t -> Ann (unannE e) (unannT t)
   App e1 e2 -> App (unannE e1) (unannE e2)
-  ClockApp e1 kappa -> ClockApp (unannE e1) kappa
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannE e)
   TickAbs nm kappa e -> TickAbs nm kappa (unannE e)
   Tuple e1 e2 -> Tuple (unannE e1) (unannE e2)
