@@ -167,7 +167,7 @@ polySpec = do
   
   describe "wfContext" $ do
     let runWfContext ks ctx = 
-          runTypingM0 (wfContext' ctx) (mempty {trKinds = ks, trCtx = ctx})
+          runTypingM0 (wfContext ctx) (mempty {trKinds = ks, trCtx = ctx})
 
     specify "nil is well-formed" $ do
       runWfContext mempty nil `shouldYield` ()

@@ -18,15 +18,12 @@
 module CloTT.AST.Pat where
 
 import Data.String (IsString(..))
-import qualified Data.Set as S
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
-import qualified CloTT.AST.Prim as P
 import Data.Text.Prettyprint.Doc
 
 import CloTT.Annotated 
 import CloTT.AST.Name
-import CloTT.AST.Type
 type Pat a = Annotated a (Pat' a)
 
 data Pat' a  

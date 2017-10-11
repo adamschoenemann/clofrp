@@ -30,8 +30,16 @@ forAll = p <?> "forall" where
     foldrM fn ty nms
   fn nm t = (\p -> A.A p $ E.Forall nm t) <$> getPosition
 
+clocks :: Parser Type
+clocks = p <?> "clocks" where
+  p = do
+    nms <- reserved "clocks" *> (map UName <$> many1 lidentifier) <* reservedOp "."
+    ty <- typep
+    foldrM fn ty nms
+  fn nm t = (\p -> A.A p $ E.Clock nm t) <$> getPosition
+
 typeexpr :: Parser Type
-typeexpr = tvar <|> free <|> forAll <|> parens typep
+typeexpr = tvar <|> free <|> forAll <|> clocks <|> parens typep
 
 typep :: Parser Type
 typep = buildExpressionParser table typeexpr where

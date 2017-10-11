@@ -125,6 +125,18 @@ parserSpec = do
        e `shouldBe` E.forAll ["a"] ((E.forAll ["b"] $ "a" @->: "b") @->: "b")
     do let Right e = E.unannT <$> parse P.typep "" "forall a. forall b. a -> b -> b"
        e `shouldBe` E.forAll ["a"] (E.forAll ["b"] $ "a" @->: "b" @->: "b")
+
+  it "parses clock quantifiers" $ do
+    do let Right e = E.unannT <$> parse P.typep "" "clocks a. a"
+       e `shouldBe` E.clocks ["a"] "a"
+    do let Right e = E.unannT <$> parse P.typep "" "clocks a. a -> Int"
+       e `shouldBe` E.clocks ["a"] ("a" @->: "Int")
+    do let Right e = E.unannT <$> parse P.typep "" "clocks a b. (a -> b) -> (b -> a) -> Iso a b"
+       e `shouldBe` E.clocks ["a", "b"] (("a" @->: "b") @->: ("b" @->: "a") @->: "Iso" @@: "a" @@: "b")
+    do let Right e = E.unannT <$> parse P.typep "" "clocks a. (clocks b. a -> b) -> b"
+       e `shouldBe` E.clocks ["a"] ((E.clocks ["b"] $ "a" @->: "b") @->: "b")
+    do let Right e = E.unannT <$> parse P.typep "" "clocks a. clocks b. a -> b -> b"
+       e `shouldBe` E.clocks ["a"] (E.clocks ["b"] $ "a" @->: "b" @->: "b")
   
   it "parses typevars" $ do
     do let Right e = E.unannT <$> parse P.tvar "" "a"

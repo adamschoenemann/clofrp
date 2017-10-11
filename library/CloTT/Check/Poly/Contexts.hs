@@ -20,7 +20,6 @@ import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 import Data.List (break, find)
 import Data.Maybe (isJust)
-import Data.Foldable (foldrM)
 
 import CloTT.Check.Poly.Destr
 import CloTT.AST.Parsed hiding (exists)
@@ -213,6 +212,10 @@ findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
   fn (nm' := ty) | nm == nm' = pure ty
   fn _                       = Nothing
 
+isAssigned :: Name -> TyCtx a -> Bool
+isAssigned = isJust .*. findAssigned where
+  (.*.) = (.) . (.)
+
 hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a Poly)
 hasTypeInCtx nm (Gamma xs) = findMap fn xs where
   fn (nm' `HasType` ty) | nm == nm' = pure ty
@@ -255,25 +258,6 @@ insertAt' at insertee into = do
   (l, _, r) <- splitCtx' at into
   pure $ l <++ insertee <++ r
 
--- Check if a context is well-formed
--- DEPRECATE
-wfContext :: forall a. KindCtx a -> TyCtx a -> Bool
-wfContext kctx (Gamma ctx) = isJust $ foldr fn (Just []) ctx where
-  fn :: CtxElem a -> Maybe [CtxElem a] -> Maybe [CtxElem a]
-  fn el accM = accM >>= (\acc -> if checkIt acc el then Just (el : acc) else Nothing)
-
-  elem' f xs = isJust $ find (\x -> f (unann x)) xs
-  checkIt acc = \case
-    Uni nm          -> notInDom nm
-    Exists nm       -> notInDom nm
-    nm `HasType` ty -> notInDom nm && ((asPolytype ty `isWfTypeIn'` kctx) (Gamma acc))
-    nm := ty        -> notInDom nm && ((asPolytype ty `isWfTypeIn'` kctx) (Gamma acc))
-    Marker nm       -> notInDom nm && not ((\x -> Marker nm == x) `elem'` acc)
-    where
-      notInDom nm = not $ (\x -> Uni nm == x || Exists nm == x) `elem'` acc
-
-
-
 containsEVar :: TyCtx a -> Name -> Bool
 containsEVar ctx alpha = isJust $ ctxFind expred ctx where
     expred = \case
@@ -286,28 +270,3 @@ containsTVar ctx alpha = isJust $ ctxFind varPred ctx where
     varPred = \case
       Uni alpha' -> alpha == alpha'
       _          -> False
-
--- A type is wellformed
--- this one, validType and kindOf should probably be merged somehow...
--- DEPRECATED in favor of checkWfType
-isWfTypeIn' :: Type a Poly -> KindCtx a -> TyCtx a -> Bool
-isWfTypeIn' (A ann ty) kctx ctx =
-  -- trace ("isWfTypeIn'" ++ (show $ unann ty)) $
-  case ty of
-    -- UFreeWF
-    TFree alpha -> alpha `isMemberOf` kctx
-    -- UVarWF
-    TVar alpha -> ctx `containsTVar` alpha
-    -- EvarWF and SolvedEvarWF
-    TExists alpha -> ctx `containsEVar` alpha
-    -- ArrowWF
-    t1 :->: t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
-    -- ForallWF
-    Forall alpha t 
-      | ctx `containsTVar` alpha -> False
-      | otherwise                -> isWfTypeIn' t kctx (ctx <+ Uni alpha)
-    -- TAppWF. FIXME Should check correct kinds as well.
-    TApp t1 t2 -> isWfTypeIn' t1 kctx ctx && isWfTypeIn' t2 kctx ctx
-    -- ClockWF
-    -- Clock kappa t
-

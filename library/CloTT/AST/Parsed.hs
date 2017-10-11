@@ -142,6 +142,10 @@ forAll :: [String] -> Type () Poly -> Type () Poly
 forAll nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Forall nm acc
 
+clocks :: [String] -> Type () Poly -> Type () Poly
+clocks nms t = foldr fn t $ map UName nms where
+  fn nm acc = A () $ Clock nm acc
+
 exists :: Name -> Type () a
 exists nm = A () $ TExists nm
 
@@ -223,11 +227,11 @@ substTVarInExpr :: Type a Poly -> Name -> Expr a -> Expr a
 substTVarInExpr new nm = go where
   go (A a e') = A a $ go' e'
   go' e' = case e' of
-    Var nm -> e'
+    Var _ -> e'
     Ann e t -> Ann e (subst new nm t)
     App e1 e2 -> App (go e1) (go e2)
-    Lam nm mty e -> Lam nm (subst new nm <$> mty) (go e)
-    TickAbs nm kappa e -> TickAbs nm kappa (go e)
+    Lam v mty e -> Lam v (subst new nm <$> mty) (go e)
+    TickAbs v kappa e -> TickAbs v kappa (go e)
     Tuple e1 e2 -> Tuple (go e1) (go e2)
     Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
     Prim p -> e'

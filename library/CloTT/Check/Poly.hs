@@ -33,7 +33,7 @@ import Data.String (fromString)
 import Control.Applicative ((<|>))
 import Control.Monad.Except (catchError, throwError)
 import Data.Text.Prettyprint.Doc
-import Data.List (break, find)
+import Data.List (find)
 import Data.Maybe (isJust)
 
 import CloTT.AST.Name
@@ -87,6 +87,10 @@ substCtx' ctx (A a ty) =
     Forall x t -> do
       t' <- substCtx' ctx t
       pure $ A a $ Forall x t'
+
+    Clock x t -> do
+      t' <- substCtx' ctx t
+      pure $ A a $ Clock x t'
 
 substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
 substCtx ctx ty = 
@@ -189,8 +193,10 @@ kindOf (A _ t) = do
         (k1', k2')   -> otherErr $ "Both operands in arrow types must have kind *, but had " 
                      ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
     
-    -- TODO: Infer kind of v instead of setting it to *
     Forall v tau -> withCtx (\g -> g <+ Uni v) $ kindOf tau
+
+    -- TODO: what to do with v here?
+    Clock  v tau -> kindOf tau
   where
     notFound = nameNotFound
 
@@ -252,8 +258,8 @@ checkWfType ty@(A ann ty') = do
 -- Check if a context is well-formed
 -- will completely ignore trCtx in the TypingM monad
 -- TODO: Also fail ctx such as [a := tau, a] or [a, a := tau]
-wfContext' :: forall a. TyCtx a -> TypingM a ()
-wfContext' (Gamma ctx) = foldrM fn [] ctx *> pure () where
+wfContext :: forall a. TyCtx a -> TypingM a ()
+wfContext (Gamma elems) = foldrM fn [] elems *> pure () where
   fn :: CtxElem a -> [CtxElem a] -> TypingM a [CtxElem a]
   fn el acc = do 
     _ <- withCtx (const $ Gamma acc) $ checkIt el 
@@ -261,6 +267,7 @@ wfContext' (Gamma ctx) = foldrM fn [] ctx *> pure () where
 
   elem' f xs = isJust $ find (\x -> f (unann x)) xs
 
+  -- this one refers to ctx through getCtx
   checkIt el = case el of
     Uni nm          -> notInDom nm el
     Exists nm       -> notInDom nm el
@@ -285,21 +292,24 @@ validType kctx t = do
   k <- withKCtx (const kctx) $ kindOf t
   case k of
     Star -> pure ()
-    k    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
+    _    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
 
 -- assign an unsolved variable to a type in a context
 -- TODO: Optimize 
 assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
-  Gamma ctx <- getCtx
-  case foldr fn ([], False) ctx of
-    (xs, True) -> do
-      _ <- wfContext' (Gamma xs)
-      pure (Gamma xs)
-    (xs, False)                   -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything" 
-  where
-    fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
-    fn x (xs, b)                        = (x : xs, b)
+  ctx@(Gamma xs) <- getCtx
+  if isAssigned nm ctx
+    then otherErr $ show $ pretty nm <+> "is already assigned"
+    else 
+      case foldr fn ([], False) xs of
+        (xs', True) -> do
+          _ <- wfContext (Gamma xs')
+          pure (Gamma xs')
+        (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything" 
+      where
+        fn (Exists nm') (xs, _) | nm == nm' = (nm := ty : xs, True)
+        fn x (xs, b)                        = (x : xs, b)
 
 asMonotypeTM :: Type a s -> TypingM a (Type a Mono)
 asMonotypeTM = maybe (otherErr "asMonotype") pure . asMonotype
@@ -536,8 +546,8 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     let aty' = subst alphat alpha aty
     -- FIXME: We need to traverse e and substitute alpha for a fresh name in order to make type annotations
     -- with type variables work. This is horribly ineffecient, but will do for now
-    let e'   = substTVarInExpr alphat alpha e
-    (delta, _, _) <- splitCtx (Uni alpha') =<< withCtx (\g -> g <+ Uni alpha') (branch $ check e' aty')
+    let esubst = substTVarInExpr alphat alpha e
+    (delta, _, _) <- splitCtx (Uni alpha') =<< withCtx (\g -> g <+ Uni alpha') (branch $ check esubst aty')
     pure delta
   
   -- ->I
@@ -549,9 +559,9 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     pure delta
   
   -- Case<=
-  check' (Case e' clauses) _ = do
+  check' (Case on clauses) _ = do
     root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
-    (pty, delta) <- branch $ synthesize e'
+    (pty, delta) <- branch $ synthesize on
     (pty', delta') <- withCtx (const delta) $ branch $ intros pty
     markerName <- freshName
     cty <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty' clauses ty
@@ -567,25 +577,23 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     btysubst <- substCtx theta ty
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
   
-  sanityCheck ty = do
-    kctx <- getKCtx
+  sanityCheck ty0 = do
     ctx <- getCtx
-    if wfContext kctx ctx
-      then checkWfType ty 
-      else otherErr (show $ pretty ctx <+> "is not well-formed")
+    _ <- wfContext ctx
+    checkWfType ty0
   
   -- just introduce forall-quantified variables as existentials
   -- in the current context
   intros :: Type a Poly -> TypingM a (Type a Poly, TyCtx a)
-  intros ty@(A ann (Forall nm t)) = do
-    root $ "[Intros]" <+> pretty ty
+  intros ty0@(A ann (Forall nm t)) = do
+    root $ "[Intros]" <+> pretty ty0
     ahat <- freshName
     let t' = subst (A ann $ TExists ahat) nm t
     withCtx (\g -> g <+ Exists ahat) $ branch $ intros t'
-  intros ty = do
-    root $ "[Intros]" <+> pretty ty
+  intros ty0 = do
+    root $ "[Intros]" <+> pretty ty0
     ctx <- getCtx
-    pure (ty, ctx)
+    pure (ty0, ctx)
 
   -- Could be expressed as a fold, but this is a bit simpler methinks.
   -- Checks some clauses against an expected type.
@@ -692,11 +700,11 @@ checkPat pat@(A ann p) ty = do
 -- Take a destructor and "existentialize it" - replace its bound type-variables
 -- with fresh existentials
 existentialize :: forall a. a -> Destr a -> TypingM a (TyCtx a, Destr a)
-existentialize ann d = do
-  (nms, d') <- foldrM folder ([], d) (bound d)
+existentialize ann destr = do
+  (nms, destr') <- foldrM folder ([], destr) (bound destr)
   ctx <- getCtx
   let ctx' = foldr (\n g -> g <+ Exists n) ctx nms
-  pure (ctx', d')
+  pure (ctx', destr')
   where
     folder b (nms, d@(Destr {typ, args})) = do
       b' <- freshName

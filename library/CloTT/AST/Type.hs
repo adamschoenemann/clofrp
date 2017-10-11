@@ -24,7 +24,6 @@ import Data.String (IsString(..))
 import qualified Data.Set as S
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
-import qualified CloTT.AST.Prim as P
 import Data.Text.Prettyprint.Doc
 
 type Type a s = Annotated a (Type' a s)
@@ -56,6 +55,11 @@ prettyT' pars = \case
     let (ns, t') = collect t
         bound = hsep $ map (fromString . show) (n:ns)
     in  parensIf $ "∀" <> bound <> dot <+> prettyT False t'
+
+  Clock n t -> 
+    let (ns, t') = collect t
+        bound = hsep $ map (fromString . show) (n:ns)
+    in  parensIf $ "∇" <> bound <> dot <+> prettyT False t'
   where
     collect :: Type a s -> ([Name], Type a s)
     collect (A _ (Forall n t)) = 
@@ -95,6 +99,7 @@ unannT' = \case
   t1 `TApp` t2  -> unannT t1 `TApp` unannT t2
   t1 :->: t2    -> unannT t1 :->: unannT t2
   Forall ts tau -> Forall ts (unannT tau)
+  Clock ts tau  -> Clock  ts (unannT tau)
 
 deriving instance Show a => Show (Type' a s)
 
@@ -130,6 +135,7 @@ freeVars (A _ ty) =
     TApp x y -> freeVars x `S.union` freeVars y
     x :->: y  -> freeVars x `S.union` freeVars y
     Forall n t -> freeVars t `S.difference` S.singleton n
+    Clock  n t -> freeVars t `S.difference` S.singleton n
 
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
@@ -143,6 +149,7 @@ asPolytype (A a ty) = A a $
     t1 `TApp` t2 -> asPolytype t1 `TApp` asPolytype t2
     t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
     Forall x t   -> Forall x (asPolytype t) 
+    Clock  x t   -> Clock  x (asPolytype t) 
 
 asMonotype :: Type a s -> Maybe (Type a Mono)
 asMonotype (A a ty) = 
@@ -158,6 +165,8 @@ asMonotype (A a ty) =
     
     Forall _ _ -> Nothing
 
+    Clock  _ _ -> Nothing
+
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
   case inTy of
@@ -170,8 +179,11 @@ subst x forY (A a inTy) =
     TExists y   | y == forY  -> x
                 | otherwise -> A a $ TExists y
 
-    Forall y t  | y == forY  -> A a $ Forall y t 
+    Forall y t  | y == forY -> A a $ Forall y t 
                 | otherwise -> A a $ Forall y (subst x forY t)
+
+    Clock  y t  | y == forY -> A a $ Clock y t 
+                | otherwise -> A a $ Clock y (subst x forY t)
 
     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
     

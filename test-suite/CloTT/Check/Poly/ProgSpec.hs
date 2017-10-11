@@ -11,9 +11,19 @@ import           CloTT.Check.Poly.TestUtils
 import           CloTT.QuasiQuoter
 import           CloTT.Check.Poly.Prog
 import           CloTT.Check.Poly.TypingM
+import           CloTT.Pretty
+import           CloTT.AST.Name
+
+-- foo :: Bool -> Either () Char
+-- foo = \b ->
+--   case (\x -> x) :: forall a. a -> a of
+--     id' -> case id' b of
+--       True  -> Left (id' ())
+--       False -> Right (id' 'a')
 
 progSpec :: Spec 
 progSpec = do
+  let errs e x = fst x `shouldBe` e
   describe "checkProg" $ do
     it "fails programs with invalid types (1)" $ do
       let prog = [unsafeProg|
@@ -84,7 +94,7 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "succeeds for type annotations (3)" $ do
+    it "does not generalize functions in case stmts" $ do
       let prog = [unsafeProg|
         data Either a b = Left a | Right b.
         data A = MkA.
@@ -98,7 +108,7 @@ progSpec = do
               | True -> Right (id MkA)
               | False -> Left (id MkB).
       |]
-      runCheckProg mempty prog `shouldYield` ()
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other $ show $ pretty (mname 1) <+> "is already assigned")
 
     it "succeeds for monomorphic patterns (1)" $ do
       let prog = [unsafeProg|
