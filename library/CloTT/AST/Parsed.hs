@@ -96,14 +96,6 @@ data Prog a = Prog [Decl a]
 instance Pretty (Prog a) where
   pretty (Prog ds) = vsep $ map pretty ds
 
-
-
-data RecTy a = 
-  RecTy { rtName :: Name
-        , rtParam :: Name 
-        , rtConstrs :: [(Name, Type a Poly)]
-        }
-
 {-
 data Nat = Z | S Nat
 
@@ -118,16 +110,44 @@ which corresponds to a pattern match
 
 and
 Z : Nat
-S : NatF Nat -> Nat
+S : Nat -> Nat
 which corresponds to a the original constructors
 
 and primitive recursion over nats as 
 
-primRecNat : forall a. (NatF (Nat, a)) -> Nat -> a
+plus : Nat -> Nat -> Nat
+plus = \m n ->
+  rec m of 
+    | Z -> n
+    | S m' with r -> S r.
+-}
+
+{-
+
+data List a = Nil | Cons a (List a)
+
+desugars to 
+data ListF a x = Nil | Cons a x
+type List a = uX. ListF a X.
+
+constructors
+Nil : forall a. List a
+Cons : forall a. a -> List a -> List a
+
+and patterns 
+Nil : forall a. () -> a
+Cons : forall a r. a -> List a -> r
+
+we implement sum as
+
+sum : List Nat -> Nat
+sum = \xs ->
+  rec xs of
+    | Nil -> Z
+    | Cons a xs with r -> plus a r.
 
 
 -}
--- extractRecType :: Name -> Type a Poly -> 
 
 -- Here are some combinators for creating un-annotated expressions easily
 

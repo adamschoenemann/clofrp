@@ -92,6 +92,11 @@ substCtx' ctx (A a ty) =
       t' <- substCtx' ctx t
       pure $ A a $ Clock x t'
 
+    RecTy x t -> do
+      t' <- substCtx' ctx t
+      pure $ A a $ RecTy x t'
+
+
 substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
 substCtx ctx ty = 
   case substCtx' ctx ty of
@@ -197,6 +202,8 @@ kindOf (A _ t) = do
 
     -- TODO: what to do with v here?
     Clock  v tau -> kindOf tau
+    -- TODO: what to do with v here?
+    RecTy  v tau -> withCtx (\g -> g <+ Uni v) $ kindOf tau
   where
     notFound = nameNotFound
 
@@ -244,6 +251,8 @@ checkWfType ty@(A ann ty') = do
       if kappa `isMemberOf` clks
         then otherErr $ show $ pretty kappa <+> "is already in clock-context"
         else withCCtx (extend kappa ()) $ checkWfType t
+
+    RecTy x t -> withCtx (\g -> g <+ Uni x) $ checkWfType t
 
   where 
     expred alpha = \case

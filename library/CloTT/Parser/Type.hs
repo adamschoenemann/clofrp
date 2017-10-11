@@ -38,8 +38,12 @@ clocks = p <?> "clocks" where
     foldrM fn ty nms
   fn nm t = (\p -> A.A p $ E.Clock nm t) <$> getPosition
 
+recTy :: Parser Type
+recTy = (ann <*> p) <?> "Fix" where
+  p = E.RecTy <$> (reserved "Fix" *> (UName <$> lidentifier) <* reservedOp ".") <*> typep
+
 typeexpr :: Parser Type
-typeexpr = tvar <|> free <|> forAll <|> clocks <|> parens typep
+typeexpr = tvar <|> free <|> forAll <|> clocks <|> recTy <|> parens typep
 
 typep :: Parser Type
 typep = buildExpressionParser table typeexpr where

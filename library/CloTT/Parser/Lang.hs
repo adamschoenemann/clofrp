@@ -47,6 +47,7 @@ reservedNames = [ "if"
                 , "forall"
                 , "type"
                 , "clocks"
+                , "Fix"
                 ]
 
 languageDef :: Tok.LanguageDef ()
