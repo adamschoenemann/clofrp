@@ -97,6 +97,38 @@ instance Pretty (Prog a) where
   pretty (Prog ds) = vsep $ map pretty ds
 
 
+
+data RecTy a = 
+  RecTy { rtName :: Name
+        , rtParam :: Name 
+        , rtConstrs :: [(Name, Type a Poly)]
+        }
+
+{-
+data Nat = Z | S Nat
+
+desugars to 
+data NatF a = ZF | SF a
+and 
+type Nat = uX. NatF X.
+
+So, we'll get
+unfoldNat : Nat -> NatF Nat
+which corresponds to a pattern match
+
+and
+Z : Nat
+S : NatF Nat -> Nat
+which corresponds to a the original constructors
+
+and primitive recursion over nats as 
+
+primRecNat : forall a. (NatF (Nat, a)) -> Nat -> a
+
+
+-}
+-- extractRecType :: Name -> Type a Poly -> 
+
 -- Here are some combinators for creating un-annotated expressions easily
 
 var :: String -> Expr ()

@@ -18,6 +18,9 @@ data Nat' a = Z | S a deriving Functor
 
 type Nat = Fix Nat'
 
+zero :: Nat
+zero = Into Z
+
 -- just for inspiration (general recursion fixpoint)
 fix :: (a -> a) -> a 
 fix f =
@@ -32,10 +35,16 @@ primRec fn (Into f) =
 
 -- plus defined with primitive recursion
 plus :: Nat -> Nat -> Nat 
-plus = primRec fn where
-  fn :: Nat' (Nat, Nat -> Nat) -> Nat -> Nat 
-  fn Z x = x
-  fn (S (m', r)) n = Into (S (r n))
+plus m n = primRec fn m where
+  fn :: Nat' (Nat, Nat) -> Nat 
+  fn Z = n
+  fn (S (m', r)) = Into (S r)
+
+natId :: Nat -> Nat
+natId = primRec fn where
+  fn :: Nat' (Nat, Nat) -> Nat
+  fn Z = Into Z
+  fn (S (m', r)) = Into $ S m'
 
 -- debug functions
 fromInt :: Int -> Nat

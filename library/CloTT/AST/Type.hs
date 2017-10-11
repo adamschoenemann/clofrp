@@ -12,6 +12,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -52,20 +53,29 @@ prettyT' pars = \case
   x :->: y   -> parensIf $ prettyT True x  <> softline <> "->" <+> prettyT False y
 
   Forall n t -> 
-    let (ns, t') = collect t
+    let (ns, t') = collect p t
         bound = hsep $ map (fromString . show) (n:ns)
     in  parensIf $ "∀" <> bound <> dot <+> prettyT False t'
+        where 
+          p :: Type' a s -> Maybe (Name, Type a s)
+          p (Forall n t) = Just (n,t)
+          p _            = Nothing
 
   Clock n t -> 
-    let (ns, t') = collect t
+    let (ns, t') = collect p t
         bound = hsep $ map (fromString . show) (n:ns)
     in  parensIf $ "∇" <> bound <> dot <+> prettyT False t'
+        where
+          p :: Type' a s -> Maybe (Name, Type a s)
+          p (Clock n t)  = Just (n,t)
+          p _            = Nothing
   where
-    collect :: Type a s -> ([Name], Type a s)
-    collect (A _ (Forall n t)) = 
-      let (ns, t') = collect t
-      in  (n:ns, t')
-    collect t                  = ([], t)
+    collect :: (Type' a s -> Maybe (Name, Type a s)) -> Type a s -> ([Name], Type a s)
+    collect p (A ann ty')
+      | Just (n, t) <- p ty' = 
+          let (ns, t') = collect p t
+          in  (n:ns, t')
+      | otherwise            = ([], A ann ty')
 
     parensIf = if pars then parens else id
 
@@ -140,6 +150,18 @@ freeVars (A _ ty) =
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
+iterType :: (Type a Poly -> Type a Poly) -> (Type a Poly -> Type a Poly) -> Type a Poly -> Type a Poly
+iterType base go t@(A ann t') = 
+  case t' of
+    TFree n -> base t
+    TVar n  -> base t
+    TExists n -> base t
+    TApp x y   -> A ann $ TApp (go x) (go y)
+    x :->: y   -> A ann $ go x :->: go y
+    Forall n t -> A ann $ Forall n (go t)
+    Clock  n t -> A ann $ Clock  n (go t)
+
+-- asPolytype' :: Type a s -> Type a Poly
 asPolytype :: Type a s -> Type a Poly
 asPolytype (A a ty) = A a $ 
   case ty of

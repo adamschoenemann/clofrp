@@ -32,7 +32,7 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ Other "Clock k' must be named k")
 
-    it "accepts veeery simple programs with clock application" $ do
+    it "accepts veeery simple programs with clock application (1)" $ do
       let prog = [unsafeProg|
         data Unit = MkUnit.
         idk : clocks k. forall a. a -> a.
@@ -42,4 +42,26 @@ clockSpec = do
         bar = /\k -> idk [k] MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    it "accepts veeery simple programs with clock application (2)" $ do
+      let prog = [unsafeProg|
+        data Unit = MkUnit.
+        idk : clocks k k'. forall a. a -> a.
+        idk = /\k k' -> \x -> x. 
+
+        bar : clocks k. Unit.
+        bar = /\k -> idk [k] [k] MkUnit.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "rejects veeery simple programs with clock application (1)" $ do
+      let prog = [unsafeProg|
+        data Unit = MkUnit.
+        idk : clocks k. forall a. a -> a.
+        idk = /\k -> \x -> x. 
+
+        bar : clocks k. Unit.
+        bar = /\k -> idk MkUnit.
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other "Expected MkUnit to be a clock")
       

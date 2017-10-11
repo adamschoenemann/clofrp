@@ -665,6 +665,17 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     (delta, _, theta) <- splitCtx (x `HasType` alphat) ctx'
     pure (A ann $ alphat :->: betat, delta)
   
+  -- ->ClockE
+  synthesize' (App e1 (A _ (ClockVar kappa))) = do
+    ctx <- getCtx
+    root $ "[->ClockE]" <+> pretty expr <+> "in" <+> pretty ctx
+    (ty1, theta) <- branch $ synthesize e1
+    case ty1 of 
+      A _ (Clock kappa' cty) -> do
+        ctysubst <- substCtx theta cty
+        pure (ctysubst, theta)
+      _ -> otherErr $ show $ "Cannot apply a clock variable to an expression that is not clock-quantified at" <+> pretty expr
+
   -- ->E
   synthesize' (App e1 e2) = do
     ctx <- getCtx
@@ -784,5 +795,8 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     delta <- branch $ check e aty
     pure (cty, delta)
   
-  applysynth' _ = cannotAppSynthesize ty e
+  applysynth' (Clock _ _) = otherErr $ show $ "Expected" <+> pretty e <+> "to be a clock"
+    
+  
+  applysynth' _ = root "[CannotAppSynthesize]" *> cannotAppSynthesize ty e
 
