@@ -88,6 +88,8 @@ pat = ann <*> p where
 atom :: Parser Expr
 atom =   nat
      <|> try tuple
+     <|> reserved "fold" *> (ann <*> pure (E.Prim E.Fold))
+     <|> reserved "unfold" *> (ann <*> pure (E.Prim E.Unfold))
      <|> var
      <|> tickvar
      <|> clockvar

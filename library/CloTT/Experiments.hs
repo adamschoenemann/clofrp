@@ -14,9 +14,9 @@ data Fix f = Into (f (Fix f))
 out :: Fix f -> f (Fix f)
 out (Into f) = f
 
-data Nat' a = Z | S a deriving Functor
+data NatF a = Z | S a deriving Functor
 
-type Nat = Fix Nat'
+type Nat = Fix NatF
 
 zero :: Nat
 zero = Into Z
@@ -27,6 +27,21 @@ fix f =
   let x = f x
   in x
 
+pred :: Nat -> Nat
+pred m =
+  case out m of
+    Z -> Into Z
+    S m' -> m'
+
+pred2 :: Nat -> Nat
+pred2 m = 
+  case out m of
+    S m' -> 
+      case out m' of
+        S m'' -> m''
+        Z     -> Into Z
+    Z -> Into Z
+
 -- primitive recursion 
 -- (F[(µX. F) × A] → A) → µX. F[X] → A
 primRec :: Functor f => (f (Fix f, a) -> a) -> Fix f -> a
@@ -36,13 +51,13 @@ primRec fn (Into f) =
 -- plus defined with primitive recursion
 plus :: Nat -> Nat -> Nat 
 plus m n = primRec fn m where
-  fn :: Nat' (Nat, Nat) -> Nat 
+  fn :: NatF (Nat, Nat) -> Nat 
   fn Z = n
   fn (S (m', r)) = Into (S r)
 
 natId :: Nat -> Nat
 natId = primRec fn where
-  fn :: Nat' (Nat, Nat) -> Nat
+  fn :: NatF (Nat, Nat) -> Nat
   fn Z = Into Z
   fn (S (m', r)) = Into $ S m'
 

@@ -11,11 +11,16 @@ import Data.String (fromString)
 data Prim
   = Unit
   | Nat (Pr.Integer)
+  | Fold 
+  | Unfold
   deriving (Eq, Data, Typeable)
 
 instance Show Prim where
   show Unit = "()"
   show (Nat x)  = show x
+  show Fold = "fold"
+  show Unfold = "unfold"
+
 
 instance Pretty Prim where
   pretty = fromString . show

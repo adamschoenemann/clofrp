@@ -144,6 +144,16 @@ parserSpec = do
     do let Right e = E.unannE <$> parse P.expr "" "/\\k1 k2 -> e1 [k1] (e2 [k2])"
        e `shouldBe` ("k1" `E.cAbs` ("k2" `E.cAbs` ("e1" @@ "[k1]" @@ ("e2" @@ "[k2]"))))
   
+  it "parses fold and unfold" $ do
+    do let Right e = E.unannE <$> parse P.expr "" "fold"
+       e `shouldBe` E.foldf
+    do let Right e = E.unannE <$> parse P.expr "" "unfold"
+       e `shouldBe` E.unfoldf
+    do let Right e = E.unannE <$> parse P.expr "" "fold m"
+       e `shouldBe` (E.foldf @@ "m")
+    do let Right e = E.unannE <$> parse P.expr "" "unfold m"
+       e `shouldBe` (E.unfoldf @@ "m")
+  
   it "parses simple types" $ do
     do let Right e = E.unannT <$> parse P.typep "" "x"
        e `shouldBe` "x"

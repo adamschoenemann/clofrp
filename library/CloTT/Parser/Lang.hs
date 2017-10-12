@@ -38,7 +38,6 @@ reservedNames = [ "if"
                 , "case"
                 , "of"
                 , "fix"
-                , "mu"
                 , "()"
                 , "undefined"
                 , "import"
@@ -48,6 +47,8 @@ reservedNames = [ "if"
                 , "type"
                 , "clocks"
                 , "Fix"
+                , "fold"
+                , "unfold"
                 ]
 
 languageDef :: Tok.LanguageDef ()

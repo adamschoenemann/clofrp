@@ -18,6 +18,7 @@ import CloTT.QuasiQuoterSpec
 import CloTT.Check.PolySpec
 import CloTT.Check.Poly.ProgSpec
 import CloTT.Check.Poly.ClockSpec
+import CloTT.Check.Poly.RecSpec
 import CloTT.AST.PrettySpec
 
 
@@ -30,5 +31,6 @@ main = do
   pretty <- testSpec "pretty" prettySpec
   checkProg <- testSpec "checkProg" progSpec
   clocks <- testSpec "clockSpec" clockSpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, poly, decl, pretty, checkProg, clocks]
+  recursive <- testSpec "recursive types" recSpec
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, poly, decl, pretty, checkProg, clocks, recursive]
   Test.Tasty.defaultMain group

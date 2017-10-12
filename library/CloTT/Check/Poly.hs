@@ -534,17 +534,28 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     a2' <- substCtx theta a2
     b2' <- substCtx theta b2
     branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
+  
+  -- <:Rec
+  subtypeOf' (RecTy v1 b1) (RecTy v2 b2) = do
+    root "[<:Rec]"
+    fresh <- freshName
+    let b1s = subst (A ann1 $ TVar fresh) v1 b1
+    let b2s = subst (A ann2 $ TVar fresh) v2 b2
+    branch $ withCtx (\g -> g <+ Uni fresh) $ b1s `subtypeOf` b2s
 
   subtypeOf' t1 t2 = do
-    root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
-    -- root $ "[Error!]" <+> pretty t1 <+> "<:" <+> pretty t2
+    -- root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
+    root $ "[SubtypeError!]" <+> pretty t1 <+> "<:" <+> pretty t2
     cannotSubtype ty1 ty2
 
 check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
 check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
+
   -- 1I (PrimI)
-  check' (Prim p) _ 
-    | ty' =%= inferPrim p = root "[PrimI]" *> getCtx
+  check' (Prim p) _ = do
+    root "[PrimI]"
+    pty <- A eann <$> inferPrim p
+    branch $ ty `subtypeOf` pty
   
   -- ∀I
   check' _ (Forall alpha aty) = do
@@ -591,6 +602,22 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     | otherwise = do 
         root "[ClockAbs]"
         otherErr $ show $ "Clock" <+> pretty k <+> "must be named" <+> pretty k'
+  
+  -- FoldApp
+  check' (A fann (Prim Fold) `App` e2) (RecTy nm fty) = do
+    root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
+    let unfty = subst ty nm fty
+    branch $ check e2 unfty
+
+  -- UnfoldApp
+  check' (A ufann (Prim Unfold) `App` e2) (ftor `TApp` unfty) = do
+    root "[UnfoldApp]"
+    branch $ check e2 $ unfty
+    -- case fty of 
+    --   A fann (RecTy nm fty') -> do
+    --     branch $ subst fty nm fty' `subtypeOf` ty
+    --   _ -> otherErr $ show $ pretty fty <+> "must be the folding of" <+> pretty unfty
+
 
   -- Sub
   check' _ _ = do
@@ -685,8 +712,17 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         pure (ctysubst, theta)
       _ -> otherErr $ show $ "Cannot apply a clock variable to an expression that is not clock-quantified at" <+> pretty expr
 
+  -- UnfoldE
+  synthesize' (A uann (Prim Unfold) `App` e2) = do
+    root "[UnfoldE]"
+    (e2ty, theta) <- branch $ synthesize e2 
+    -- e2ty' <- substCtx theta e2ty -- TODO: Should we do this?
+    case e2ty of
+      A _ (RecTy nm fty) -> pure $ (subst e2ty nm fty, theta)
+      _                  -> otherErr $ show $ pretty e2ty <+> "cannot be unfolded"
+
   -- ->E
-  synthesize' (App e1 e2) = do
+  synthesize' (e1 `App` e2) = do
     ctx <- getCtx
     root $ "[->E]" <+> pretty expr <+> "in" <+> pretty ctx
     (ty1, theta) <- branch $ synthesize e1
@@ -695,7 +731,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
   -- Prim=>
   synthesize' (Prim p) = do
-    let pt = inferPrim p
+    pt <- inferPrim p
     root $ "[Prim=>]" <+> pretty expr <+> "=>" <+> pretty pt
     ctx <- getCtx
     pure (A ann $ pt, ctx)
@@ -711,10 +747,12 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
   synthesize' _ = cannotSynthesize expr
 
-inferPrim :: Prim -> Type' a Poly
-inferPrim p = TFree $ UName $ case p of
-  Unit   -> "Unit"
-  Nat _  -> "Nat"
+inferPrim :: Prim -> TypingM a (Type' a Poly)
+inferPrim p = TFree . UName <$> case p of
+  Unit   -> pure "Unit"
+  Nat _  -> pure "Nat"
+  Fold   -> otherErr $ "Cannot infer type of primitive fold"
+  Unfold -> otherErr $ "Cannot infer type of primitive unfold"
 
 -- check that patterns type-check and return a new ctx extended with bound variables
 checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)

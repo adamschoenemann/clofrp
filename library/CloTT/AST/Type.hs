@@ -71,7 +71,7 @@ prettyT' pars = \case
           p (Clock n t)  = Just (n,t)
           p _            = Nothing
   
-  RecTy n t -> "Fix" <+> pretty n <> "." <+> pretty t
+  RecTy n t -> parensIf $ "Fix" <+> pretty n <> "." <+> prettyT True t
   where
     collect :: (Type' a s -> Maybe (Name, Type a s)) -> Type a s -> ([Name], Type a s)
     collect p (A ann ty')

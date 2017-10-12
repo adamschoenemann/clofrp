@@ -169,6 +169,12 @@ true = A () . Var $ "True"
 false :: Expr ()
 false = A () . Var $ "False"
 
+foldf :: Expr ()
+foldf = A () . Prim $ P.Fold
+
+unfoldf :: Expr ()
+unfoldf = A () . Prim $ P.Unfold
+
 the :: Type () Poly -> Expr () -> Expr ()
 the t e = A () $ Ann e t
 
