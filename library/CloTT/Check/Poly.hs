@@ -604,20 +604,24 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
         otherErr $ show $ "Clock" <+> pretty k <+> "must be named" <+> pretty k'
   
   -- FoldApp
-  check' (A fann (Prim Fold) `App` e2) (RecTy nm fty) = do
+  check' (A fann (Prim Fold) `App` e2) _ = do
     root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
-    let unfty = subst ty nm fty
-    branch $ check e2 unfty
+    x <- freshName
+    alpha <- freshName
+    let alphat = A tann $ TExists alpha
+    delta <- withCtx (\g -> g <+ Exists x <+ Exists alpha) $ ty `subtypeOf` (A tann $ RecTy x alphat)
+    withCtx (const delta) $ check e2 alphat
+
+  -- FoldApp
+  -- check' (A fann (Prim Fold) `App` e2) (RecTy nm fty) = do
+    -- root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
+    -- let unfty = subst ty nm fty
+    -- branch $ check e2 unfty
 
   -- UnfoldApp
   check' (A ufann (Prim Unfold) `App` e2) (ftor `TApp` unfty) = do
     root "[UnfoldApp]"
     branch $ check e2 $ unfty
-    -- case fty of 
-    --   A fann (RecTy nm fty') -> do
-    --     branch $ subst fty nm fty' `subtypeOf` ty
-    --   _ -> otherErr $ show $ pretty fty <+> "must be the folding of" <+> pretty unfty
-
 
   -- Sub
   check' _ _ = do
@@ -712,14 +716,28 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         pure (ctysubst, theta)
       _ -> otherErr $ show $ "Cannot apply a clock variable to an expression that is not clock-quantified at" <+> pretty expr
 
-  -- UnfoldE
+  -- ->UnfoldE=>
   synthesize' (A uann (Prim Unfold) `App` e2) = do
-    root "[UnfoldE]"
+    root "[->UnfoldE=>]"
     (e2ty, theta) <- branch $ synthesize e2 
-    -- e2ty' <- substCtx theta e2ty -- TODO: Should we do this?
-    case e2ty of
-      A _ (RecTy nm fty) -> pure $ (subst e2ty nm fty, theta)
+    e2ty' <- substCtx theta e2ty 
+    case e2ty' of
+      A _ (RecTy nm fty) -> pure $ (subst e2ty' nm fty, theta)
       _                  -> otherErr $ show $ pretty e2ty <+> "cannot be unfolded"
+
+  -- -- ->FoldE
+  -- synthesize' (A uann (Prim Fold) `App` e2) = do
+  --   root "[->FoldE=>]"
+  --   (e2ty, theta) <- branch $ synthesize e2 
+  --   -- root $ "[Info]" <+> pretty (e2ty, theta)
+  --   e2ty' <- substCtx theta e2ty 
+  --   x <- freshName
+  --   f <- freshName
+  --   let xt = A uann (TExists x)
+  --   let ft = A uann (TExists f)
+  --   delta <- withCtx (\g -> g <+ Exists x <+ Exists f) $ e2ty' `subtypeOf` (A uann $ ft `TApp` xt)
+  --   ty <- substCtx delta $ (A uann $ RecTy x $ A uann $ (ft `TApp` xt))
+  --   pure (ty, delta)
 
   -- ->E
   synthesize' (e1 `App` e2) = do

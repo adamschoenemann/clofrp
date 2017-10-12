@@ -74,3 +74,9 @@ toInt (Into n) =
   case n of
     Z -> 0
     S n' -> 1 + toInt n'
+
+data ListF a f = Nil | Cons a f
+type List a = Fix (ListF a)
+
+sing :: a -> List a
+sing x = Into (Cons x (Into Nil))

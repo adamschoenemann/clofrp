@@ -33,7 +33,6 @@ For my master's thesis at ITU
   - Parsing and checking is pretty laissez faire with propagating and maintaining annotations, leading
     to possibly incorrect source-locations in errors
 
-
 ## Type Aliases
 - Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:
   - Go through each alias, and "fixpoint" expand them
@@ -44,3 +43,10 @@ For my master's thesis at ITU
       arguments
     - We can then substitute the arguments (after they've been expanded as well)for the bound variables in
       the alias definition and replace it directly into the AST.
+
+## Recursive Types
+- Is it really a good idea to expose the recursive primitives to the user?
+- Do we need the parameter at all? E.g. we have Fix x. NatF x, but we could
+  just have Fix NatF and still treat Fix as a special construct, but substitutions
+  would just be one extra type application to its functor.
+  - This also means we can check that the kind of the argument to fix is (* -> *)
