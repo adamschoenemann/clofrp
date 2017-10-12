@@ -21,6 +21,7 @@ import           CloTT.QuasiQuoter
 import           CloTT.Check.Poly.TestUtils
 import           CloTT.TestUtils
 import           CloTT.Pretty
+import           CloTT.Annotated 
 
 foo :: (forall a. a -> a) -> (forall b. b -> b)
 foo f = f
@@ -46,7 +47,8 @@ bar xs =
 polySpec :: Spec
 polySpec = do
   let nil = mempty :: TyCtx ()
-  let rd fctx kctx ctx = TR ctx fctx kctx mempty mempty
+  let stdlib = ["True" |-> A mempty (E.TFree "Bool"), "False" |-> A mempty (E.TFree "Bool")]
+  let rd fctx kctx ctx = TR ctx (fctx `mappend` stdlib) kctx mempty mempty
   let rd'  = rd mempty 
   let rd'' = rd mempty mempty
   let (.:) = HasType
@@ -388,8 +390,6 @@ polySpec = do
     
     it "synthesizes primitives" $ do
       runSynth (rd'' nil) (E.nat 10) `shouldYield` ("Nat",  nil)
-      runSynth (rd'' nil) (E.true)   `shouldYield` ("Bool", nil)
-      runSynth (rd'' nil) (E.false)  `shouldYield` ("Bool", nil)
       runSynth (rd'' nil) (E.unit)   `shouldYield` ("Unit", nil)
     
     it "synthesizes variables" $ do
@@ -452,7 +452,7 @@ polySpec = do
          runCheck ctx ("x" @-> "x") (E.forAll ["a"] $ (E.forAll ["b"] "a") @->: (E.forAll ["b"] "a")) `shouldYield` nil
          runCheck ctx ("x" @-> "x") (E.forAll ["a"] $ (E.forAll ["b"] "a") @->: "a") `shouldYield` nil
          runCheck ctx ("x" @-> "x") (E.forAll ["a"] $ (E.forAll ["b"] "b") @->: "a") `shouldYield` nil
-         shouldFail $ runCheck (rd'' mempty) [unsafeExpr|\x -> x|] [unsafeType|forall a b. (forall c. b) -> a|]
+         shouldFail $ runCheck (rd'' mempty) ("x" @-> "x") (E.forAll ["a", "b"] $ (E.forAll ["c"] "b") @->: "a")
       do let ctx = nil <+ "x" .: "Nat"
          runCheck (rd' ["Nat" |-> Star] ctx) ("y" @-> "x") (E.forAll ["a"] $ "a" @->: "Nat") `shouldYield` ctx
     

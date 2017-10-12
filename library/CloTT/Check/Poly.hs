@@ -714,7 +714,6 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 inferPrim :: Prim -> Type' a Poly
 inferPrim p = TFree $ UName $ case p of
   Unit   -> "Unit"
-  Bool _ -> "Bool"
   Nat _  -> "Nat"
 
 -- check that patterns type-check and return a new ctx extended with bound variables

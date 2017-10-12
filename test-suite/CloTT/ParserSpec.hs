@@ -181,6 +181,16 @@ parserSpec = do
        e `shouldBe` E.clocks ["a"] ((E.clocks ["b"] $ "a" @->: "b") @->: "b")
     do let Right e = E.unannT <$> parse P.typep "" "clocks a. clocks b. a -> b -> b"
        e `shouldBe` E.clocks ["a"] (E.clocks ["b"] $ "a" @->: "b" @->: "b")
+
+  it "parses recursive types (1)" $ do
+    let Right e = E.unannT <$> parse P.typep "" "Fix x. Unit"
+    e `shouldBe` E.recTy "x" "Unit"
+  it "parses recursive types (2)" $ do
+    let Right e = E.unannT <$> parse P.typep "" "Fix x. NatF x"
+    e `shouldBe` E.recTy "x" ("NatF" @@: "x")
+  it "parses recursive types (3)" $ do
+    let Right e = E.unannT <$> parse P.typep "" "forall a. Fix x. ListF a x"
+    e `shouldBe` E.forAll ["a"] (E.recTy "x" ("ListF" @@: "a" @@: "x"))
   
   it "parses typevars" $ do
     do let Right e = E.unannT <$> parse P.tvar "" "a"

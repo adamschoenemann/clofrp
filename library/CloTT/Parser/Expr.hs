@@ -20,11 +20,6 @@ type Pat  = E.Pat  SourcePos
 nat :: Parser Expr
 nat = ann <*> (E.Prim . P.Nat <$> natural)
 
-bool :: Parser Expr
-bool = ann <*> (E.Prim . P.Bool <$> b) where
-  b =   reserved "True" *> pure True
-    <|> reserved "False" *> pure False
-
 tuple :: Parser Expr
 tuple = ann <*> parens ((\e1 e2 -> E.Tuple e1 e2) <$> expr <* comma <*> expr)
 
@@ -92,7 +87,6 @@ pat = ann <*> p where
 
 atom :: Parser Expr
 atom =   nat
-     <|> bool
      <|> try tuple
      <|> var
      <|> tickvar

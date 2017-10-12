@@ -164,10 +164,10 @@ nat :: Integer -> Expr ()
 nat = A () . Prim . P.Nat
 
 true :: Expr ()
-true = A () . Prim . P.Bool $ True
+true = A () . Var $ "True"
 
 false :: Expr ()
-false = A () . Prim . P.Bool $ False
+false = A () . Var $ "False"
 
 the :: Type () Poly -> Expr () -> Expr ()
 the t e = A () $ Ann e t
@@ -197,6 +197,9 @@ forAll nms t = foldr fn t $ map UName nms where
 clocks :: [String] -> Type () Poly -> Type () Poly
 clocks nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Clock nm acc
+
+recTy :: Name -> Type () Poly -> Type () Poly
+recTy nm t = A () $ RecTy nm t
 
 exists :: Name -> Type () a
 exists nm = A () $ TExists nm
