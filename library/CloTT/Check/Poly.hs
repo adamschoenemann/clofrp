@@ -92,9 +92,9 @@ substCtx' ctx (A a ty) =
       t' <- substCtx' ctx t
       pure $ A a $ Clock x t'
 
-    RecTy x t -> do
+    RecTy t -> do
       t' <- substCtx' ctx t
-      pure $ A a $ RecTy x t'
+      pure $ A a $ RecTy t'
 
 
 substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
@@ -203,7 +203,13 @@ kindOf (A _ t) = do
     -- TODO: what to do with v here?
     Clock  v tau -> kindOf tau
     -- TODO: what to do with v here?
-    RecTy  v tau -> withCtx (\g -> g <+ Uni v) $ kindOf tau
+    RecTy tau -> do 
+      k <- kindOf tau
+      case k of
+        Star :->*: Star -> pure Star
+        _               -> otherErr $ show $ pretty tau <+> "must have kind * -> * to be an argument to Fix" 
+      
+
   where
     notFound = nameNotFound
 
@@ -242,7 +248,7 @@ checkWfType ty@(A ann ty') = do
 
     -- TAppWF. FIXME Should check correct kinds as well.
     TApp t1 t2 -> do
-      errIf (kindOf t1) (== Star) (const $ Other $ show $ pretty t1 <+> "must be a type-constructor")
+      -- errIf (kindOf t1) (== Star) (const $ Other $ show $ pretty t1 <+> "must be a type-constructor")
       checkWfType t1 *> checkWfType t2
 
     -- ClockWF
@@ -252,7 +258,7 @@ checkWfType ty@(A ann ty') = do
         then otherErr $ show $ pretty kappa <+> "is already in clock-context"
         else withCCtx (extend kappa ()) $ checkWfType t
 
-    RecTy x t -> withCtx (\g -> g <+ Uni x) $ checkWfType t
+    RecTy t -> checkWfType t
 
   where 
     expred alpha = \case
@@ -328,9 +334,10 @@ instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat ty@(A a ty') = 
   let solve = do
+        ctx <- getCtx
+        root $ "[InstLSolve]" <+> pretty ty <+> ":<=" <+> pretty ahat <+> "in" <+> pretty ctx
         mty <- asMonotypeTM ty
         ctx' <- assign ahat mty 
-        root $ "[InstLSolve]" <+> pretty ty <+> ":<=" <+> pretty ahat
         pure ctx'
   in solve `catchError` \err -> 
       case ty' of
@@ -368,7 +375,7 @@ instL ahat ty@(A a ty') =
 
         -- InstLTApp. Identical to InstLArr
         TApp t1 t2 -> do
-          root $ "[InstLTApp]" <+> pretty ty <+> ":<=" <+> pretty ahat
+          root $ "[InstLTApp]" <+> pretty ahat <+> ":<=" <+> pretty ty
           af1 <- freshName
           af2 <- freshName
           let ahat1 = exists af1
@@ -379,6 +386,14 @@ instL ahat ty@(A a ty') =
           substed <- substCtx omega t2
           r <- withCtx (const omega) $ branch (af2 `instL` substed)
           pure r
+
+        -- InstLRec
+        RecTy t -> do
+          root $ "[InstLRec]" <+> pretty ahat <+> ":<=" <+> pretty ty
+          a1 <- freshName
+          let rt = A a $ RecTy (A a $ TExists a1)
+          ctx' <- insertAt (exists ahat) (mempty <+ Exists a1 <+ ahat := rt)
+          withCtx (const ctx') $ branch (a1 `instL` t)
         
         _ -> do
           root $ "[InstLError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
@@ -397,10 +412,10 @@ instR ty@(A a ty') ahat =
         case ty' of
           -- InstRReach
           TExists bhat -> do 
-            root $ "InstRReach"
+            root $ "[InstRReach]" <+> "^" <> pretty ahat <+> "=" <+> "^" <> pretty bhat
             Exists ahat `before` Exists bhat >>= \case
               True -> assign bhat (A a $ TExists ahat)
-              False -> otherErr $ "InstRReach"
+              False -> otherErr $ "[InstRReachError]"
 
           -- InstRArr
           t1 :->: t2 -> do
@@ -427,7 +442,8 @@ instR ty@(A a ty') ahat =
           
           -- InstRTApp. Identical to InstRArr
           TApp t1 t2 -> do
-            root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            ctx <- getCtx
+            root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "in" <+> pretty ctx
             af1 <- freshName
             af2 <- freshName
             let ahat1 = exists af1
@@ -438,9 +454,18 @@ instR ty@(A a ty') ahat =
             substed <- substCtx omega t2
             r <- withCtx (const omega) $ branch (substed `instR` af2)
             pure r
+
+          -- InstRRec
+          RecTy t -> do
+            root $ "[InstRRec]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            a1 <- freshName
+            let rt = A a $ RecTy (A a $ TExists a1)
+            ctx' <- insertAt (exists ahat) (mempty <+ Exists a1 <+ ahat := rt)
+            withCtx (const ctx') $ branch (t `instR` a1)
           
           _ -> do
-            root $ "[InstRError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
+            ctx <- getCtx
+            root $ "[InstRError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
             throwError err
             -- otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
 
@@ -512,7 +537,8 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   subtypeOf' (TExists ahat) _
     | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do 
-        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
+        ctx <- getCtx
+        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2 <+> "in" <+> pretty ctx
         _ <- checkWfType (A ann1 $ TExists ahat)
         r <- branch (ahat `instL` ty2)
         pure r
@@ -536,12 +562,9 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
   
   -- <:Rec
-  subtypeOf' (RecTy v1 b1) (RecTy v2 b2) = do
-    root "[<:Rec]"
-    fresh <- freshName
-    let b1s = subst (A ann1 $ TVar fresh) v1 b1
-    let b2s = subst (A ann2 $ TVar fresh) v2 b2
-    branch $ withCtx (\g -> g <+ Uni fresh) $ b1s `subtypeOf` b2s
+  subtypeOf' (RecTy b1) (RecTy b2) = do
+    root $ "[<:Rec]" <+> pretty ty1 <+> "<:" <+> pretty ty2
+    branch $ b1 `subtypeOf` b2
 
   subtypeOf' t1 t2 = do
     -- root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
@@ -604,24 +627,27 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
         otherErr $ show $ "Clock" <+> pretty k <+> "must be named" <+> pretty k'
   
   -- FoldApp
-  check' (A fann (Prim Fold) `App` e2) _ = do
-    root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
-    x <- freshName
-    alpha <- freshName
-    let alphat = A tann $ TExists alpha
-    delta <- withCtx (\g -> g <+ Exists x <+ Exists alpha) $ ty `subtypeOf` (A tann $ RecTy x alphat)
-    withCtx (const delta) $ check e2 alphat
+  -- check' (A fann (Prim Fold) `App` e2) _ = do
+  --   ctx <- getCtx
+  --   root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+  --   fex <- freshName
+  --   let fext = A tann $ TExists fex
+  --   let recTy = A tann $ RecTy fext
+  --   delta <- withCtx (\g -> g <+ Exists fex) $ ty `subtypeOf` recTy
+  --   tysubst <- substCtx delta ty
+  --   case tysubst of 
+  --     A rann (RecTy fun) -> withCtx (const delta) $ check e2 (A tann $ fun `TApp` tysubst)
+  --     _   -> otherErr $ show $ "Expected" <+> pretty tysubst <+> "to be a Fix type"
 
   -- FoldApp
-  -- check' (A fann (Prim Fold) `App` e2) (RecTy nm fty) = do
-    -- root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
-    -- let unfty = subst ty nm fty
-    -- branch $ check e2 unfty
+  -- check' (A fann (Prim Fold) `App` e2) (RecTy fty) = do
+  --   root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
+  --   branch $ check e2 (A tann $ fty `TApp` ty)
 
   -- UnfoldApp
-  check' (A ufann (Prim Unfold) `App` e2) (ftor `TApp` unfty) = do
-    root "[UnfoldApp]"
-    branch $ check e2 $ unfty
+  -- check' (A ufann (Prim Unfold) `App` e2) (ftor `TApp` unfty) = do
+  --   root "[UnfoldApp]"
+    -- branch $ check e2 $ unfty
 
   -- Sub
   check' _ _ = do
@@ -722,22 +748,25 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     (e2ty, theta) <- branch $ synthesize e2 
     e2ty' <- substCtx theta e2ty 
     case e2ty' of
-      A _ (RecTy nm fty) -> pure $ (subst e2ty' nm fty, theta)
-      _                  -> otherErr $ show $ pretty e2ty <+> "cannot be unfolded"
+      A ann2 (RecTy fty) -> pure (A ann2 $ fty `TApp` e2ty', theta)
+      _                  -> otherErr $ show $ pretty e2ty' <+> "cannot be unfolded"
 
   -- -- ->FoldE
+  synthesize' (Prim Fold) = do
+    ctx <- getCtx
+    root $ "[->FoldE=>]" <+> "in" <+> pretty ctx
+    a1 <- freshName
+    let a1t = A ann (TExists a1)
+    let rt = A ann (RecTy a1t)
+    pure (A ann $ (A ann $ a1t `TApp` rt) :->: rt, ctx <+ Exists a1)
+
   -- synthesize' (A uann (Prim Fold) `App` e2) = do
   --   root "[->FoldE=>]"
   --   (e2ty, theta) <- branch $ synthesize e2 
-  --   -- root $ "[Info]" <+> pretty (e2ty, theta)
-  --   e2ty' <- substCtx theta e2ty 
-  --   x <- freshName
-  --   f <- freshName
-  --   let xt = A uann (TExists x)
-  --   let ft = A uann (TExists f)
-  --   delta <- withCtx (\g -> g <+ Exists x <+ Exists f) $ e2ty' `subtypeOf` (A uann $ ft `TApp` xt)
-  --   ty <- substCtx delta $ (A uann $ RecTy x $ A uann $ (ft `TApp` xt))
-  --   pure (ty, delta)
+  --   e2ty' <- substCtx theta e2ty
+  --   case e2ty' of 
+  --     A ann2 (fty `TApp` ty) -> pure (ty, theta)
+  --     _                      -> otherErr $ show $ pretty e2ty' <+> "cannot be folded"
 
   -- ->E
   synthesize' (e1 `App` e2) = do

@@ -193,14 +193,17 @@ parserSpec = do
        e `shouldBe` E.clocks ["a"] (E.clocks ["b"] $ "a" @->: "b" @->: "b")
 
   it "parses recursive types (1)" $ do
-    let Right e = E.unannT <$> parse P.typep "" "Fix x. Unit"
-    e `shouldBe` E.recTy "x" "Unit"
+    let Right e = E.unannT <$> parse P.typep "" "Fix Unit" -- invalid ofc, but type checker will check
+    e `shouldBe` E.recTy "Unit"
   it "parses recursive types (2)" $ do
-    let Right e = E.unannT <$> parse P.typep "" "Fix x. NatF x"
-    e `shouldBe` E.recTy "x" ("NatF" @@: "x")
+    let Right e = E.unannT <$> parse P.typep "" "Fix NatF"
+    e `shouldBe` E.recTy "NatF"
   it "parses recursive types (3)" $ do
-    let Right e = E.unannT <$> parse P.typep "" "forall a. Fix x. ListF a x"
-    e `shouldBe` E.forAll ["a"] (E.recTy "x" ("ListF" @@: "a" @@: "x"))
+    let Right e = E.unannT <$> parse P.typep "" "forall a. Fix (ListF a)"
+    e `shouldBe` E.forAll ["a"] (E.recTy ("ListF" @@: "a"))
+  it "parses recursive types (4)" $ do
+    let Right e = E.unannT <$> parse P.typep "" "forall a. Fix (ListF a) -> Fix NatF"
+    e `shouldBe` E.forAll ["a"] (E.recTy ("ListF" @@: "a") @->: (E.recTy "NatF"))
   
   it "parses typevars" $ do
     do let Right e = E.unannT <$> parse P.tvar "" "a"

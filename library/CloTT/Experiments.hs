@@ -27,6 +27,7 @@ fix f =
   let x = f x
   in x
 
+
 pred :: Nat -> Nat
 pred m =
   case out m of

@@ -136,7 +136,7 @@ checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (a
 
       Forall n t -> checkRecAl name t
       Clock  n t -> checkRecAl name t
-      RecTy  n t -> checkRecAl name t
+      RecTy  t -> checkRecAl name t
             
 
 
@@ -191,9 +191,9 @@ expandAliases als t =
             Done t1' -> done $ A ann $ Clock n t1'
             Ex nm _ -> wrong nm
 
-        RecTy  n t1 -> 
+        RecTy t1 -> 
           go t1 >>= \case
-            Done t1' -> done $ A ann $ RecTy n t1'
+            Done t1' -> done $ A ann $ RecTy t1'
             Ex nm _ -> wrong nm
 
     (c1, c2) &&& fn = do

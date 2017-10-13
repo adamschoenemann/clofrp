@@ -39,7 +39,8 @@ data Type' :: * -> TySort -> * where
   (:->:)  :: Type a s    -> Type a s    -> Type' a s
   Forall  :: Name        -> Type a Poly -> Type' a Poly
   Clock   :: Name        -> Type a Poly -> Type' a Poly
-  RecTy   :: Name        -> Type a s    -> Type' a s
+  RecTy   :: Type a s                   -> Type' a s
+
 
 deriving instance Eq a       => Eq (Type' a s)
 deriving instance Data a     => Data (Type' a Poly)
@@ -71,7 +72,7 @@ prettyT' pars = \case
           p (Clock n t)  = Just (n,t)
           p _            = Nothing
   
-  RecTy n t -> parensIf $ "Fix" <+> pretty n <> "." <+> prettyT True t
+  RecTy t -> parensIf $ "Fix" <+> prettyT True t
   where
     collect :: (Type' a s -> Maybe (Name, Type a s)) -> Type a s -> ([Name], Type a s)
     collect p (A ann ty')
@@ -113,7 +114,7 @@ unannT' = \case
   t1 :->: t2    -> unannT t1 :->: unannT t2
   Forall nm tau -> Forall nm (unannT tau)
   Clock nm tau  -> Clock  nm (unannT tau)
-  RecTy nm tau  -> RecTy  nm (unannT tau)
+  RecTy tau     -> RecTy  (unannT tau)
 
 deriving instance Show a => Show (Type' a s)
 
@@ -150,7 +151,7 @@ freeVars (A _ ty) =
     x :->: y  -> freeVars x `S.union` freeVars y
     Forall n t -> freeVars t `S.difference` S.singleton n
     Clock  n t -> freeVars t `S.difference` S.singleton n
-    RecTy  n t -> freeVars t `S.difference` S.singleton n
+    RecTy  t -> freeVars t 
 
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
@@ -165,7 +166,7 @@ iterType base go t@(A ann t') =
     x :->: y   -> A ann $ go x :->: go y
     Forall n t -> A ann $ Forall n (go t)
     Clock  n t -> A ann $ Clock  n (go t)
-    RecTy  n t -> A ann $ RecTy  n (go t)
+    RecTy  t -> A ann $ RecTy (go t)
 
 -- asPolytype' :: Type a s -> Type a Poly
 asPolytype :: Type a s -> Type a Poly
@@ -178,7 +179,7 @@ asPolytype (A a ty) = A a $
     t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
     Forall x t   -> Forall x (asPolytype t) 
     Clock  x t   -> Clock  x (asPolytype t) 
-    RecTy  x t   -> RecTy  x (asPolytype t) 
+    RecTy  t   -> RecTy (asPolytype t) 
 
 asMonotype :: Type a s -> Maybe (Type a Mono)
 asMonotype (A a ty) = 
@@ -196,7 +197,7 @@ asMonotype (A a ty) =
 
     Clock  _ _ -> Nothing
 
-    RecTy  x t -> A a . RecTy x <$> asMonotype t
+    RecTy  t -> A a . RecTy <$> asMonotype t
 
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
@@ -216,9 +217,7 @@ subst x forY (A a inTy) =
     Clock  y t  | y == forY -> A a $ Clock y t 
                 | otherwise -> A a $ Clock y (subst x forY t)
 
-    RecTy  y t  | y == forY -> A a $ RecTy y t 
-                | otherwise -> A a $ RecTy y (subst x forY t)
-
+    RecTy  t  -> A a $ RecTy (subst x forY t)
     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
     
     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2

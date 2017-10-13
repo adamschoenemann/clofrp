@@ -204,8 +204,8 @@ clocks :: [String] -> Type () Poly -> Type () Poly
 clocks nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Clock nm acc
 
-recTy :: Name -> Type () Poly -> Type () Poly
-recTy nm t = A () $ RecTy nm t
+recTy :: Type () Poly -> Type () Poly
+recTy t = A () $ RecTy t
 
 exists :: Name -> Type () a
 exists nm = A () $ TExists nm

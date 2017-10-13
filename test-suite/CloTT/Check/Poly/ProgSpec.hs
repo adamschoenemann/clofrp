@@ -21,6 +21,12 @@ import           CloTT.AST.Name
 --       True  -> Left (id' ())
 --       False -> Right (id' 'a')
 
+progSpec :: Spec
+progSpec = do
+  describe "checkProg" $ do
+    specify "commented out for compilation performance" $ pending
+
+{-
 progSpec :: Spec 
 progSpec = do
   let errs e x = fst x `shouldBe` e
@@ -772,3 +778,4 @@ progSpec = do
     --   |]
     --   pending
       -- runCheckProg mempty prog `shouldYield` ()
+-}

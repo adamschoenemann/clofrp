@@ -40,7 +40,7 @@ clocks = p <?> "clocks" where
 
 recTy :: Parser Type
 recTy = (ann <*> p) <?> "Fix" where
-  p = E.RecTy <$> (reserved "Fix" *> (UName <$> lidentifier) <* reservedOp ".") <*> typep
+  p = E.RecTy <$> (reserved "Fix" *> typeexpr)
 
 typeexpr :: Parser Type
 typeexpr = tvar <|> free <|> forAll <|> clocks <|> recTy <|> parens typep
