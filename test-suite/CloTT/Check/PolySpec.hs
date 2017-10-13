@@ -250,7 +250,7 @@ polySpec = do
   describe "before'" $ do
     it "fails on empty context" $ do
       let ctx = Gamma @() []
-      before' (Exists "a") (Exists "b") ctx `shouldBe` False
+      before' (exists "a") (exists "b") ctx `shouldBe` False
     it "fails on singleton context" $ do
       let ctx = Gamma @() [exists "a"]
       before' (exists "a") (exists "b") ctx `shouldBe` False
@@ -637,8 +637,8 @@ polySpec = do
     it "fails when type not found in ctx" $ do
       runKindOf [] mempty "Nat" `shouldSatisfy` isLeft
     
-    let a = mempty <+ Uni "a"
-    let ab = mempty <+ Uni "a" <+ Uni "b"
+    let a = mempty <+ uni "a"
+    let ab = mempty <+ uni "a" <+ uni "b"
     it "fails with partially applied types in arrows" $ do
       runKindOf kinds a ("List" @->: "a") `shouldSatisfy` isLeft
       runKindOf kinds ab ("Tuple" @@: "a" @->: "b") `shouldSatisfy` isLeft

@@ -26,14 +26,26 @@ recSpec = do
         foldNat' : NatF (Fix NatF) -> Fix NatF.
         foldNat' = \m -> fold m.
 
-        foldNat : NatF Nat -> Nat.
-        foldNat = \m -> fold m.
+        -- foldNat : NatF Nat -> Nat.
+        -- foldNat = \m -> fold m.
 
-        unfoldNat' : Fix NatF -> NatF (Fix NatF).
-        unfoldNat' = \m -> unfold m.
+        -- foldNatPF : NatF Nat -> Nat.
+        -- foldNatPF = fold.
 
-        unfoldNat : Nat -> NatF Nat.
-        unfoldNat = \m -> unfold m.
+        -- unfoldNat' : Fix NatF -> NatF (Fix NatF).
+        -- unfoldNat' = \m -> unfold m.
+
+        -- unfoldNat : Nat -> NatF Nat.
+        -- unfoldNat = \m -> unfold m.
+
+        -- unfoldNatPF : Nat -> NatF Nat.
+        -- unfoldNatPF = unfold.
+
+        -- zero : Nat.
+        -- zero = fold Z.
+
+        -- one : Nat.
+        -- one = fold (S (fold Z)).
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -95,6 +107,12 @@ recSpec = do
 
         unfoldList : forall a. List a -> ListF a (List a).
         unfoldList = \m -> unfold m.
+
+        nil : forall a. List a.
+        nil = fold Nil.
+
+        cons : forall a. a -> List a -> List a.
+        cons = \x xs -> fold (Cons x xs).
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -119,5 +137,37 @@ recSpec = do
 
         singleton' : forall a. a -> List a.
         singleton' = \x -> foldList (Cons x (foldList Nil)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "works with Trees" $ do
+      let prog = [unsafeProg|
+        data TreeF a f = Empty | Branch a f f.
+        type Tree a = Fix (TreeF a).
+
+        data NatF a = Z | S a.
+        type Nat = Fix NatF.
+
+        data Maybe a = Nothing | Just a.
+        data Triple a b c = Triple a b c.
+
+        empty : forall a. Tree a.
+        empty = fold Empty.
+
+        branch : forall a. a -> Tree a -> Tree a -> Tree a.
+        branch = \x l r -> fold (Branch x l r).
+
+        treeMatch : forall a. Tree a -> Maybe (Triple a (Tree a) (Tree a)).
+        treeMatch = \t ->
+          case unfold t of
+            | Empty -> Nothing
+            | Branch x l r -> Just (Triple x l r).
+
+        nonsense : forall a. Tree a -> Nat.
+        nonsense = \t -> 
+          case unfold t of
+            | Empty -> fold Z
+            | Branch x l r -> fold (S (fold Z)).
+
       |]
       runCheckProg mempty prog `shouldYield` ()

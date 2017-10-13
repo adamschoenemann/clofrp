@@ -28,8 +28,8 @@ import CloTT.Annotated
 import CloTT.Pretty
 
 data CtxElem a
-  = Uni Name -- ^ Universal
-  | Exists Name -- ^ Existential
+  = Uni Name Kind -- ^ Universal
+  | Exists Name Kind -- ^ Existential
   | Name `HasType` Type a Poly -- ^ x : A
   | Name := Type a Mono -- ^ a = t
   | Marker Name -- ^ |>a
@@ -38,37 +38,34 @@ data CtxElem a
 instance Unann (CtxElem a) (CtxElem ()) where
   unann el = 
     case el of
-      Uni nm          -> Uni nm
-      Exists nm       -> Exists nm
+      Uni nm k        -> Uni nm k
+      Exists nm k     -> Exists nm k
       nm `HasType` ty -> nm `HasType` unann ty
       nm := ty        -> nm := unann ty
       Marker nm       -> Marker nm
 
-instance Show (CtxElem a) where
-  show = \case
-    Uni nm          -> show nm
-    Exists nm       -> "^" ++ show nm
-    nm `HasType` ty -> show nm ++ " : " ++ show (unannT ty)
-    nm := ty        -> show nm ++ " = " ++ show (unannT ty)
-    Marker nm       -> "▷" ++ show nm
-
 instance Pretty (CtxElem a) where
   pretty = \case
-    Uni nm          -> pretty nm
-    Exists nm       -> "^" <> pretty nm
-    nm `HasType` ty -> pretty nm <> " : " <> pretty (unann ty)
-    nm := ty        -> "^" <> pretty nm <> " = " <> pretty (unann ty)
+    Uni nm Star -> pretty nm
+    Uni nm k    -> parens (pretty nm <+> ":" <+> pretty k)
+    Exists nm Star -> "^" <> pretty nm
+    Exists nm k    -> parens ("^" <> pretty nm <+> ":" <+> pretty k)
+    nm `HasType` ty -> pretty nm <+> ":" <+> pretty (unann ty)
+    nm := ty        -> "^" <> pretty nm <+> "=" <+> pretty (unann ty)
     Marker nm       -> "▷" <> pretty nm
+
+instance Show (CtxElem a) where
+  show = show . pretty
 
 
 exists :: Name -> CtxElem a
-exists = Exists
+exists nm = Exists nm Star
 
 marker :: Name -> CtxElem a
 marker = Marker
 
 uni :: Name -> CtxElem a
-uni = Uni
+uni nm = Uni nm Star
 
 -- Free contexts contains "global" mappings from names to types
 newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
@@ -261,12 +258,12 @@ insertAt' at insertee into = do
 containsEVar :: TyCtx a -> Name -> Bool
 containsEVar ctx alpha = isJust $ ctxFind expred ctx where
     expred = \case
-      Exists alpha' -> alpha == alpha'
+      Exists alpha' _k -> alpha == alpha'
       alpha' := _   -> alpha == alpha' 
       _             -> False
 
 containsTVar :: TyCtx a -> Name -> Bool
 containsTVar ctx alpha = isJust $ ctxFind varPred ctx where
     varPred = \case
-      Uni alpha' -> alpha == alpha'
+      Uni alpha' _k -> alpha == alpha'
       _          -> False
