@@ -872,8 +872,14 @@ checkPat pat@(A ann p) ty = do
       Nothing    -> otherErr $ "Pattern " ++ show nm ++ " not found in context."
       Just destr -> do 
         ctx' <- branch $ checkPats pats destr ty
-        -- traceM $ showW 80 $ pretty ctx'
         pure ctx'
+
+    PTuple pats -> 
+      case ty of
+        A tann (TTuple ts) -> 
+          foldrM (\(p,t) acc -> branch $ withCtx (const acc) $ checkPat p t) ctx (zip pats ts)
+        _                    -> otherErr $ show $ pretty pat <+> "does not check against" <+> pretty ty
+    
 
 -- Take a destructor and "existentialize it" - replace its bound type-variables
 -- with fresh existentials
@@ -901,9 +907,6 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
   | length pats /= length args = 
       otherErr $ show $ "Expected" <+> pretty (length args) 
              <+> "arguments to" <> pretty name <+> "but got" <+> pretty (length pats)
-  -- | typ         =/%= expected    = 
-  --     otherErr $ show $ "Pattern '" <> pretty name <> "' has type" <+> pretty typ 
-  --            <+> "but expected" <+> pretty expected
   | otherwise                  = do
       (delta, Destr {typ = etyp, args = eargs}) <- existentialize ann d
       -- traceM $ show $ pretty name <> ":" <+> pretty typ <+> "with args" <+> pretty args

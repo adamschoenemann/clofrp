@@ -120,3 +120,6 @@ lexeme     = Tok.lexeme lexer
 
 ann :: Parser (t -> A.Annotated SourcePos t)
 ann = A.A <$> getPosition
+
+sepBy2 :: Parser a -> Parser sep -> Parser [a]
+sepBy2 e s = (:) <$> (e <* s) <*> sepBy1 e s

@@ -33,6 +33,7 @@ For my master's thesis at ITU
   - Parsing and checking is pretty laissez faire with propagating and maintaining annotations, leading
     to possibly incorrect source-locations in errors
 - Check data decls and type aliases for well-formedness before elaboration
+- Is OK to re-assign an existential iff it is the same type we're attempting to assign?
 
 ## Type Aliases
 - Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:

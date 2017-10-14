@@ -29,6 +29,7 @@ type Pat a = Annotated a (Pat' a)
 data Pat' a  
   = Bind Name 
   | Match Name [Pat a]
+  | PTuple [Pat a]
   deriving (Eq, Data, Typeable)
 
 prettyP :: Bool -> Pat a -> Doc ann
@@ -39,6 +40,7 @@ prettyP' pars = \case
   Bind nm -> pretty nm
   Match nm []   -> pretty nm
   Match nm pats -> parensIf $ pretty nm <+> hsep (map (prettyP False) pats)
+  PTuple   pats -> tupled (map (prettyP False) pats)
   where
     parensIf = if pars then parens else id
 
@@ -69,3 +71,4 @@ unannPat' :: Pat' a -> Pat' ()
 unannPat' p = case p of
   Bind nm -> Bind nm
   Match nm ps ->  Match nm (map unannPat ps)
+  PTuple ps -> PTuple (map unannPat ps)

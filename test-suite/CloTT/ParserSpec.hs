@@ -125,6 +125,28 @@ parserSpec = do
     case E.unannE <$> parse P.expr "" "case n of | Z -> n | S n' -> n'" of
       Right e -> e `shouldBe` E.caseof "n" [(E.match "Z" [], "n"), (E.match "S" ["n'"], "n'")]
       Left e -> failure $ show e
+    case E.unannE <$> parse P.expr "" "case n of | (a,b) -> n" of
+      Right e -> e `shouldBe` E.caseof "n" [ (E.pTup ["a", "b"], "n") ]
+      Left e -> failure $ show e
+    case E.unannE <$> parse P.expr "" "case n of | (Z,b) -> n" of
+      Right e -> e `shouldBe` E.caseof "n" [ (E.pTup [E.match "Z" [], "b"], "n") ]
+      Left e -> failure $ show e
+    case E.unannE <$> parse P.expr "" "case n of | (a,(b,c)) -> n" of
+      Right e -> e `shouldBe` E.caseof "n" [ (E.pTup ["a", E.pTup ["b", "c"]], "n") ]
+      Left e -> failure $ show e
+    case E.unannE <$> parse P.expr "" "case n of | (S n',b) -> n" of
+      Right e -> e `shouldBe` E.caseof "n" [ (E.pTup [E.match "S" ["n'"], "b"], "n") ]
+      Left e -> failure $ show e
+    case E.unannE <$> parse P.expr "" "case n of | (S (a,b),c) -> n" of
+      Right e -> e `shouldBe` E.caseof "n" [ (E.pTup [E.match "S" [E.pTup ["a", "b"]], "c"], "n") ]
+      Left e -> failure $ show e
+    case E.unannE <$> parse P.expr "" "case n of | (a,(Z,b)) -> n | (S n', S (x,y)) -> n'" of
+      Right e -> e `shouldBe` 
+        E.caseof "n" 
+          [ (E.pTup ["a", E.pTup [E.match "Z" [], "b"]], "n")
+          , (E.pTup [E.match "S" ["n'"], E.match "S" [E.pTup ["x", "y"]]], "n'")
+          ]
+      Left e -> failure $ show e
   
   it "parses compound expressions" $ 
     do let Right e = E.unannE <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"

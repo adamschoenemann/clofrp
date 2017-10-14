@@ -15,6 +15,7 @@
 module CloTT.Check.Poly.Prog where
 
 import qualified Data.Map.Strict as M
+import Debug.Trace
 import Data.Data (Data, Typeable)
 import Data.Monoid
 import Data.Foldable
@@ -230,11 +231,17 @@ elabProg (Prog decls) = do
         | otherwise     -> do
             _ <- checkRecAliases aliases
             let FreeCtx types = sigds <> cnstrs
-            expanded <- traverse (expandAliases aliases) types
-            -- traceM $ show $ pretty $ M.toList expanded
+            expFree <- traverse (expandAliases aliases) types
+            expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
+            -- traceM $ show $ pretty $ M.toList expFree
             -- destrs <- DestrCtx <$> traverse ()
-            pure $ ElabProg kinds (FreeCtx expanded) funds destrs aliases
+            pure $ ElabProg kinds (FreeCtx expFree) funds (expDestrs) aliases
   where 
+    expandDestr als d@(Destr {typ, args}) = do
+      typ' <- expandAliases als typ
+      args' <- traverse (expandAliases als) args
+      pure (d {typ = typ', args = args'})
+
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> TypingM a (ElabRes a)
     folder (A _ x) (ks, fs, ss, cs, ds, als) = case x of

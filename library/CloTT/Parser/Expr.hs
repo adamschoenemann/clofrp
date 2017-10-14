@@ -21,8 +21,7 @@ nat :: Parser Expr
 nat = ann <*> (E.Prim . P.Nat <$> natural)
 
 tuple :: Parser Expr
-tuple = ann <*> (E.Tuple <$> parens (expr `sepBy2` comma)) where
-  sepBy2 e s = (:) <$> (e <* s) <*> sepBy1 e s
+tuple = ann <*> (E.Tuple <$> parens (expr `sepBy2` comma))
 
 lname :: Parser Name
 lname = UName <$> lidentifier
@@ -77,13 +76,16 @@ casep = do
     matchp = (,) <$> (pat <* reservedOp "->") <*> expr
 
 
+-- a bit annoying with all this copy-paste but meh
 pat :: Parser Pat
 pat = ann <*> p where
-  p = (bind <|> match <|> parens p) 
-  bind  = E.Bind . UName <$> lidentifier
-  match = E.Match <$> (UName <$> uidentifier) <*> many (ann <*> pat')
+  p = (bind <|> match <|> try ptuple <|> parens p) 
+  bind    = E.Bind . UName <$> lidentifier
+  match   = E.Match <$> (UName <$> uidentifier) <*> many (ann <*> pat')
+  ptuple  = parens (E.PTuple <$> pat `sepBy2` comma)
   pat'  =  E.Match <$> (UName <$> uidentifier) <*> pure [] 
         <|> E.Bind . UName <$> lidentifier
+        <|> try (parens (E.PTuple <$> pat `sepBy2` comma))
         <|> parens (E.Match <$> (UName <$> uidentifier) <*> many pat)
 
 atom :: Parser Expr

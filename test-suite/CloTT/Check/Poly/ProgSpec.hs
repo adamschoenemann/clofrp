@@ -103,8 +103,25 @@ progSpec = do
 
         curry : forall a b c. ((a,b) -> c) -> a -> b -> c.
         curry = \fn x y -> fn (x, y).
-        -- uncurry : forall a b c. (a -> b -> c) -> (a, b) -> c.
-        -- uncurry
+        uncurry : forall a b c. (a -> b -> c) -> (a, b) -> c.
+        uncurry = \fn t -> 
+          case t of
+            | (x, y) -> fn x y.
+        uncurry3 : forall a b c d. (a -> b -> c -> d) -> (a, b, c) -> d.
+        uncurry3 = \fn t ->
+          case t of
+            | (x, y, z) -> fn x y z.
+        
+        pairAssocL : forall a b c. (a, (b, c)) -> ((a, b), c).
+        pairAssocL = \p ->
+          case p of
+            | (x, (y, z)) -> ((x, y), z).
+
+        pairAssocR : forall a b c. ((a, b), c) -> (a, (b, c)).
+        pairAssocR = \p ->
+          case p of
+            | ((x, y), z) -> (x, (y, z)).
+
       |]
       runCheckProg mempty prog `shouldYield` ()
 

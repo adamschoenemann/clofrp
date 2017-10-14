@@ -53,8 +53,7 @@ recTy = (ann <*> p) <?> "Fix" where
   p = E.RecTy <$> (reserved "Fix" *> typeexpr)
 
 ttuple :: Parser Type
-ttuple = ann <*> (E.TTuple <$> parens (typep `sepBy2` comma)) where
-  sepBy2 e s = (:) <$> (e <* s) <*> sepBy1 e s
+ttuple = ann <*> (E.TTuple <$> parens (typep `sepBy2` comma))
 
 typeexpr :: Parser Type
 typeexpr = tvar <|> free <|> forAll <|> clocks <|> recTy <|> try (ttuple) <|> parens typep
