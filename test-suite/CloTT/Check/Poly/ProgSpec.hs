@@ -412,6 +412,21 @@ progSpec = do
             | Cons (Right x) xs' -> rights xs'.
       |]
       shouldFail $ runCheckProg mempty prog
+    
+    specify "(double-assignment test-case)" $ do
+      let Right prog = pprog [text|
+        data A = A.
+        data Bool = True | False.
+
+        app : forall a b. (a -> b) -> a -> b.
+        app = \f x -> f x.
+
+        foo : Bool -> A.
+        foo = app (\b -> case b of
+          | True -> A
+          | False -> A).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
     -- we need a new rule to instantiate existentials with type-applications
     it "succeeds for a bunch of eithers" $ do
