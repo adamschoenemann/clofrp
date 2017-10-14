@@ -95,6 +95,9 @@ substCtx' ctx (A a ty) =
     RecTy t -> do
       t' <- substCtx' ctx t
       pure $ A a $ RecTy t'
+    
+    TTuple ts -> do
+      A a . TTuple <$> sequence (map (substCtx' ctx) ts)
 
 
 substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)

@@ -42,6 +42,7 @@ data Type' :: * -> TySort -> * where
   Forall  :: Name -> Kind -> Type a Poly -> Type' a Poly
   Clock   :: Name         -> Type a Poly -> Type' a Poly
   RecTy   :: Type a s                    -> Type' a s
+  TTuple  :: [Type a s]                  -> Type' a s
 
 
 deriving instance Eq a       => Eq (Type' a s)
@@ -79,6 +80,7 @@ prettyT' pars = \case
           p _            = Nothing
   
   RecTy t -> parensIf $ "Fix" <+> prettyT True t
+  TTuple ts -> parens (tupled $ map (prettyT False) ts)
   where
     collect :: Pretty n => (Type' a s -> Maybe (n, Type a s)) -> Type a s -> ([n], Type a s)
     collect p (A ann ty')
@@ -121,6 +123,7 @@ unannT' = \case
   Forall nm k tau -> Forall nm k (unannT tau)
   Clock nm tau  -> Clock  nm (unannT tau)
   RecTy tau     -> RecTy  (unannT tau)
+  TTuple ts     -> TTuple (map unannT ts)
 
 deriving instance Show a => Show (Type' a s)
 
@@ -158,6 +161,7 @@ freeVars (A _ ty) =
     Forall n k t -> freeVars t `S.difference` S.singleton n
     Clock  n t -> freeVars t `S.difference` S.singleton n
     RecTy  t -> freeVars t 
+    TTuple ts -> S.unions $ map freeVars ts
 
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
@@ -173,6 +177,7 @@ iterType base go t@(A ann t') =
     Forall n k t -> A ann $ Forall n k (go t)
     Clock  n t -> A ann $ Clock  n (go t)
     RecTy  t -> A ann $ RecTy (go t)
+    TTuple ts -> A ann $ TTuple (map go ts)
 
 -- asPolytype' :: Type a s -> Type a Poly
 asPolytype :: Type a s -> Type a Poly
@@ -185,7 +190,8 @@ asPolytype (A a ty) = A a $
     t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
     Forall x k t  -> Forall x k (asPolytype t) 
     Clock  x t   -> Clock  x (asPolytype t) 
-    RecTy  t   -> RecTy (asPolytype t) 
+    RecTy  t     -> RecTy (asPolytype t) 
+    TTuple ts    -> TTuple (map asPolytype ts)
 
 asMonotype :: Type a s -> Maybe (Type a Mono)
 asMonotype (A a ty) = 
@@ -206,6 +212,8 @@ asMonotype (A a ty) =
 
     RecTy  t -> A a . RecTy <$> asMonotype t
 
+    TTuple ts -> A a . TTuple <$> sequence (map asMonotype ts)
+
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
   case inTy of
@@ -225,6 +233,8 @@ subst x forY (A a inTy) =
                 | otherwise -> A a $ Clock y (subst x forY t)
 
     RecTy  t  -> A a $ RecTy (subst x forY t)
+    TTuple ts -> A a $ TTuple (map (subst x forY) ts)
+
     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
     
     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
