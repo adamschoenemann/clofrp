@@ -38,7 +38,7 @@ data Expr' a
   | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx -> e OR λ(x : A) -> e
   | TickAbs Name Name (Expr a) -- λ(α : κ) -> e
   | ClockAbs Name (Expr a) -- /\κ -> e
-  | Tuple (Expr a) (Expr a) -- not really used right now
+  | Tuple [Expr a]
   | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
   | Prim P.Prim -- primitive (will probably just include numbers in the end)
  
@@ -62,7 +62,7 @@ prettyE' pars = \case
   TickAbs  nm kappa e -> "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
   ClockAbs kappa e -> "/\\" <> pretty kappa <+> "->" <+> pretty e
 
-  Tuple e1 e2 -> parens (prettyE False e1 <> comma <+> prettyE False e2)
+  Tuple es -> tupled (map (prettyE False) es)
 
   Case e clauses ->
     "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
@@ -111,6 +111,6 @@ unannE' = \case
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannE e)
   TickAbs nm kappa e -> TickAbs nm kappa (unannE e)
   ClockAbs kappa e -> ClockAbs kappa (unannE e)
-  Tuple e1 e2 -> Tuple (unannE e1) (unannE e2)
+  Tuple es -> Tuple (map unannE es)
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
   Prim p -> Prim p

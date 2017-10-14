@@ -155,6 +155,9 @@ true = A () . Var $ "True"
 false :: Expr ()
 false = A () . Var $ "False"
 
+tup :: [Expr ()] -> Expr ()
+tup = A () . Tuple
+
 foldf :: Expr ()
 foldf = A () . Prim $ P.Fold
 
@@ -193,6 +196,9 @@ clocks nms t = foldr fn t $ map UName nms where
 recTy :: Type () Poly -> Type () Poly
 recTy t = A () $ RecTy t
 
+tTup :: [Type () Poly] -> Type () Poly
+tTup = A () . TTuple
+
 exists :: Name -> Type () a
 exists nm = A () $ TExists nm
 
@@ -215,14 +221,12 @@ cAbs k e = A () $ ClockAbs k e
 infixr 2 @->
 infixr 2 @:->
 infixl 9 @@
-infixl 8 @*
 infixl 3 @::
 
 class IsString a => LamCalc a t | a -> t where
   (@->) :: String -> a -> a
   (@:->) :: (String, t) -> a -> a
   (@@) :: a -> a -> a
-  (@*) :: a -> a -> a
   (@::) :: a -> t -> a
 
 
@@ -231,8 +235,6 @@ instance LamCalc (Expr ()) (Type () Poly) where
   (nm, t) @:-> e = A () $ Lam (UName nm) (Just t) e
 
   e1 @@ e2 = A () $ App e1 e2
-
-  e1 @* e2 = A () $ Tuple e1 e2
   e @:: t = A () $ Ann e t
 
 -- helper
@@ -287,7 +289,7 @@ substTVarInExpr new nm = go where
     Lam v mty e -> Lam v (subst new nm <$> mty) (go e)
     TickAbs v kappa e -> TickAbs v kappa (go e)
     ClockAbs kappa e -> ClockAbs kappa (go e)
-    Tuple e1 e2 -> Tuple (go e1) (go e2)
+    Tuple es -> Tuple (map go es)
     Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
     Prim p -> e'
 
@@ -307,6 +309,6 @@ substClockVarInExpr new nm = go where
       Lam v mty e -> A a $ Lam v mty (go e)
       TickAbs v kappa e -> A a $ TickAbs v kappa (go e)
       ClockAbs kappa e -> A a $ ClockAbs kappa (go e)
-      Tuple e1 e2 -> A a $ Tuple (go e1) (go e2)
+      Tuple es -> A a $ Tuple (map go es)
       Case e clauses -> A a $ (Case (go e) $ map (\(p,c) -> (p, go c)) clauses)
       Prim p -> A a e'

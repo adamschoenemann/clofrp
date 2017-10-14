@@ -16,7 +16,7 @@ data Name
 instance Show Name where
   show x = 
     case x of
-      UName x -> x
+      UName s -> s
       MName i -> '`' : intToString i where
       DeBruijn i -> '`' : show i
 

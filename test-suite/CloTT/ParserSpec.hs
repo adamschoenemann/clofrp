@@ -33,9 +33,11 @@ parserSpec = do
   
   it "parses tuples" $ do
     do let Right e = E.unannE <$> parse P.expr "" "(10, False)"
-       e `shouldBe` E.nat 10 @* E.false
+       e `shouldBe` E.tup [E.nat 10, E.false]
     do let Right e = E.unannE <$> parse P.expr "" "(True, 5)"
-       e `shouldBe` E.true @* E.nat 5
+       e `shouldBe` E.tup [E.true, E.nat 5]
+    do let Right e = E.unannE <$> parse P.expr "" "(True, 5, False, 4)"
+       e `shouldBe` E.tup [E.true, E.nat 5, E.false, E.nat 4]
   
   it "parses vars" $ do
     do let Right e = E.unannE <$> parse P.expr "" "x"
@@ -47,7 +49,7 @@ parserSpec = do
     do let Right e = E.unannE <$> parse P.expr "" "\\x -> x"
        e `shouldBe` "x" @-> "x"
     do let Right e = E.unannE <$> parse P.expr "" "\\x -> (x, True)"
-       e `shouldBe` "x" @-> "x" @* E.true
+       e `shouldBe` "x" @-> E.tup ["x", E.true]
     do let Right e = E.unannE <$> parse P.expr "" "\\x -> \\y -> x"
        e `shouldBe` "x" @-> "y" @-> "x"
     case E.unannE <$> parse P.expr "" "\\(x:Bool) -> \\(y:Int) -> x" of
@@ -126,7 +128,7 @@ parserSpec = do
   
   it "parses compound expressions" $ 
     do let Right e = E.unannE <$> parse P.expr "" "\\x -> (\\y -> x y, y (True,x))"
-       e `shouldBe` "x" @-> ("y" @-> "x" @@ "y") @* "y" @@ (E.true @* "x")
+       e `shouldBe` "x" @-> E.tup ["y" @-> "x" @@ "y", "y" @@ (E.tup [E.true, "x"])]
 
   it "parses tick abstractions (1)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "\\\\(a : k) -> \\x -> x"
@@ -167,6 +169,12 @@ parserSpec = do
        e `shouldBe` "a" @->: "b" @->: "c"
     do let Right e = E.unannT <$> parse P.typep "" "(a -> b) -> c"
        e `shouldBe` ("a" @->: "b") @->: "c"
+  
+  it "parses tuple types" $ do
+    do let Right e = E.unannT <$> parse P.typep "" "(a,b)"
+       e `shouldBe` E.tTup ["a", "b"]
+    do let Right e = E.unannT <$> parse P.typep "" "(a -> b, f a, f b)"
+       e `shouldBe` E.tTup ["a" @->: "b", "f" @@: "a", "f" @@: "b"]
 
   it "parses foralls" $ do
     do let Right e = E.unannT <$> parse P.typep "" "forall a. a"

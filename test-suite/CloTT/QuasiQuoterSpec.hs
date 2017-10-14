@@ -25,7 +25,7 @@ quasiSpec = do
         E.sigd "id" ("a" @->: "a")
       , E.fund "id" ("x" @-> "x")
       , E.sigd "twice" ("Nat" @->: "Tuple" @@: "Nat" @@: "Nat")
-      , E.fund "twice" ("x" @-> ("x" @* "x"))
+      , E.fund "twice" ("x" @-> (E.tup ["x", "x"]))
       , E.datad "Maybe" 
           (Star :->*: Star)
           ["a"]

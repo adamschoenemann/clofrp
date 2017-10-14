@@ -67,7 +67,7 @@ prettyT' pars = \case
     in  parensIf $ "∀" <> bound <> dot <+> prettyT False t'
         where 
           p :: Type' a s -> Maybe ((Name, Kind), Type a s)
-          p (Forall n k t) = Just ((n,k),t)
+          p (Forall n' k' t') = Just ((n', k'), t')
           p _              = Nothing
 
   Clock n t -> 
@@ -76,7 +76,7 @@ prettyT' pars = \case
     in  parensIf $ "∇" <> bound <> dot <+> prettyT False t'
         where
           p :: Type' a s -> Maybe (Name, Type a s)
-          p (Clock n t)  = Just (n,t)
+          p (Clock n' t')  = Just (n',t')
           p _            = Nothing
   
   RecTy t -> parensIf $ "Fix" <+> prettyT True t
@@ -167,11 +167,11 @@ inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
 iterType :: (Type a Poly -> Type a Poly) -> (Type a Poly -> Type a Poly) -> Type a Poly -> Type a Poly
-iterType base go t@(A ann t') = 
-  case t' of
-    TFree n -> base t
-    TVar n  -> base t
-    TExists n -> base t
+iterType base go ty@(A ann ty') = 
+  case ty' of
+    TFree n -> base ty
+    TVar n  -> base ty
+    TExists n -> base ty
     TApp x y   -> A ann $ TApp (go x) (go y)
     x :->: y   -> A ann $ go x :->: go y
     Forall n k t -> A ann $ Forall n k (go t)

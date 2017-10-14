@@ -28,8 +28,6 @@ module CloTT.Check.Poly
   where
 
 import Data.Foldable (foldlM, foldrM)
-import Debug.Trace
-import Data.String (fromString)
 import Control.Applicative ((<|>))
 import Control.Monad.Except (catchError, throwError)
 import Data.Text.Prettyprint.Doc
@@ -215,6 +213,11 @@ kindOf ty = go ty `catchError` handler where
         case k of
           Star :->*: Star -> pure Star
           _               -> otherErr $ show $ pretty tau <+> "must have kind * -> * to be an argument to Fix" 
+      
+      TTuple ts -> (traverse fn ts) *> pure Star where
+        fn tt = kindOf tt >>= \case
+          Star -> pure ()
+          k    -> otherErr $ show $ pretty tt <+> "must have kind *"
         
 
     where
@@ -256,13 +259,11 @@ checkWfType ty@(A ann ty') = do
       | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context"
       | otherwise                         -> withCtx (\g -> g <+ Uni x k) $ checkWfType t -- TODO: Kind anns
 
-    -- TAppWF. FIXME Should check correct kinds as well.
     TApp t1 t2 -> do
       k <- kindOf t1
       case k of
         k' :->*: k''  -> checkWfType t1 *> checkWfType t2
         _             -> do 
-          kctx <- getKCtx
           otherErr $ show $ pretty t1 <+> "must be a type-constructor" <+> "in kctx" <+> pretty kctx
 
     -- ClockWF
@@ -275,6 +276,11 @@ checkWfType ty@(A ann ty') = do
     RecTy t -> kindOf t >>= \case
       Star :->*: k' -> checkWfType t
       k             -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but must be a type constructor"
+    
+    TTuple ts -> traverse fn ts *> pure () where
+      fn tt = do
+        errIf (kindOf tt) (/= Star) (\tt' -> Other $ show $ pretty tt' <+> "must have kind *")
+        checkWfType tt
 
   where 
     expred alpha = \case
@@ -600,6 +606,11 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     root $ "[<:Rec]" <+> pretty ty1 <+> "<:" <+> pretty ty2
     branch $ b1 `subtypeOf` b2
 
+  subtypeOf' (TTuple ts1) (TTuple ts2) = do
+    root $ "[<:Tuple]" <+> pretty ty1 <+> "<:" <+> pretty ty2
+    ctx <- getCtx
+    foldrM (\(t1, t2) acc -> branch $ withCtx (const acc) $ t1 `subtypeOf` t2) ctx (zip ts1 ts2)
+
   subtypeOf' t1 t2 = do
     -- root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
     root $ "[SubtypeError!]" <+> pretty t1 <+> "<:" <+> pretty t2
@@ -682,6 +693,12 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- check' (A ufann (Prim Unfold) `App` e2) (ftor `TApp` unfty) = do
   --   root "[UnfoldApp]"
     -- branch $ check e2 $ unfty
+
+  -- Tuple<=
+  check' (Tuple es) (TTuple ts) = do
+    root $ "[Tuple<=]" <+> pretty e <+> "<=" <+> pretty ty
+    ctx <- getCtx
+    foldrM (\(e, t) acc -> branch $ withCtx (const acc) $ check e t) ctx (zip es ts)
 
   -- Sub
   check' _ _ = do
@@ -805,10 +822,16 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   synthesize' (Case e clauses) = do
     root $ "[Case=>]" <+> pretty e <+> enclose "[" "]" (cat $ map pretty clauses)
     cannotSynthesize expr
-    -- (pty, delta) <- branch $ synthesize e
-    -- cty <- withCtx (const delta) $ branch $ checkClauses (pty, Nothing) clauses
-    -- ctx <- getCtx
-    -- pure (cty, ctx)
+
+  -- Tuple=>
+  synthesize' (Tuple es) = do
+    ctx <- getCtx
+    (ts, ctx') <- foldrM folder ([], ctx) es
+    pure (A ann $ TTuple ts, ctx')
+    where
+      folder e (ts', acc) = do
+        (t', acc') <- branch $ withCtx (const acc) $ synthesize e
+        pure (t' : ts', acc')
 
   synthesize' _ = cannotSynthesize expr
 

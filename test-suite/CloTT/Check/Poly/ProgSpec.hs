@@ -1,3 +1,8 @@
+{-
+I don't use the quasi-quoter here because it increases compilation
+time too much, even when I don't want to run all the tests.
+This way, the CloTT programs are parsed lazily
+-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -6,33 +11,24 @@
 module CloTT.Check.Poly.ProgSpec where
 
 import Test.Tasty.Hspec
+import NeatInterpolation
+import Data.Text (Text, unpack)
 
 import           CloTT.Check.Poly.TestUtils
-import           CloTT.QuasiQuoter
+import           CloTT.Parser.Prog (parseProg)
 import           CloTT.Check.Poly.Prog
 import           CloTT.Check.Poly.TypingM
 import           CloTT.Pretty
 import           CloTT.AST.Name
 
--- foo :: Bool -> Either () Char
--- foo = \b ->
---   case (\x -> x) :: forall a. a -> a of
---     id' -> case id' b of
---       True  -> Left (id' ())
---       False -> Right (id' 'a')
 
-progSpec :: Spec
-progSpec = do
-  describe "checkProg" $ do
-    specify "commented out for compilation performance" $ pending
-
-{-
 progSpec :: Spec 
 progSpec = do
+  let pprog = parseProg . unpack
   let errs e x = fst x `shouldBe` e
   describe "checkProg" $ do
     it "fails programs with invalid types (1)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Foo a = MkFoo a.
         foo : Foo -> Nat.
         foo = \x -> x.
@@ -40,26 +36,26 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog
 
     it "succeeds for mono-types" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Int = .
         data IntList = Nil | Cons Int IntList.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
     it "fails programs with invalid types (2)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List a = Nil | Cons a (List a a).
       |]
       shouldFail $ runCheckProg mempty prog 
 
     it "fails programs with invalid types (3)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List = Nil | Cons a (List a).
       |]
       shouldFail $ runCheckProg mempty prog 
 
     it "succeeds for some simple functions" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Unit = Unit.
         foo : Unit -> Unit.
         foo = \x -> x.
@@ -71,26 +67,26 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for some simple poly functions" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         foo : forall a. a -> a.
         foo = \x -> x.
-        -- app : forall a b. (a -> b) -> a -> b.
-        -- app = \f -> \x -> f x.
-        -- data Unit = Unit.
-        -- bar : Unit.
-        -- bar = app foo Unit.
+        app : forall a b. (a -> b) -> a -> b.
+        app = \f x -> f x.
+        data Unit = Unit.
+        bar : Unit.
+        bar = app foo Unit.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
     it "succeeds for type annotations (1)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         id : forall a. a -> a.
         id = \x -> the (a) x.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for type annotations (2)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data NEList a = One a | Cons a (NEList a).
         foo : forall b. (forall a. NEList a) -> b.
         foo = \xs -> 
@@ -99,9 +95,21 @@ progSpec = do
             | Cons x xs' -> the (b) x.
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "succeeds for programs with tuples" $ do
+      let Right prog = pprog [text|
+        twice : forall a. a -> (a, a).
+        twice = \x -> (x, x).
+
+        curry : forall a b c. ((a,b) -> c) -> a -> b -> c.
+        curry = \fn x y -> fn (x, y).
+        -- uncurry : forall a b c. (a -> b -> c) -> (a, b) -> c.
+        -- uncurry
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
     it "does not generalize functions in case stmts" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data A = MkA.
         data B = MkB.
@@ -117,7 +125,7 @@ progSpec = do
       runCheckProg mempty prog `shouldFailWith` (errs $ Other $ show $ pretty (mname 1) <+> "is already assigned")
 
     it "succeeds for monomorphic patterns (1)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data FooBar = Foo | Bar.
         data Two = One | Two.
         foo : FooBar -> Two.
@@ -129,7 +137,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for monomorphic patterns (2)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data FooBar = Foo | Bar.
         data Two = One FooBar | Two.
         foo : FooBar -> Two.
@@ -141,7 +149,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
     
     it "suceeds for polymorphic patterns (1)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Maybe a = Nothing | Just a.
         data Int = .
         data FooBar = Foo Int | Bar.
@@ -157,7 +165,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
     
     it "suceeds for simple poly pattern match (Wrap)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Wrap t = MkWrap t.
         unWrap : forall a. Wrap a -> a.
         unWrap = \x ->
@@ -167,7 +175,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "suceeds for nested poly pattern match (Wrap)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Wrap t = MkWrap t.
         unUnWrap : forall a. Wrap (Wrap a) -> a.
         unUnWrap = \x ->
@@ -177,7 +185,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "fails for not-deep-enough pattern matches" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Wrap t = MkWrap t.
         unUnWrap : forall a. Wrap (Wrap a) -> a.
         unUnWrap = \x ->
@@ -187,7 +195,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog
 
     it "succeeds for nested list matching" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List t = Nil | Cons t (List t).
         data Maybe a = Nothing | Just a.
         head2 : forall a. List a -> Maybe a.
@@ -199,7 +207,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for lists and and maybe" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List t = Nil | Cons t (List t).
         singleton : forall a. a -> List a.
         singleton = \x -> Cons x Nil.
@@ -214,7 +222,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for rank2 crap" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List t = Nil | Cons t (List t).
         data Unit = MkUnit.
         foo : (forall a. List a) -> Unit.
@@ -226,7 +234,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "fails for rank2 crap" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List t = Nil | Cons t (List t).
         data Unit = MkUnit.
         data Either a b = Left a | Right b.
@@ -241,7 +249,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
 
     it "suceeds for rank2 stuff" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List t = Nil | Cons t (List t).
         data Pair a b = Pair a b.
         data Bool = True | False.
@@ -253,7 +261,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "fails for tricky polymorphism (1)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List t = Nil | Cons t (List t).
 
         data Maybe a = Nothing | Just a.
@@ -266,7 +274,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
 
     it "fails getRight" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         getRight : forall a b. Either a b -> b.
         getRight = \e ->
@@ -277,7 +285,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
 
     it "fails for tricky polymorphism (2)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data Maybe a = Nothing | Just a.
 
@@ -290,7 +298,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
 
     it "fails for wrong patterns" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data Maybe a = Nothing | Just a.
 
@@ -303,7 +311,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
     
     it "fails for impredicative types" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data Maybe a = Nothing | Just a.
 
@@ -316,7 +324,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
 
     it "succeeds for toMaybe" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data Maybe a = Nothing | Just a.
 
@@ -329,16 +337,14 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "suceeds for polymorphic function composition" $ do
-      let prog = [unsafeProg|
-
+      let Right prog = pprog [text|
         compose : forall a b c. (b -> c) -> (a -> b) -> (a -> c).
         compose = \g -> \f -> \x -> g (f x).
       |]
       runCheckProg mempty prog `shouldYield` ()
 
     it "infers the type of lambdas" $ do
-      let prog = [unsafeProg|
-
+      let Right prog = pprog [text|
         data Bool = True | False.
         data Unit = MkUnit.
         test : Bool -> Unit.
@@ -348,7 +354,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "suceeds for contravariant functor" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Bool = True | False.
         data Predicate a = Pred (a -> Bool).
 
@@ -360,7 +366,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
     
     it "succeeds for lefts" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Bool = True | False.
         data Either a b = Left a | Right b.
         data List a = Nil | Cons a (List a).
@@ -376,7 +382,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "fails for incorrect rights" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Bool = True | False.
         data Either a b = Left a | Right b.
         data List a = Nil | Cons a (List a).
@@ -392,7 +398,7 @@ progSpec = do
 
     -- we need a new rule to instantiate existentials with type-applications
     it "succeeds for a bunch of eithers" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data Unit = MkUnit.
         data A = MkA.
@@ -411,7 +417,7 @@ progSpec = do
 
 
     it "succeeds for a bunch of polymorphic eithers" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
 
         either1 : forall a b c. a -> Either a (Either b c).
@@ -430,7 +436,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for nested eithers (either-swap)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Bool = True | False.
         data Either a b = Left a | Right b.
 
@@ -445,7 +451,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog
 
     it "fails for a bunch of eithers (1)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data A = MkA.
         data B = MkB.
@@ -456,7 +462,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
 
     it "fails for a bunch of eithers (2)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data A = MkA.
         data B = MkB.
@@ -467,7 +473,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
 
     it "fails for a bunch of eithers (3)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
 
         either : forall a b c. a -> Either a (Either b c).
@@ -476,7 +482,7 @@ progSpec = do
       shouldFail $ runCheckProg mempty prog 
     
     it "suceeds for church lists (data-dec)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data ChurchList a = ChurchList (forall r. (a -> r -> r) -> r -> r).
         data List a = Nil | Cons a (List a).
         
@@ -518,7 +524,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for church lists (alias)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List a = Nil | Cons a (List a).
         type ChurchList a = forall r. (a -> r -> r) -> r -> r.
         
@@ -543,7 +549,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
     
     it "succeeds for Data.Either stdlib" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         data List a = Nil | Cons a (List a).
         data Bool = True | False.
@@ -608,7 +614,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
     
     it "succeeds for superfluous quantifiers" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         foo : forall a b c. a -> a.
         foo = \x -> x.
 
@@ -619,14 +625,14 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "fails for impossible defs" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         foo : forall a b. a -> b.
         foo = \x -> x.
       |]
       shouldFail $ runCheckProg mempty prog 
     
     it "succeeds for non-regular data (omg)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Pair a = MkPair a a.
         data BalTree a = Empty | Branch a (BalTree (Pair a)).
         data Nat = Z | S Nat.
@@ -671,7 +677,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
     
     it "checks and expands type-aliases (1) " $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Bar = Bar.
         type Foo = Bar.
         id : Foo -> Bar.
@@ -680,7 +686,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "checks and expands type-aliases (2) " $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         type Id a = a.
         id : forall a. Id a -> Id a.
         id = \x -> x. 
@@ -688,7 +694,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "checks and expands type-aliases (3) " $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         type FlipSum a b = Either b a.
 
@@ -701,7 +707,7 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "checks and expands '2nd-order' type-aliases (4)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data List a = Nil | Cons a (List a).
         type Array a = List a.
         type Array2D a = Array (Array a).
@@ -722,20 +728,20 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "fails incorrect aliases (1)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         type Foo = Bar.
       |]
       shouldFail $ runCheckProg mempty prog 
 
     it "fails incorrect aliases (2)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         type A1 = Foo.
         type A2 = A1.
       |]
       shouldFail $ runCheckProg mempty prog 
 
     it "fails incorrect aliases (3)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Unit = MkUnit.
         data Foo a = Foo a.
         type A = Unit -> Foo.
@@ -745,7 +751,7 @@ progSpec = do
 
 
     it "rejects recursive type aliases" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Unit = MkUnit.
         data Pair a b = MkPair a b.
         data List a = Nil | Cons a (List a).
@@ -761,7 +767,7 @@ progSpec = do
       runCheckProg mempty prog `shouldFailWith` (\(e,_) -> e `shouldBe` Other "Units is recursive")
 
     it "rejects mutually recursive type aliases" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data Unit = MkUnit.
         data Bool = True | False.
         data Pair a b = MkPair a b.
@@ -773,9 +779,8 @@ progSpec = do
       runCheckProg mempty prog `shouldFailWith` (\(e,_) -> e `shouldBe` Other "BoolThenUnits is recursive")
     
     -- it "succeeds for higher-kinded types" $ do
-    --   let prog = [unsafeProg|
+    --   let Right prog = pprog [text|
     --     data Functor f = Functor (forall a b. (a -> b) -> f a -> f b) .
     --   |]
     --   pending
       -- runCheckProg mempty prog `shouldYield` ()
--}

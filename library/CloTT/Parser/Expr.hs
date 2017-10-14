@@ -21,7 +21,8 @@ nat :: Parser Expr
 nat = ann <*> (E.Prim . P.Nat <$> natural)
 
 tuple :: Parser Expr
-tuple = ann <*> parens ((\e1 e2 -> E.Tuple e1 e2) <$> expr <* comma <*> expr)
+tuple = ann <*> (E.Tuple <$> parens (expr `sepBy2` comma)) where
+  sepBy2 e s = (:) <$> (e <* s) <*> sepBy1 e s
 
 lname :: Parser Name
 lname = UName <$> lidentifier
@@ -30,7 +31,7 @@ clockabs :: Parser Expr
 clockabs = do
   ps <- symbol "/\\" *> many1 param
   bd <- reservedOp "->" *> expr
-  pure $ foldr (\(A.A ann kappa) acc -> A.A ann $ E.ClockAbs kappa acc) bd ps
+  pure $ foldr (\(A.A a kappa) acc -> A.A a $ E.ClockAbs kappa acc) bd ps
   where
     param = ann <*> lname
 
@@ -38,7 +39,7 @@ tickabs :: Parser Expr
 tickabs = do
   ps <- symbol "\\\\" *> many1 param
   bd <- reservedOp "->" *> expr
-  pure $ foldr (\(A.A ann (nm, kappa)) acc -> A.A ann $ E.TickAbs nm kappa acc) bd ps
+  pure $ foldr (\(A.A a (nm, kappa)) acc -> A.A a $ E.TickAbs nm kappa acc) bd ps
   where
     param = ann <*> parens ((,) <$> lname <*> (reservedOp ":" *> lname))
             
@@ -47,7 +48,7 @@ lam :: Parser Expr
 lam = do
   ps <- symbol "\\" *> many1 param
   bd <- reservedOp "->" *> expr
-  pure $ foldr (\(A.A ann nm, ty) acc -> A.A ann $ E.Lam nm ty acc) bd ps
+  pure $ foldr (\(A.A a nm, ty) acc -> A.A a $ E.Lam nm ty acc) bd ps
   where
     param =  (\x -> (x, Nothing)) <$> (ann <*> lname)
          <|> parens ((,) <$> (ann <*> lname)
