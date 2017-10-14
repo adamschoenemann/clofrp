@@ -217,8 +217,8 @@ kindOf ty = go ty `catchError` handler where
     where
       notFound = nameNotFound
 
-  handler (Other err, ctx) = withCtx (const ctx) $ otherErr $ err ++ " at kindOf " ++ (show $ pretty ty)
-  handler _                = error "kindOf handler err"
+  handler (Other err, ctx) = withCtx (const ctx) $ otherErr $ err ++ " at kindOf " ++ (show $ pretty ty) -- TODO: Replace with decorator error constructor
+  handler err              = throwError err
 
 -- A type is wellformed
 -- this one, validType and kindOf should probably be merged somehow...
