@@ -14,5 +14,5 @@ type Alias = E.Alias SourcePos
 alias :: Parser Alias
 alias = p where
   p = E.Alias <$> (reserved "type" *> (UName <$> uidentifier))
-              <*> (map UName <$> many lidentifier)
+              <*> (many P.boundp)
               <*> (reservedOp "=" *> P.typep <* reservedOp ".")

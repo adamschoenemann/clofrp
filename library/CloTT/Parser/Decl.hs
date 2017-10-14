@@ -41,9 +41,8 @@ datad :: Parser Decl
 datad = ann <*> p where
   p = do 
     nm <- E.UName <$> (reserved "data" *> uidentifier)
-    vars <- many lidentifier
-    let kind = foldr (\_ b -> E.Star E.:->*:b ) E.Star vars
-    let bound = map UName vars
+    bound <- many P.boundp
+    let kind = foldr (\(_,k) b -> k E.:->*: b) E.Star bound
     constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) <* reservedOp "."
     pure $ E.DataD nm kind bound constrs
 

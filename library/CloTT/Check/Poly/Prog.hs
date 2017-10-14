@@ -98,7 +98,7 @@ elabAlias :: a -> Alias a -> ElabAlias a
 elabAlias ann = go 0 . deb where 
 
   deb al@(Alias {alName, alBound, alExpansion}) =
-    al { alExpansion = deBruijnify ann alBound alExpansion } 
+    al { alExpansion = deBruijnify ann (map fst alBound) alExpansion } 
 
   go i al@(Alias {alName, alBound, alExpansion}) =
     case alBound of
@@ -134,7 +134,7 @@ checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (a
         checkRecAl name t1
         checkRecAl name t2
 
-      Forall n t -> checkRecAl name t
+      Forall n k t -> checkRecAl name t
       Clock  n t -> checkRecAl name t
       RecTy  t -> checkRecAl name t
             
@@ -181,9 +181,9 @@ expandAliases als t =
             (Ex nm _, _)         -> wrong nm
             (_, Ex nm _)         -> wrong nm
 
-        Forall n t1 -> 
+        Forall n k t1 -> 
           go t1 >>= \case
-            Done t1' -> done $ A ann $ Forall n t1'
+            Done t1' -> done $ A ann $ Forall n k t1'
             Ex nm _ -> wrong nm
 
         Clock  n t1 -> 
@@ -245,11 +245,11 @@ elabProg (Prog decls) = do
 -- Nothing : Maybe a
 -- Just : a -> Maybe a
 -- and a mapping from constructors to their destructors
-elabCs :: forall a. Name -> [Name] -> [Constr a] -> (FreeCtx a, DestrCtx a)
+elabCs :: forall a. Name -> [(Name,Kind)] -> [Constr a] -> (FreeCtx a, DestrCtx a)
 elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) where
   -- | The fully applied type e.g. Maybe a
   fullyApplied :: a -> Type a Poly
-  fullyApplied ann = foldl (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType') bound
+  fullyApplied ann = foldl (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType' . fst) bound
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
   toFn    (A ann (Constr nm args)) = (nm, quantify bound $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)
   -- | Convert a constructor to a destructor, to use for pattern matches

@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
@@ -58,7 +59,7 @@ polySpec = do
         ]
 
   let als = M.fromList 
-  let al x b e = (x, E.Alias x b e)
+  let al x b e = (x, E.Alias x (map (,Star) b) e)
   
   describe "checkRecAliases" $ do
     let checkAl x = runTypingM0 @() (checkRecAliases x) mempty
@@ -83,12 +84,12 @@ polySpec = do
 
   describe "elabAlias" $ do
     it "should work with flipsum" $ do
-      let (Ex _ f) = elabAlias () (E.Alias "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f) = elabAlias () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
       let (Ex _ f') = f ("a")
       f' "b" `shouldBe` Done ("Either" @@: "b" @@: "a")
 
     it "should work with nested flipsum" $ do
-      let (Ex _ f1) = elabAlias () (E.Alias "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f1) = elabAlias () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
       let (Ex _ f2) = f1 ("a")
       let (Done t) = f2 ("FlipSum" @@: "b" @@: "d")
       t `shouldBe` ("Either" @@: ("FlipSum" @@: "b" @@: "d") @@: "a")

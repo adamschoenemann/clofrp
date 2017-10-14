@@ -11,6 +11,6 @@ import Data.Data
 data Destr a = Destr
   { name   :: Name
   , typ    :: Type a Poly
-  , bound  :: [Name]
+  , bound  :: [(Name, Kind)]
   , args   :: [Type a Poly]
   } deriving (Show, Eq, Data, Typeable)

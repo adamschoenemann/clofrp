@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -22,6 +23,7 @@ module CloTT.AST.Parsed
   , module CloTT.AST.Pat
   , module CloTT.AST.Expr
   , module CloTT.AST.Alias
+  , module CloTT.AST.Kind
   , P.Prim(..)
   , Unann(..)
 ) where
@@ -37,30 +39,14 @@ import CloTT.AST.Type
 import CloTT.AST.Pat
 import CloTT.AST.Expr
 import CloTT.AST.Alias
-
-
-infixr 2 :->*:
-
-data Kind
-  = Star
-  | Kind :->*: Kind
-  deriving (Show, Eq, Data, Typeable)
-
-instance Pretty Kind where
-  pretty = rndr False where
-    rndr p = \case 
-      Star -> "*"
-      k1 :->*: k2 -> parensIf $ rndr True k1 <+> "->" <+> rndr False k2
-      where
-        parensIf = if p then parens else id
-    
+import CloTT.AST.Kind
 
 
 type Decl a = Annotated a (Decl' a)
 data Decl' a
   = FunD Name (Expr a)
   -- |    name kind tvars  constructors
-  | DataD Name Kind [Name] [Constr a]
+  | DataD Name Kind [(Name,Kind)] [Constr a]
   | SigD Name (Type a Poly)
   | AliasD (Alias a)
 
@@ -182,7 +168,7 @@ constr :: Name -> [Type () Poly] -> Constr ()
 constr nm ts = A () $ Constr nm ts
 
 datad :: Name -> Kind -> [Name] -> [Constr ()] -> Decl ()
-datad nm k b cs = A () $ DataD nm k b cs
+datad nm k b cs = A () $ DataD nm k (map (,Star) b) cs
 
 fund :: Name -> Expr () -> Decl ()
 fund nm e =  A () $ FunD nm e
@@ -191,14 +177,14 @@ sigd :: Name -> Type () Poly -> Decl ()
 sigd nm t =  A () $ SigD nm t
 
 aliasd :: Name -> [Name] -> Type () Poly -> Decl ()
-aliasd nm bs t = A () $ AliasD (Alias nm bs t)
+aliasd nm bs t = A () $ AliasD (Alias nm (map (,Star) bs) t)
 
 prog :: [Decl ()] -> Prog ()
 prog = Prog
 
 forAll :: [String] -> Type () Poly -> Type () Poly
 forAll nms t = foldr fn t $ map UName nms where
-  fn nm acc = A () $ Forall nm acc
+  fn nm acc = A () $ Forall nm Star acc
 
 clocks :: [String] -> Type () Poly -> Type () Poly
 clocks nms t = foldr fn t $ map UName nms where
@@ -284,8 +270,8 @@ unannConstr (A _ c) =
     Constr nm ts -> A () $ Constr nm (map unannT ts)
 
 -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
-quantify :: [Name] -> Type a Poly -> Type a Poly
-quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\nm t' -> A ann $ Forall nm t') (A ann t) bound) else id
+quantify :: [(Name, Kind)] -> Type a Poly -> Type a Poly
+quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\(nm,k) t' -> A ann $ Forall nm k t') (A ann t) bound) else id
 
 -- substitute type for name in expr (traverses and substitutes in annotations)
 substTVarInExpr :: Type a Poly -> Name -> Expr a -> Expr a 

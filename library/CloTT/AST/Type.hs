@@ -21,6 +21,8 @@ module CloTT.AST.Type where
 
 import CloTT.Annotated 
 import CloTT.AST.Name
+import CloTT.AST.Kind
+
 import Data.String (IsString(..))
 import qualified Data.Set as S
 import Data.Data (Data, Typeable)
@@ -32,19 +34,23 @@ type Type a s = Annotated a (Type' a s)
 data TySort = Mono | Poly deriving (Show, Eq)
 
 data Type' :: * -> TySort -> * where
-  TFree   :: Name                       -> Type' a s
-  TVar    :: Name                       -> Type' a s
-  TExists :: Name                       -> Type' a s
-  TApp    :: Type a s    -> Type a s    -> Type' a s
-  (:->:)  :: Type a s    -> Type a s    -> Type' a s
-  Forall  :: Name        -> Type a Poly -> Type' a Poly
-  Clock   :: Name        -> Type a Poly -> Type' a Poly
-  RecTy   :: Type a s                   -> Type' a s
+  TFree   :: Name                        -> Type' a s
+  TVar    :: Name                        -> Type' a s
+  TExists :: Name                        -> Type' a s
+  TApp    :: Type a s     -> Type a s    -> Type' a s
+  (:->:)  :: Type a s     -> Type a s    -> Type' a s
+  Forall  :: Name -> Kind -> Type a Poly -> Type' a Poly
+  Clock   :: Name         -> Type a Poly -> Type' a Poly
+  RecTy   :: Type a s                    -> Type' a s
 
 
 deriving instance Eq a       => Eq (Type' a s)
 deriving instance Data a     => Data (Type' a Poly)
 deriving instance Typeable a => Typeable (Type' a Poly)
+
+prettyBound :: Bool -> Name -> Kind -> Doc ann
+prettyBound _ nm Star = pretty nm 
+prettyBound p nm k    = (if p then parens else id) $ pretty nm <+> ":" <+> pretty k
 
 prettyT' :: Bool -> Type' a s -> Doc ann
 prettyT' pars = \case 
@@ -54,18 +60,18 @@ prettyT' pars = \case
   TApp x y   -> parensIf $ prettyT False x <+> prettyT True y
   x :->: y   -> parensIf $ prettyT True x  <> softline <> "->" <+> prettyT False y
 
-  Forall n t -> 
+  Forall n k t -> 
     let (ns, t') = collect p t
-        bound = hsep $ map (fromString . show) (n:ns)
+        bound = hsep $ map (uncurry $ prettyBound True) ((n,k):ns)
     in  parensIf $ "∀" <> bound <> dot <+> prettyT False t'
         where 
-          p :: Type' a s -> Maybe (Name, Type a s)
-          p (Forall n t) = Just (n,t)
-          p _            = Nothing
+          p :: Type' a s -> Maybe ((Name, Kind), Type a s)
+          p (Forall n k t) = Just ((n,k),t)
+          p _              = Nothing
 
   Clock n t -> 
     let (ns, t') = collect p t
-        bound = hsep $ map (fromString . show) (n:ns)
+        bound = hsep $ map pretty (n:ns)
     in  parensIf $ "∇" <> bound <> dot <+> prettyT False t'
         where
           p :: Type' a s -> Maybe (Name, Type a s)
@@ -74,7 +80,7 @@ prettyT' pars = \case
   
   RecTy t -> parensIf $ "Fix" <+> prettyT True t
   where
-    collect :: (Type' a s -> Maybe (Name, Type a s)) -> Type a s -> ([Name], Type a s)
+    collect :: Pretty n => (Type' a s -> Maybe (n, Type a s)) -> Type a s -> ([n], Type a s)
     collect p (A ann ty')
       | Just (n, t) <- p ty' = 
           let (ns, t') = collect p t
@@ -112,7 +118,7 @@ unannT' = \case
   TExists x     -> TExists x
   t1 `TApp` t2  -> unannT t1 `TApp` unannT t2
   t1 :->: t2    -> unannT t1 :->: unannT t2
-  Forall nm tau -> Forall nm (unannT tau)
+  Forall nm k tau -> Forall nm k (unannT tau)
   Clock nm tau  -> Clock  nm (unannT tau)
   RecTy tau     -> RecTy  (unannT tau)
 
@@ -149,7 +155,7 @@ freeVars (A _ ty) =
     TExists n -> S.singleton n
     TApp x y -> freeVars x `S.union` freeVars y
     x :->: y  -> freeVars x `S.union` freeVars y
-    Forall n t -> freeVars t `S.difference` S.singleton n
+    Forall n k t -> freeVars t `S.difference` S.singleton n
     Clock  n t -> freeVars t `S.difference` S.singleton n
     RecTy  t -> freeVars t 
 
@@ -164,7 +170,7 @@ iterType base go t@(A ann t') =
     TExists n -> base t
     TApp x y   -> A ann $ TApp (go x) (go y)
     x :->: y   -> A ann $ go x :->: go y
-    Forall n t -> A ann $ Forall n (go t)
+    Forall n k t -> A ann $ Forall n k (go t)
     Clock  n t -> A ann $ Clock  n (go t)
     RecTy  t -> A ann $ RecTy (go t)
 
@@ -177,7 +183,7 @@ asPolytype (A a ty) = A a $
     TExists x    -> TExists x
     t1 `TApp` t2 -> asPolytype t1 `TApp` asPolytype t2
     t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
-    Forall x t   -> Forall x (asPolytype t) 
+    Forall x k t  -> Forall x k (asPolytype t) 
     Clock  x t   -> Clock  x (asPolytype t) 
     RecTy  t   -> RecTy (asPolytype t) 
 
@@ -193,8 +199,9 @@ asMonotype (A a ty) =
     
     t1 :->: t2 -> (\x y -> A a (x :->: y)) <$> asMonotype t1 <*> asMonotype t2
     
-    Forall _ _ -> Nothing
+    Forall _ _ _ -> Nothing
 
+    -- TODO: Are clock quantifiers monotypes?
     Clock  _ _ -> Nothing
 
     RecTy  t -> A a . RecTy <$> asMonotype t
@@ -211,8 +218,8 @@ subst x forY (A a inTy) =
     TExists y   | y == forY  -> x
                 | otherwise -> A a $ TExists y
 
-    Forall y t  | y == forY -> A a $ Forall y t 
-                | otherwise -> A a $ Forall y (subst x forY t)
+    Forall y k t  | y == forY -> A a $ Forall y k t 
+                  | otherwise -> A a $ Forall y k (subst x forY t)
 
     Clock  y t  | y == forY -> A a $ Clock y t 
                 | otherwise -> A a $ Clock y (subst x forY t)

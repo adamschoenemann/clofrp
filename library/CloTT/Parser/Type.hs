@@ -22,13 +22,23 @@ tvar = ann <*> (E.TVar . UName <$> lidentifier) <?> "tvar"
 arr :: Parser (Type -> Type -> Type)
 arr = pure (\p a b -> A.A p $ a E.:->: b) <*> getPosition <?> "arr"
 
+kind :: Parser E.Kind
+kind = buildExpressionParser table kindexpr where
+  table = [[binary' "->" karr AssocRight]]
+  karr = pure (E.:->*:)
+  kindexpr = symbol "*" *> pure E.Star
+
+boundp :: Parser (Name, E.Kind)
+boundp = (\n -> (UName n, E.Star)) <$> lidentifier 
+     <|> parens ((\n k -> (UName n, k)) <$> lidentifier <* reservedOp ":" <*> kind)
+
 forAll :: Parser Type
 forAll = p <?> "forall" where
   p = do
-    nms <- reserved "forall" *> (map UName <$> many1 lidentifier) <* reservedOp "."
+    nms <- reserved "forall" *> (many1 boundp) <* reservedOp "."
     ty <- typep
     foldrM fn ty nms
-  fn nm t = (\p -> A.A p $ E.Forall nm t) <$> getPosition
+  fn (nm,k) t = (\p -> A.A p $ E.Forall nm k t) <$> getPosition
 
 clocks :: Parser Type
 clocks = p <?> "clocks" where

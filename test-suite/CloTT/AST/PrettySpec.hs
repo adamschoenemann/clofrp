@@ -66,10 +66,10 @@ prettySpec = do
   
   describe "type aliases" $ do
     it "works lol" $ do
-      pps (E.Alias @() "Seconds" [] "Int") `shouldBe` "type Seconds = Int."
-      pps (E.Alias @() "Stream" ["a"] $ "List" @@: "a") `shouldBe` "type Stream a = List a."
-      pps (E.Alias @() "Option" ["a"] $ "Maybe" @@: "a") `shouldBe` "type Option a = Maybe a."
-      pps (E.Alias @() "Sum" ["a", "b"] $ "Either" @@: "a" @@: "b") `shouldBe` "type Sum a b = Either a b."
-      ppsw 80 (E.Alias @() "CList" ["a"] $ E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")
+      pps (E.aliasd "Seconds" [] "Int") `shouldBe` "type Seconds = Int."
+      pps (E.aliasd "Stream" ["a"] $ "List" @@: "a") `shouldBe` "type Stream a = List a."
+      pps (E.aliasd "Option" ["a"] $ "Maybe" @@: "a") `shouldBe` "type Option a = Maybe a."
+      pps (E.aliasd "Sum" ["a", "b"] $ "Either" @@: "a" @@: "b") `shouldBe` "type Sum a b = Either a b."
+      ppsw 80 (E.aliasd "CList" ["a"] $ E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")
         `shouldBe` "type CList a = ∀r. (a -> r -> r) -> r -> r."
 

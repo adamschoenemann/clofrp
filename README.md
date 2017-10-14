@@ -32,6 +32,7 @@ For my master's thesis at ITU
   - Add source-location to errors
   - Parsing and checking is pretty laissez faire with propagating and maintaining annotations, leading
     to possibly incorrect source-locations in errors
+- Check data decls and type aliases for well-formedness before elaboration
 
 ## Type Aliases
 - Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:
