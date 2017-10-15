@@ -94,8 +94,6 @@ higherKindedSpec = do
         data B = B.
         data Either a b = Left a | Right b.
 
-        -- provokes already assigned error. TODO: Check if it is fine to attempt to assign something twice,
-        -- if we attempt to assign the same type that is already assigned
         foo : Pair Bool Bool -> Pair (Either A B) Bool.
         foo = \p -> first pairbf (\x -> case x of | True -> Left A | False -> Right B) p.
       |]

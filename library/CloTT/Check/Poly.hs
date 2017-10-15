@@ -342,9 +342,11 @@ validType kctx t = do
 assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
   ctx@(Gamma xs) <- getCtx
-  if isAssigned nm ctx
-    then otherErr $ show $ pretty nm <+> "is already assigned"
-    else 
+  case findAssigned nm ctx of
+    Just ty' 
+      | ty =%= ty' -> pure ctx
+      | otherwise -> otherErr $ show $ pretty nm <+> "is already assigned to" <+> pretty ty'
+    Nothing ->
       case foldr fn ([], False) xs of
         (xs', True) -> do
           _ <- wfContext (Gamma xs')

@@ -20,12 +20,13 @@ import           CloTT.Check.Poly.Prog
 import           CloTT.Check.Poly.TypingM
 import           CloTT.Pretty
 import           CloTT.AST.Name
+import           CloTT.Annotated (unann)
 
 
 progSpec :: Spec 
 progSpec = do
   let pprog = parseProg . unpack
-  let errs e x = fst x `shouldBe` e
+  let errs e x = (unann (fst x)) `shouldBe` e
   describe "checkProg" $ do
     it "fails programs with invalid types (1)" $ do
       let Right prog = pprog [text|
@@ -139,7 +140,7 @@ progSpec = do
               | True -> Right (id MkA)
               | False -> Left (id MkB).
       |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ Other $ show $ pretty (mname 1) <+> "is already assigned")
+      runCheckProg mempty prog `shouldFailWith` (errs $ "A" `CannotSubtype` "Bool")
 
     it "succeeds for monomorphic patterns (1)" $ do
       let Right prog = pprog [text|
@@ -413,7 +414,7 @@ progSpec = do
       |]
       shouldFail $ runCheckProg mempty prog
     
-    specify "(double-assignment test-case)" $ do
+    specify "double-assignment test-case (1)" $ do
       let Right prog = pprog [text|
         data A = A.
         data Bool = True | False.
@@ -427,6 +428,21 @@ progSpec = do
           | False -> A).
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    specify "double-assignment test-case (2)" $ do
+      let Right prog = pprog [text|
+        data A = A.
+        data Bool = True | False.
+
+        app : forall a b. (a -> b) -> a -> b.
+        app = \f x -> f x.
+
+        foo : Bool -> A.
+        foo = app (\b -> case b of
+          | True -> A
+          | A -> A).
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other $ show $ pretty (mname 2) <+> "is already assigned to Bool")
 
     -- we need a new rule to instantiate existentials with type-applications
     it "succeeds for a bunch of eithers" $ do
