@@ -17,13 +17,13 @@ shouldYield (res, st, tree) ctx =
       -- failure (showTree tree)
       ctx' `shouldBe` ctx
     Left err   -> do 
-      failure $ showW 200 $ pretty err <> "\nProgress:\n" <> prettyTree tree
+      failure $ showW 2000 $ pretty err <> "\nProgress:\n" <> prettyTree tree
 
 shouldFail :: (Show a, Show b) => (Either a b, t1, TypingWrite ann) -> Expectation
 shouldFail (res, st, tree) = 
   case res of
     Left err -> True `shouldBe` True
-    Right x  -> failure (show x ++ "\n" ++ (showW 200 . prettyTree $ tree))
+    Right x  -> failure (show x ++ "\n" ++ (showW 2000 . prettyTree $ tree))
 
 shouldFailWith :: (Show a, Show b) => (Either a b, t1, TypingWrite ann) -> (a -> Expectation) -> Expectation
 shouldFailWith (res, st, tree) fn = 
