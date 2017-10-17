@@ -366,7 +366,7 @@ instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 instL ahat ty@(A a ty') = 
   let solve = do
         ctx <- getCtx
-        root $ "[InstLSolve]" <+> pretty ty <+> ":<=" <+> pretty ahat <+> "in" <+> pretty ctx
+        root $ "[InstLSolve]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
         mty <- asMonotypeTM ty
         ctx' <- assign ahat mty 
         pure ctx'
@@ -443,7 +443,7 @@ instR ty@(A a ty') ahat =
   let solve = do
         mty <- asMonotypeTM ty
         ctx' <- assign ahat mty 
-        root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat
+        root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "≜" <+> pretty ctx'
         pure ctx'
   in  solve `catchError` \err ->
         case ty' of
@@ -652,10 +652,12 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   check' (Case on clauses) _ = do
     root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
     (pty, delta) <- branch $ synthesize on
-    (pty', delta') <- withCtx (const delta) $ branch $ intros pty
+    pty' <- substCtx delta pty
+    (pty'', delta') <- withCtx (const delta) $ branch $ intros pty'
+    ty' <- substCtx delta' ty
     markerName <- freshName
-    cty <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty' clauses ty
-    pure delta
+    delta'' <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty'' clauses ty'
+    pure delta''
   
   -- ClockAbs
   check' (ClockAbs k body) (Clock k' t)
@@ -735,18 +737,19 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- The marker is to make sure that the clauses can assign types to existentials
   -- that are in scope at the case-expr, but does not pollute the scope with new
   -- type variables that came into the context during the branch and body.
-  checkCaseClauses :: Name -> Type a Poly -> [(Pat a, Expr a)] -> Type a Poly -> TypingM a ()
+  checkCaseClauses :: Name -> Type a Poly -> [(Pat a, Expr a)] -> Type a Poly -> TypingM a (TyCtx a)
   checkCaseClauses markerName pty clauses expected = 
     case clauses of
       (pat, expr) : clauses' -> do
         ctx <- getCtx
-        root $ "[CheckClause]" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
+        root $ "[CheckClause] |" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
         ctx' <- branch $ checkPat pat pty
-        ctx'' <- withCtx (const ctx') $ branch $ check expr expected
+        expected' <- substCtx ctx' expected
+        ctx'' <- withCtx (const ctx') $ branch $ check expr expected'
         let nextCtx =  (dropTil (Marker markerName) ctx'') <+ Marker markerName
         withCtx (const nextCtx) $
-            checkCaseClauses markerName pty clauses' expected
-      [] -> pure ()
+            checkCaseClauses markerName pty clauses' expected'
+      [] -> getCtx
 
 synthesize :: Expr a -> TypingM a (Type a Poly, TyCtx a)
 synthesize expr@(A ann expr') = synthesize' expr' where
@@ -950,7 +953,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ->App
   applysynth' (aty :->: cty) = do
     ctx <- getCtx
-    root $ "[->App]" <+> pretty ty <+> "in" <+> group (pretty ctx)
+    root $ "[->App]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
     delta <- branch $ check e aty
     pure (cty, delta)
   

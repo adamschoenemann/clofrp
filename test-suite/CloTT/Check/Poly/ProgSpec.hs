@@ -126,6 +126,16 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
+    it "rejects invalid programs that assign existentials inside case expressions" $ do
+      let Right prog = pprog [text|
+
+        data Arr a b = MkArr (a -> b).
+
+        foo : forall a b s. (s -> a) -> Arr s b.
+        foo = \f -> MkArr (\s -> case f s of | x -> x).
+        |]
+      shouldFail $ runCheckProg mempty prog 
+
     it "does not generalize functions in case stmts" $ do
       let Right prog = pprog [text|
         data Either a b = Left a | Right b.

@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module CloTT.Check.Poly.HigherKinded where
 
@@ -11,6 +12,14 @@ import           CloTT.Check.Poly.TestUtils
 import           CloTT.QuasiQuoter
 import           CloTT.Check.Poly.Prog
 import           CloTT.AST.Name
+
+data State s a = State (s -> (a, s))
+
+-- foo :: forall s a b. State s a -> State s b
+-- foo (State sfn) =
+--   State $ \s -> 
+--     case sfn s of
+--       (r, s') -> (r, s')
 
 
 higherKindedSpec :: Spec
@@ -125,43 +134,30 @@ higherKindedSpec = do
         data Monad (m : * -> *) =
           Monad (forall a. a -> m a) (forall a b. (a -> m b) -> m a -> m b).
         
-        -- data Maybe a = Nothing | Just a.
+        data Maybe a = Nothing | Just a.
 
-        -- maybeM : Monad Maybe.
-        -- maybeM = Monad
-        --   Just
-        --   (\fn x -> case x of
-        --     | Nothing -> Nothing
-        --     | Just x' -> fn x'
-        --   ).
+        maybeM : Monad Maybe.
+        maybeM = Monad
+          Just
+          (\fn x -> case x of
+            | Nothing -> Nothing
+            | Just x' -> fn x'
+          ).
         
         data State s a = State (s -> (a, s)).
-
-        foo : forall s a b. State s a -> State s b.
-        foo = \c -> case c of
-          | State sfn -> 
-            State (\s -> case sfn s of
-              | (r, s') -> (r, s')
-            ).
+        data Bool = True | False.
 
         -- really annoying without let bindings
-        -- stateM : forall s. Monad (State s).
-        -- stateM = Monad
-        --   (\x -> State (\s -> (x, s)))
-        --   (\fn x -> case x of 
-        --     | State sfn -> State (\s -> case sfn s of
-        --       | (r, s') -> (r, s')
-        --     )
-        --   ).
-          -- (\fn x -> case x of
-          --   | State sfn -> 
-          --     State (\s -> case sfn s of
-          --       | (r, s') -> case fn r of
-          --         | State sfn' -> (r, s') -- sfn' s'
-          --     )
-          -- ).
-
+        stateM : forall s. Monad (State s).
+        stateM = Monad
+          (\x -> State (\s -> (x, s)))
+          (\fn x -> case x of 
+            | State sfn -> State (\s -> case sfn s of
+              | (r, s') -> case fn r of
+                | State sfn' -> sfn' s'
+            )
+          ).
 
       |]
-      shouldFail $ runCheckProg mempty prog 
-      -- runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog 
+      runCheckProg mempty prog `shouldYield` ()

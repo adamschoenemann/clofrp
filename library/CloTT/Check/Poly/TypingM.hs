@@ -28,11 +28,12 @@ import CloTT.AST.Parsed hiding (exists)
 import CloTT.Pretty
 import CloTT.Check.Poly.Contexts
 
-branch :: TypingM a r -> TypingM a r
+branch :: Pretty r => TypingM a r -> TypingM a r
 branch comp = do
   i <- gets level
   modify $ \s -> s { level = i + 1 }
   r <- comp
+  -- tell [(i+1, "≜" <+> pretty r)]
   modify $ \s -> s { level = i }
   pure r
 
