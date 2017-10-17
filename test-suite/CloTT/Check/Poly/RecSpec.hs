@@ -184,7 +184,11 @@ recSpec = do
             | S (m', r) -> fold (S r).
         
         plus : Nat -> Nat -> Nat.
-        plus = \m n -> primRec (plusRec n) m.
-
+        plus = \m n -> 
+          let body = \x ->
+            case x of
+              | Z -> n
+              | S (m', r) -> n -- fold (S r)
+          in  n. -- primRec body m.
       |]
       runCheckProg mempty prog `shouldYield` ()

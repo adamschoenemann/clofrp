@@ -699,7 +699,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     ty1s <- substCtx ctx' ty1
     case p of
       A _ (Bind nm) -> withCtx (const $ ctx' <+ (nm `HasType` ty1s)) $ branch $ check e2 ty
-      _       -> checkClause ty1s (p, e2) ty
+      _       -> snd <$> checkClause ty1s (p, e2) ty
 
 
   -- Sub
@@ -741,18 +741,29 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
       (pat, expr) : clauses' -> do
         ctx <- getCtx
         root $ "[CheckClause] |" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
-        ctx' <- checkClause pty (pat, expr) expected
+        (expected', ctx') <- checkClause pty (pat, expr) expected
         let nextCtx =  (dropTil (Marker markerName) ctx') <+ Marker markerName
+        pty' <- substCtx ctx' pty -- more substCtx for (hopefully) better inference
         withCtx (const nextCtx) $
-            checkCaseClauses markerName pty clauses' expected
+            checkCaseClauses markerName pty' clauses' expected'
       [] -> getCtx
   
-  -- should we substCtx on expected? I don't know...
-  checkClause :: Type a Poly -> (Pat a, Expr a) -> Type a Poly -> TypingM a (TyCtx a)
+  -- using substCtx alot improves inference. If the first clause infers that the pat is type P and
+  -- body is type A, then subsequent patterns must also check against this more refined type.
+  checkClause :: Type a Poly -> (Pat a, Expr a) -> Type a Poly -> TypingM a (Type a Poly, TyCtx a)
   checkClause pty (pat, expr) expected = do
     ctx' <- branch $ checkPat pat pty
-    ctx'' <- withCtx (const ctx') $ branch $ check expr expected
-    pure ctx''
+    expected' <- substCtx ctx' expected
+    ctx'' <- withCtx (const ctx') $ branch $ check expr expected'
+    expected'' <- substCtx ctx'' expected'
+    pure (expected'', ctx'')
+
+  -- here with no substCtx
+  -- checkClause :: Type a Poly -> (Pat a, Expr a) -> Type a Poly -> TypingM a (TyCtx a)
+  -- checkClause pty (pat, expr) expected = do
+  --   ctx' <- branch $ checkPat pat pty
+  --   ctx'' <- withCtx (const ctx') $ branch $ check expr expected
+  --   pure ctx''
 
 synthesize :: Expr a -> TypingM a (Type a Poly, TyCtx a)
 synthesize expr@(A ann expr') = synthesize' expr' where
@@ -873,9 +884,10 @@ inferPrim ann p = case p of
     let ftorq = A ann . Forall "F" (Star :->*: Star)
     let resultq = A ann . Forall "A" Star 
     let inductivet = A ann $ RecTy ftorty
-    let body = A ann $ ftorty `TApp` A ann (TTuple [A ann $ RecTy ftorty, resultty])
+    let ftorresultty = A ann (ftorty `TApp` A ann (TTuple [A ann $ RecTy ftorty, resultty]))
+    let body = A ann (ftorresultty :->: resultty)
     ctx <- getCtx
-    pure (A ann (body :->: A ann (inductivet :->: resultty)), ctx)
+    pure (ftorq . resultq $ A ann (body :->: A ann (inductivet :->: resultty)), ctx)
 
 -- check that patterns type-check and return a new ctx extended with bound variables
 checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)
@@ -893,6 +905,7 @@ checkPat pat@(A ann p) ty = do
         pure ctx'
 
     PTuple pats -> 
+      -- TODO: Check tuple-patterns against existentials as well (instantiate basically)
       case ty of
         A tann (TTuple ts) -> 
           foldrM (\(p',t) acc -> branch $ withCtx (const acc) $ checkPat p' t) ctx (zip pats ts)
