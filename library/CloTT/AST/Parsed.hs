@@ -220,6 +220,9 @@ tAbs (a, k) e = A () $ TickAbs a k e
 cAbs :: Name -> Expr () -> Expr ()
 cAbs k e = A () $ ClockAbs k e
 
+lete :: Pat () -> Expr () -> Expr () -> Expr ()
+lete p e1 e2 = A () $ Let p e1 e2
+
 
 infixr 2 @->
 infixr 2 @:->
@@ -293,6 +296,7 @@ substTVarInExpr new nm = go where
     TickAbs v kappa e -> TickAbs v kappa (go e)
     ClockAbs kappa e -> ClockAbs kappa (go e)
     Tuple es -> Tuple (map go es)
+    Let p e1 e2 -> Let p (go e1) (go e2)
     Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
     Prim p -> e'
 
@@ -313,5 +317,6 @@ substClockVarInExpr new nm = go where
       TickAbs v kappa e -> A a $ TickAbs v kappa (go e)
       ClockAbs kappa e -> A a $ ClockAbs kappa (go e)
       Tuple es -> A a $ Tuple (map go es)
+      Let p e1 e2 -> A a $ Let p (go e1) (go e2)
       Case e clauses -> A a $ (Case (go e) $ map (\(p,c) -> (p, go c)) clauses)
       Prim p -> A a e'

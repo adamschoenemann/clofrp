@@ -49,6 +49,7 @@ reservedNames = [ "if"
                 , "Fix"
                 , "fold"
                 , "unfold"
+                , "primRec"
                 ]
 
 languageDef :: Tok.LanguageDef ()

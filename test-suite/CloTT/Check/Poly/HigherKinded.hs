@@ -157,6 +157,16 @@ higherKindedSpec = do
                 | State sfn' -> sfn' s'
             )
           ).
+        
+        stateM' : forall s. Monad (State s).
+        stateM' = Monad
+          (\x -> State (\s -> (x, s)))
+          (\fn x -> State (\s ->
+            let State sfn = x in
+            let (r, s') = sfn s in
+            let State sfn' = fn r in
+            sfn' s'
+          )).
 
       |]
       -- shouldFail $ runCheckProg mempty prog 

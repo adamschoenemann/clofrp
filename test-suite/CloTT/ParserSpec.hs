@@ -69,6 +69,18 @@ parserSpec = do
        e `shouldBe` ("e1" @@ "e2" @@ "e3")
     do let Right e = E.unannE <$> parse P.expr "" "e1 (e2 e3) e4 (\\x -> x) e5)"
        e `shouldBe` ("e1" @@ ("e2" @@ "e3") @@ "e4" @@ ("x" @-> "x") @@ "e5")
+  
+  it "parses let bindings" $ do
+    do let Right e = E.unannE <$> parse P.expr "" "let x = y in z"
+       e `shouldBe` E.lete "x" "y" "z"
+    do let Right e = E.unannE <$> parse P.expr "" "let x = plus x 1 in x"
+       e `shouldBe` E.lete "x" ("plus" @@ "x" @@ E.nat 1) "x"
+    do let Right e = E.unannE <$> parse P.expr "" "let x = \\p -> y in let z = x in f x"
+       e `shouldBe` E.lete "x" ("p" @-> "y") (E.lete "z" "x" ("f" @@ "x"))
+    do let Right e = E.unannE <$> parse P.expr "" "let (x,y) = p in x"
+       e `shouldBe` E.lete (E.pTup ["x", "y"]) "p" "x"
+    do let Right e = E.unannE <$> parse P.expr "" "let S (m', r) = m in plus m' n"
+       e `shouldBe` E.lete (E.match "S" [E.pTup ["m'", "r"]]) "m" ("plus" @@ "m'" @@ "n")
 
   it "success: clock application (1)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "e1 [k]"

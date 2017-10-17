@@ -26,26 +26,26 @@ recSpec = do
         foldNat' : NatF (Fix NatF) -> Fix NatF.
         foldNat' = \m -> fold m.
 
-        -- foldNat : NatF Nat -> Nat.
-        -- foldNat = \m -> fold m.
+        foldNat : NatF Nat -> Nat.
+        foldNat = \m -> fold m.
 
-        -- foldNatPF : NatF Nat -> Nat.
-        -- foldNatPF = fold.
+        foldNatPF : NatF Nat -> Nat.
+        foldNatPF = fold.
 
-        -- unfoldNat' : Fix NatF -> NatF (Fix NatF).
-        -- unfoldNat' = \m -> unfold m.
+        unfoldNat' : Fix NatF -> NatF (Fix NatF).
+        unfoldNat' = \m -> unfold m.
 
-        -- unfoldNat : Nat -> NatF Nat.
-        -- unfoldNat = \m -> unfold m.
+        unfoldNat : Nat -> NatF Nat.
+        unfoldNat = \m -> unfold m.
 
-        -- unfoldNatPF : Nat -> NatF Nat.
-        -- unfoldNatPF = unfold.
+        unfoldNatPF : Nat -> NatF Nat.
+        unfoldNatPF = unfold.
 
-        -- zero : Nat.
-        -- zero = fold Z.
+        zero : Nat.
+        zero = fold Z.
 
-        -- one : Nat.
-        -- one = fold (S (fold Z)).
+        one : Nat.
+        one = fold (S (fold Z)).
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -168,6 +168,23 @@ recSpec = do
           case unfold t of
             | Empty -> fold Z
             | Branch x l r -> fold (S (fold Z)).
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    specify "primRec with Nat" $ do
+      let prog = [unsafeProg|
+        data NatF a = Z | S a. 
+        type Nat = Fix NatF.
+
+        plusRec : Nat -> NatF (Nat, Nat) -> Nat.
+        plusRec = \n x ->
+          case x of
+            | Z -> n
+            | S (m', r) -> fold (S r).
+        
+        plus : Nat -> Nat -> Nat.
+        plus = \m n -> primRec (plusRec n) m.
 
       |]
       runCheckProg mempty prog `shouldYield` ()

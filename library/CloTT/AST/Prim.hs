@@ -13,6 +13,7 @@ data Prim
   | Nat (Pr.Integer)
   | Fold 
   | Unfold
+  | PrimRec
   deriving (Eq, Data, Typeable)
 
 instance Show Prim where
@@ -20,6 +21,7 @@ instance Show Prim where
   show (Nat x)  = show x
   show Fold = "fold"
   show Unfold = "unfold"
+  show PrimRec = "primRec"
 
 
 instance Pretty Prim where

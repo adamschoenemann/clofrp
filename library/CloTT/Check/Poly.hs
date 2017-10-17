@@ -122,7 +122,7 @@ queryKind nm = do
   case ctxFind p ctx of
     Just (Exists _ k) -> pure k
     Just (Uni _ k)    -> pure k
-    Just (_ := ty)    -> kindOf (asPolytype ty)
+    Just (_ := ty)    -> kindOf (asPolytype ty) `decorateErr` Other ("queryKind")
     _                 -> otherErr $ show $ "Cannot lookup kind of" <+> pretty nm
   where 
       p (Uni x _)    = x == nm
@@ -349,13 +349,13 @@ assign nm ty = do
     Nothing ->
       case foldr fn ([], False) xs of
         (xs', True) -> do
-          _ <- wfContext (Gamma xs')
+          _ <- wfContext (Gamma xs') `decorateErr` (Other $ "Assign")
           pure (Gamma xs')
         (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything" 
       where
         -- TODO: Check that kindOf ty == k
-        fn (Exists nm' k) (xs, _) | nm == nm' = (nm := ty : xs, True)
-        fn x (xs, b)                          = (x : xs, b)
+        fn (Exists nm' k) (xs', _) | nm == nm' = (nm := ty : xs', True)
+        fn x (xs', b)                          = (x : xs', b)
 
 asMonotypeTM :: Type a s -> TypingM a (Type a Mono)
 asMonotypeTM = maybe (otherErr "asMonotype") pure . asMonotype
@@ -654,9 +654,9 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     (pty, delta) <- branch $ synthesize on
     pty' <- substCtx delta pty
     (pty'', delta') <- withCtx (const delta) $ branch $ intros pty'
-    ty' <- substCtx delta' ty
+    tysubst <- substCtx delta' ty
     markerName <- freshName
-    delta'' <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty'' clauses ty'
+    delta'' <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty'' clauses tysubst
     pure delta''
   
   -- ClockAbs
@@ -676,19 +676,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
         otherErr $ show $ "Clock" <+> pretty k <+> "must be named" <+> pretty k'
   
   -- FoldApp
-  -- check' (A fann (Prim Fold) `App` e2) _ = do
-  --   ctx <- getCtx
-  --   root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
-  --   fex <- freshName
-  --   let fext = A tann $ TExists fex
-  --   let recTy = A tann $ RecTy fext
-  --   delta <- withCtx (\g -> g <+ Exists fex) $ ty `subtypeOf` recTy
-  --   tysubst <- substCtx delta ty
-  --   case tysubst of 
-  --     A rann (RecTy fun) -> withCtx (const delta) $ check e2 (A tann $ fun `TApp` tysubst)
-  --     _   -> otherErr $ show $ "Expected" <+> pretty tysubst <+> "to be a Fix type"
-
-  -- FoldApp
   -- check' (A fann (Prim Fold) `App` e2) (RecTy fty) = do
   --   root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
   --   branch $ check e2 (A tann $ fty `TApp` ty)
@@ -702,7 +689,18 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   check' (Tuple es) (TTuple ts) = do
     root $ "[Tuple<=]" <+> pretty e <+> "<=" <+> pretty ty
     ctx <- getCtx
-    foldrM (\(e, t) acc -> branch $ withCtx (const acc) $ check e t) ctx (zip es ts)
+    -- TODO: How should we propagate contexts here? right-to-left? left-to-right? Not at all?
+    foldrM (\(el, t) acc -> branch $ withCtx (const acc) $ check el t) ctx (zip es ts)
+  
+  -- Let<=
+  check' (Let p e1 e2) _ = do
+    root $ "[Let<=]" <+> pretty e <+> "<=" <+> pretty ty
+    (ty1, ctx') <- branch $ synthesize e1
+    ty1s <- substCtx ctx' ty1
+    case p of
+      A _ (Bind nm) -> withCtx (const $ ctx' <+ (nm `HasType` ty1s)) $ branch $ check e2 ty
+      _       -> checkClause ty1s (p, e2) ty
+
 
   -- Sub
   check' _ _ = do
@@ -714,10 +712,10 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     btysubst <- substCtx theta ty
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
   
-  sanityCheck ty0 = do
+  sanityCheck ty0 = (do
     ctx <- getCtx
     _ <- wfContext ctx
-    checkWfType ty0
+    checkWfType ty0) `decorateErr` (Other $ "Sanity check")
   
   -- just introduce forall-quantified variables as existentials
   -- in the current context
@@ -743,13 +741,18 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
       (pat, expr) : clauses' -> do
         ctx <- getCtx
         root $ "[CheckClause] |" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
-        ctx' <- branch $ checkPat pat pty
-        expected' <- substCtx ctx' expected
-        ctx'' <- withCtx (const ctx') $ branch $ check expr expected'
-        let nextCtx =  (dropTil (Marker markerName) ctx'') <+ Marker markerName
+        ctx' <- checkClause pty (pat, expr) expected
+        let nextCtx =  (dropTil (Marker markerName) ctx') <+ Marker markerName
         withCtx (const nextCtx) $
-            checkCaseClauses markerName pty clauses' expected'
+            checkCaseClauses markerName pty clauses' expected
       [] -> getCtx
+  
+  -- should we substCtx on expected? I don't know...
+  checkClause :: Type a Poly -> (Pat a, Expr a) -> Type a Poly -> TypingM a (TyCtx a)
+  checkClause pty (pat, expr) expected = do
+    ctx' <- branch $ checkPat pat pty
+    ctx'' <- withCtx (const ctx') $ branch $ check expr expected
+    pure ctx''
 
 synthesize :: Expr a -> TypingM a (Type a Poly, TyCtx a)
 synthesize expr@(A ann expr') = synthesize' expr' where
@@ -863,6 +866,16 @@ inferPrim ann p = case p of
     let folded = A ann $ RecTy a1t
     let unfolded = A ann $ a1t `TApp` folded
     pure (A ann (folded :->: unfolded), ctx <+ Exists a1 (Star :->*: Star))
+  
+  PrimRec -> do
+    let resultty = A ann (TVar "A")
+    let ftorty = A ann (TVar "F")
+    let ftorq = A ann . Forall "F" (Star :->*: Star)
+    let resultq = A ann . Forall "A" Star 
+    let inductivet = A ann $ RecTy ftorty
+    let body = A ann $ ftorty `TApp` A ann (TTuple [A ann $ RecTy ftorty, resultty])
+    ctx <- getCtx
+    pure (A ann (body :->: A ann (inductivet :->: resultty)), ctx)
 
 -- check that patterns type-check and return a new ctx extended with bound variables
 checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)
@@ -882,8 +895,8 @@ checkPat pat@(A ann p) ty = do
     PTuple pats -> 
       case ty of
         A tann (TTuple ts) -> 
-          foldrM (\(p,t) acc -> branch $ withCtx (const acc) $ checkPat p t) ctx (zip pats ts)
-        _                    -> otherErr $ show $ pretty pat <+> "does not check against" <+> pretty ty
+          foldrM (\(p',t) acc -> branch $ withCtx (const acc) $ checkPat p' t) ctx (zip pats ts)
+        _                     -> otherErr $ show $ pretty pat <+> "does not check against" <+> pretty ty
     
 
 -- Take a destructor and "existentialize it" - replace its bound type-variables

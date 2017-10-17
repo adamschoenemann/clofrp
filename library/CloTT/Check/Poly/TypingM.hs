@@ -85,6 +85,7 @@ data TyExcept a
   | NotWfContext (CtxElem a)
   | PartialAliasApp (Alias a)
   | Other String
+  | Decorate (TyExcept a) (TyExcept a)
   deriving (Show, Eq)
 
 instance Unann (TyExcept a) (TyExcept ()) where
@@ -99,6 +100,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     NotWfContext el          -> NotWfContext (unann el)
     PartialAliasApp al       -> PartialAliasApp (unann al)
     Other s                  -> Other s
+    Decorate outer inner     -> Decorate (unann outer) (unann inner)
 
 instance Pretty (TyExcept a) where
   pretty = \case
@@ -112,6 +114,7 @@ instance Pretty (TyExcept a) where
     NotWfContext el          -> "Context is not well-formed due to" <+> pretty el
     PartialAliasApp al       -> "Partial type-alias application of alias " <+> pretty al
     Other s                  -> "Other error:" <+> fromString s
+    Decorate outer inner     -> pretty outer <> hardline <> "Caused by:" <> softline <> pretty inner
 
 tyExcept :: TyExcept a -> TypingM a r
 tyExcept err = do 
@@ -147,6 +150,9 @@ otherErr s = tyExcept $ Other s
 
 partialAliasApp :: Alias a -> TypingM a r
 partialAliasApp al = tyExcept $ PartialAliasApp al
+
+decorateErr :: TypingM a r -> TyExcept a -> TypingM a r
+decorateErr tm outer = tm `catchError` (\(inner,ctx) -> tyExcept $ Decorate outer inner)
 
 errIf :: TypingM a r -> (r -> Bool) -> (r -> TyExcept a) -> TypingM a ()
 errIf c p fl = do

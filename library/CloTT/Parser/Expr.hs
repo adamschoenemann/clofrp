@@ -42,6 +42,9 @@ tickabs = do
   where
     param = ann <*> parens ((,) <$> lname <*> (reservedOp ":" *> lname))
             
+letp :: Parser Expr
+letp = ann <*> p where 
+  p = E.Let <$> (reserved "let" *> pat <* reservedOp "=") <*> (expr <* reserved "in") <*> expr
 
 lam :: Parser Expr
 lam = do
@@ -93,6 +96,8 @@ atom =   nat
      <|> try tuple
      <|> reserved "fold" *> (ann <*> pure (E.Prim E.Fold))
      <|> reserved "unfold" *> (ann <*> pure (E.Prim E.Unfold))
+     <|> reserved "primRec" *> (ann <*> pure (E.Prim E.PrimRec))
+     <|> letp
      <|> var
      <|> tickvar
      <|> clockvar

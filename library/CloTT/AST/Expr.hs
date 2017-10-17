@@ -38,7 +38,8 @@ data Expr' a
   | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx -> e OR λ(x : A) -> e
   | TickAbs Name Name (Expr a) -- λ(α : κ) -> e
   | ClockAbs Name (Expr a) -- /\κ -> e
-  | Tuple [Expr a]
+  | Tuple [Expr a] -- n-ary tuples
+  | Let (Pat a) (Expr a) (Expr a) -- let p = e1 in e2
   | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
   | Prim P.Prim -- primitive (will probably just include numbers in the end)
  
@@ -64,6 +65,7 @@ prettyE' pars = \case
 
   Tuple es -> tupled (map (prettyE False) es)
 
+  Let p e1 e2 -> "let" <+> pretty p <+> "=" <+> pretty e1 <+> "in" <> softline <> pretty e2
   Case e clauses ->
     "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
 
@@ -112,5 +114,6 @@ unannE' = \case
   TickAbs nm kappa e -> TickAbs nm kappa (unannE e)
   ClockAbs kappa e -> ClockAbs kappa (unannE e)
   Tuple es -> Tuple (map unannE es)
+  Let p e1 e2 -> Let (unannPat p) (unannE e1) (unannE e2)
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
   Prim p -> Prim p

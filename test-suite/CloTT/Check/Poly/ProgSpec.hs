@@ -21,6 +21,7 @@ import           CloTT.Check.Poly.TypingM
 import           CloTT.Pretty
 import           CloTT.AST.Name
 import           CloTT.Annotated (unann)
+import           CloTT.TestUtils
 
 
 progSpec :: Spec 
@@ -134,6 +135,7 @@ progSpec = do
         foo : forall a b s. (s -> a) -> Arr s b.
         foo = \f -> MkArr (\s -> case f s of | x -> x).
         |]
+      -- runCheckProg mempty prog `shouldYield` ()
       shouldFail $ runCheckProg mempty prog 
 
     it "does not generalize functions in case stmts" $ do
@@ -248,6 +250,42 @@ progSpec = do
             | Cons x xs' -> Just x.
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "succeeds for let bindings" $ do
+      let Right prog = pprog [text|
+
+        fst : forall a b. (a, b) -> a.
+        fst = \p -> let (x,y) = p in x.
+
+        snd : forall a b. (a, b) -> b.
+        snd = \p -> let (x,y) = p in y.
+
+        data Unit = Unit.
+
+        silly : forall a. a -> a.
+        silly = \x ->
+          let id = \z -> z in 
+          let y = id x in
+          let foo = \z -> x in
+          let bar = foo in
+          bar Unit.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "rejects generalized let bindings" $ do
+      let Right prog = pprog [text|
+
+        data A = A.
+        data B = B.
+
+        wrong : A -> B.
+        wrong = \a -> 
+          let id = \x -> x in
+          let a' = id a
+          in id B.
+
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ CannotSubtype "B" "A")
 
     it "succeeds for rank2 crap" $ do
       let Right prog = pprog [text|
