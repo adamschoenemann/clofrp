@@ -183,12 +183,60 @@ recSpec = do
             | Z -> n
             | S (m', r) -> fold (S r).
         
+        -- without annotations :O
         plus : Nat -> Nat -> Nat.
         plus = \m n -> 
           let body = \x ->
             case x of
               | Z -> n
-              | S (m', r) -> n -- fold (S r)
-          in  n. -- primRec body m.
+              | S (m', r) -> fold (S r)
+          in  primRec body m.
+
+        multRec : Nat -> NatF (Nat, Nat) -> Nat.
+        multRec = \n x ->
+          case x of
+            | Z -> fold Z
+            | S (m', r) -> plus n r.
+        
+        mult : Nat -> Nat -> Nat.
+        mult = \m n ->
+          primRec (multRec n) m.
+
+        -- without annotations :O
+        mult' : Nat -> Nat -> Nat.
+        mult' = \m n ->
+          let body = \x -> case x of
+            | Z -> fold Z
+            | S (m', r) -> plus n r
+          in primRec body m.
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    specify "primRec with List" $ do
+      let prog = [unsafeProg|
+        data ListF a f = Nil | Cons a f.
+        type List a = Fix (ListF a).
+
+        mapRec : forall a b. (a -> b) -> ListF a (List a, List b) -> List b.
+        mapRec = \f x ->
+          case x of
+            | Nil -> fold Nil
+            | Cons x (xs, ys) -> fold (Cons (f x) ys).
+
+        map : forall a b. (a -> b) -> List a -> List b.
+        map = \f xs -> primRec (mapRec f) xs.
+
+        -- without annotations :O
+        map' : forall a b. (a -> b) -> List a -> List b.
+        map' = \f xs -> 
+          let body = \x -> 
+            case x of
+              | Nil -> fold Nil
+              | Cons x (xs, ys) -> fold (Cons (f x) ys)
+          in  primRec body xs.
+
+
+
       |]
       runCheckProg mempty prog `shouldYield` ()

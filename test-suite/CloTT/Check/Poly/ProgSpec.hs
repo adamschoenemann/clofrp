@@ -189,8 +189,8 @@ progSpec = do
         isFoo : FooBar -> Maybe Int.
         isFoo = \x ->
           case x of
-            | Foo i -> Just i
-            | Bar -> Nothing.
+            | Bar -> Nothing
+            | Foo i -> Just i.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -231,8 +231,8 @@ progSpec = do
         head2 : forall a. List a -> Maybe a.
         head2 = \xs -> 
           case xs of
-            | Cons x (Cons x' xs') -> Just x'
-            | xs' -> Nothing.
+            | xs' -> Nothing
+            | Cons x (Cons x' xs') -> Just x'.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -490,7 +490,8 @@ progSpec = do
           | True -> A
           | A -> A).
       |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ Other $ show $ pretty (mname 2) <+> "is already assigned to Bool")
+      -- runCheckProg mempty prog `shouldFailWith` (errs $ Other $ show $ pretty (mname 2) <+> "is already assigned to Bool")
+      runCheckProg mempty prog `shouldFailWith` (errs $ "A" `CannotSubtype` "Bool")
 
     -- we need a new rule to instantiate existentials with type-applications
     it "succeeds for a bunch of eithers" $ do

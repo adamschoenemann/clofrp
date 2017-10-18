@@ -80,7 +80,7 @@ prettyT' pars = \case
           p _            = Nothing
   
   RecTy t -> parensIf $ "Fix" <+> prettyT False t
-  TTuple ts -> parens (tupled $ map (prettyT False) ts)
+  TTuple ts -> tupled $ map (prettyT False) ts
   where
     collect :: Pretty n => (Type' a s -> Maybe (n, Type a s)) -> Type a s -> ([n], Type a s)
     collect p (A ann ty')

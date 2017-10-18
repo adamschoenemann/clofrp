@@ -31,7 +31,7 @@ import Data.Foldable (foldlM, foldrM)
 import Control.Applicative ((<|>))
 import Control.Monad.Except (catchError, throwError)
 import Data.Text.Prettyprint.Doc
-import Data.List (find)
+import Data.List (find, genericLength)
 import Data.Maybe (isJust)
 
 import CloTT.AST.Name
@@ -505,6 +505,19 @@ instR ty@(A a ty') ahat =
             ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 (Star :->*: Star) <+ ahat := rt)
             withCtx (const ctx') $ branch (t `instR` a1)
           
+          -- InstRTuple
+          TTuple ts -> do
+            root $ "[InstRTuple]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            nms <- traverse (const freshName) ts
+            tyk <- kindOf ty
+            let existstup = A a $ TTuple $ map (A a . TExists) nms
+            ctx' <- insertAt (Exists ahat tyk) (foldr (\x g -> g <+ Exists x Star) mempty nms <+ ahat := existstup)
+            foldrM folder ctx' $ zip nms ts
+            where 
+              folder (af, t) acc = do 
+                tsubst <- substCtx acc t
+                branch $ withCtx (const acc) $ af `instL` tsubst
+          
           _ -> do
             ctx <- getCtx
             root $ "[InstRError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
@@ -904,12 +917,20 @@ checkPat pat@(A ann p) ty = do
         ctx' <- branch $ checkPats pats destr ty
         pure ctx'
 
-    PTuple pats -> 
+    PTuple pats -> do
+      let plen = genericLength pats
+      let dname = UName $ "tuple_" ++ show plen
+      let dbound = map (\x -> (DeBruijn x, Star)) [0 .. (plen - 1)]
+      let dargs = map (A ann . TVar . fst) dbound
+      let dtyp = A ann $ TTuple $ dargs
+      let d = Destr {name = dname, bound = dbound, typ = dtyp, args = dargs}
+      branch $ checkPats pats d ty
+
       -- TODO: Check tuple-patterns against existentials as well (instantiate basically)
-      case ty of
-        A tann (TTuple ts) -> 
-          foldrM (\(p',t) acc -> branch $ withCtx (const acc) $ checkPat p' t) ctx (zip pats ts)
-        _                     -> otherErr $ show $ pretty pat <+> "does not check against" <+> pretty ty
+      -- case ty of
+      --   A tann (TTuple ts) -> 
+      --     foldrM (\(p',t) acc -> branch $ withCtx (const acc) $ checkPat p' t) ctx (zip pats ts)
+      --   _                     -> otherErr $ show $ pretty pat <+> "does not check against" <+> pretty ty
     
 
 -- Take a destructor and "existentialize it" - replace its bound type-variables
