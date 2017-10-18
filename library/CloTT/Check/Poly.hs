@@ -424,6 +424,19 @@ instL ahat ty@(A a ty') =
           r <- withCtx (const omega) $ branch (af2 `instL` substed)
           pure r
 
+        -- InstLTuple
+        TTuple ts -> do
+          root $ "[InstLTuple]" <+> pretty ty <+> "=<:" <+> pretty ahat
+          nms <- traverse (const freshName) ts
+          tyk <- kindOf ty
+          let existstup = A a $ TTuple $ map (A a . TExists) nms
+          ctx' <- insertAt (Exists ahat tyk) (foldr (\x g -> g <+ Exists x Star) mempty nms <+ ahat := existstup)
+          foldrM folder ctx' $ zip nms ts
+          where 
+            folder (af, t) acc = do 
+              tsubst <- substCtx acc t
+              branch $ withCtx (const acc) $ tsubst `instR` af
+
         -- InstLRec
         RecTy t -> do
           root $ "[InstLRec]" <+> pretty ahat <+> ":<=" <+> pretty ty
