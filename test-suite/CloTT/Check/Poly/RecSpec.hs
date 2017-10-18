@@ -219,8 +219,8 @@ recSpec = do
         type List a = Fix (ListF a).
 
         mapRec : forall a b. (a -> b) -> ListF a (List a, List b) -> List b.
-        mapRec = \f x ->
-          case x of
+        mapRec = \f l->
+          case l of
             | Nil -> fold Nil
             | Cons x (xs, ys) -> fold (Cons (f x) ys).
 
@@ -236,7 +236,43 @@ recSpec = do
               | Cons x (xs, ys) -> fold (Cons (f x) ys)
           in  primRec body xs.
 
+        type Fmap (f : * -> *) = forall a b. (a -> b) -> f a -> f b.
+        data Functor (f : * -> *) = Functor (Fmap f).
 
+        -- we have to wrap it in a "newtype" to make it a functor
+        data ListW a = ListW (Fix (ListF a)).
+
+        listf : forall a. Functor ListW.
+        listf = Functor (\f l -> 
+          case l of  
+            | ListW ls -> ListW (map f ls)
+        ).
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    specify "primRec with Tree" $ do
+      let prog = [unsafeProg|
+        data TreeF a f = Empty | Branch a f f.
+        type Tree a = Fix (TreeF a).
+
+        mapRec : forall a b. (a -> b) -> TreeF a (Tree a, Tree b) -> Tree b.
+        mapRec = \f t ->
+          case t of
+            | Empty -> fold Empty
+            | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec).
+
+        map : forall a b. (a -> b) -> Tree a -> Tree b.
+        map = \f xs -> primRec (mapRec f) xs.
+
+        -- -- without annotations :O
+        map' : forall a b. (a -> b) -> Tree a -> Tree b.
+        map' = \f xs -> 
+          let body = \t -> 
+            case t of
+              | Empty -> fold Empty
+              | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec)
+          in  primRec body xs.
 
       |]
       runCheckProg mempty prog `shouldYield` ()
