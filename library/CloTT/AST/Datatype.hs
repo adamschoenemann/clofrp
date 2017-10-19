@@ -21,15 +21,13 @@ data Datatype a =
   Datatype
     { dtName    :: Name
     , dtBound   :: [(Name, Kind)]
-    , dtClocks  :: [Name]
     , dtConstrs :: [Constr a]
     } deriving (Show, Eq, Data, Typeable)
 
 
 instance Pretty (Datatype a) where
-  pretty (Datatype {dtName = nm, dtBound = b, dtClocks = clks, dtConstrs = cs}) =
-    let pclks = if null clks then "" else " clocks" <+> cat (map pretty clks) <+> " "
-    in  "data" <+> pretty nm <+> (sep $ map pretty b) <> pclks <> <+> "=" <+> (encloseSep "" "" " | " $ map pretty cs)
+  pretty (Datatype {dtName = nm, dtBound = b, dtConstrs = cs}) =
+     "data" <+> pretty nm <+> (sep $ map pretty b) <+> "=" <+> (encloseSep "" "" " | " $ map pretty cs)
 
 instance Unann (Datatype a) (Datatype ()) where
   unann dt@(Datatype {dtConstrs = cstrs}) =
