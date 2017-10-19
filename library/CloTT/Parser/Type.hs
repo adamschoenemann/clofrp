@@ -55,19 +55,28 @@ recTy = (ann <*> p) <?> "Fix" where
 ttuple :: Parser Type
 ttuple = ann <*> (E.TTuple <$> parens (typep `sepBy2` comma))
 
+
 typeexpr :: Parser Type
 typeexpr = tvar <|> free <|> forAll <|> clocks <|> recTy <|> try (ttuple) <|> parens typep
 
 typep :: Parser Type
 typep = buildExpressionParser table typeexpr where
   table = 
-    [ [Infix spacef AssocLeft]
+    [ [Infix spacef AssocLeft, Prefix later]
     , [binary' "->" arr AssocRight]
     ]
+
   spacef :: Parser (Type -> Type -> Type)
   spacef =
     ws *> notFollowedBy (choice . map reservedOp $ opNames) *> app
        <?> "space application"
+
   app :: Parser (Type -> Type -> Type)
   app = fn <$> getPosition where
     fn p t1 t2 = A.A p $ E.TApp t1 t2
+
+  later :: Parser (Type -> Type)
+  later = do
+    p <- getPosition
+    k <- string "|>" *> (UName <$> lidentifier)
+    pure (\t -> A.A p $ E.Later k t)

@@ -43,6 +43,7 @@ data Type' :: * -> TySort -> * where
   Clock   :: Name         -> Type a Poly -> Type' a Poly
   RecTy   :: Type a s                    -> Type' a s
   TTuple  :: [Type a s]                  -> Type' a s
+  Later   :: Name         -> Type a s    -> Type' a s
 
 
 deriving instance Eq a       => Eq (Type' a s)
@@ -81,6 +82,7 @@ prettyT' pars = \case
   
   RecTy t -> parensIf $ "Fix" <+> prettyT False t
   TTuple ts -> tupled $ map (prettyT False) ts
+  Later k t -> parensIf $ "⊳" <> pretty k <+> prettyT True t
   where
     collect :: Pretty n => (Type' a s -> Maybe (n, Type a s)) -> Type a s -> ([n], Type a s)
     collect p (A ann ty')
@@ -124,6 +126,7 @@ unannT' = \case
   Clock nm tau  -> Clock  nm (unannT tau)
   RecTy tau     -> RecTy  (unannT tau)
   TTuple ts     -> TTuple (map unannT ts)
+  Later x t     -> Later x (unannT t)
 
 deriving instance Show a => Show (Type' a s)
 
@@ -162,24 +165,25 @@ freeVars (A _ ty) =
     Clock  n t -> freeVars t `S.difference` S.singleton n
     RecTy  t -> freeVars t 
     TTuple ts -> S.unions $ map freeVars ts
+    Later n t -> S.singleton n `S.union` freeVars t
+
 
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
-iterType :: (Type a Poly -> Type a Poly) -> (Type a Poly -> Type a Poly) -> Type a Poly -> Type a Poly
-iterType base go ty@(A ann ty') = 
-  case ty' of
-    TFree n -> base ty
-    TVar n  -> base ty
-    TExists n -> base ty
-    TApp x y   -> A ann $ TApp (go x) (go y)
-    x :->: y   -> A ann $ go x :->: go y
-    Forall n k t -> A ann $ Forall n k (go t)
-    Clock  n t -> A ann $ Clock  n (go t)
-    RecTy  t -> A ann $ RecTy (go t)
-    TTuple ts -> A ann $ TTuple (map go ts)
+-- iterType :: (Type a Poly -> Type a Poly) -> (Type a Poly -> Type a Poly) -> Type a Poly -> Type a Poly
+-- iterType base go ty@(A ann ty') = 
+--   case ty' of
+--     TFree n -> base ty
+--     TVar n  -> base ty
+--     TExists n -> base ty
+--     TApp x y   -> A ann $ TApp (go x) (go y)
+--     x :->: y   -> A ann $ go x :->: go y
+--     Forall n k t -> A ann $ Forall n k (go t)
+--     Clock  n t -> A ann $ Clock  n (go t)
+--     RecTy  t -> A ann $ RecTy (go t)
+--     TTuple ts -> A ann $ TTuple (map go ts)
 
--- asPolytype' :: Type a s -> Type a Poly
 asPolytype :: Type a s -> Type a Poly
 asPolytype (A a ty) = A a $ 
   case ty of
@@ -192,6 +196,7 @@ asPolytype (A a ty) = A a $
     Clock  x t   -> Clock  x (asPolytype t) 
     RecTy  t     -> RecTy (asPolytype t) 
     TTuple ts    -> TTuple (map asPolytype ts)
+    Later x t    -> Later x (asPolytype t)
 
 asMonotype :: Type a s -> Maybe (Type a Mono)
 asMonotype (A a ty) = 
@@ -214,6 +219,8 @@ asMonotype (A a ty) =
 
     TTuple ts -> A a . TTuple <$> sequence (map asMonotype ts)
 
+    Later x t -> A a . Later x <$> asMonotype t
+
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
 subst x forY (A a inTy) = 
   case inTy of
@@ -231,6 +238,13 @@ subst x forY (A a inTy) =
 
     Clock  y t  | y == forY -> A a $ Clock y t 
                 | otherwise -> A a $ Clock y (subst x forY t)
+
+    -- TODO: OK, this is a nasty hack to substitute clock variables
+    -- will only really work as long as clock variables and type variables do not
+    -- share a namespace
+    Later  y t  | y == forY, A _ (TVar k) <- x -> A a $ Later k (subst x forY t)
+                | otherwise                    -> A a $ Later y (subst x forY t)
+
 
     RecTy  t  -> A a $ RecTy (subst x forY t)
     TTuple ts -> A a $ TTuple (map (subst x forY) ts)

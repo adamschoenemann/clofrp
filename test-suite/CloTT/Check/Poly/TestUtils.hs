@@ -1,13 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module CloTT.Check.Poly.TestUtils where
+module CloTT.Check.Poly.TestUtils
+  ( module CloTT.Check.Poly.TestUtils
+  , module NeatInterpolation
+  ) where
 
 import Data.Text.Prettyprint.Doc
+import Data.Text (Text, unpack)
+import Text.Parsec (ParseError)
+import Text.Parsec.Pos (SourcePos)
 import Test.Tasty.Hspec
+import NeatInterpolation
 
 import CloTT.Check.Poly
+import CloTT.AST.Parsed
+import CloTT.Parser.Prog (parseProg)
 import CloTT.TestUtils
 import CloTT.Pretty
+
 
 swidth :: Num a => a
 swidth = 2000
@@ -33,3 +43,6 @@ shouldFailWith (res, st, tree) fn =
   case res of
     Left err -> fn err
     Right x  -> failure (show x ++ "\n" ++ (showW swidth . prettyTree $ tree))
+
+pprog :: Text -> Either ParseError (Prog SourcePos)
+pprog = parseProg . unpack

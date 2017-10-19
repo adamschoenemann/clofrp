@@ -318,15 +318,16 @@ polySpec = do
       let p = nil <+ uni "p"
       insertAt' (exists "a") p ctx `shouldBe` Just (nil <+ marker "m" <++ p <+ uni "a")
   
-  describe "substCtx'" $ do
+  describe "substCtx" $ do
+    let runSubstCtx ctx ty = runTypingM0 (substCtx ctx ty) mempty
     it "substs existentials with their solutions" $ do
       do let ctx = nil <+ "a" := "Nat"
-         substCtx' ctx (E.exists "a") `shouldBe` Right "Nat"
+         runSubstCtx ctx (E.exists "a") `shouldYield` "Nat"
       do let ctx = nil <+ "a" := "Nat"
-         substCtx' ctx (E.exists "a" @->: E.exists "a") `shouldBe` Right ("Nat" @->: "Nat")
+         runSubstCtx ctx (E.exists "a" @->: E.exists "a") `shouldYield` ("Nat" @->: "Nat")
     it "substitutes simultaneously" $ do
       let ctx = nil <+ exists "c" <+ "b" := E.exists "c" <+ "a" := E.exists "b"
-      substCtx' ctx (E.exists "a") `shouldBe` Right (E.exists "c")
+      runSubstCtx ctx (E.exists "a") `shouldYield` (E.exists "c")
 
   -- TODO: Add tests with type constructors
   describe "subtypeOf" $ do

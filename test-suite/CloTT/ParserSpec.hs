@@ -227,6 +227,16 @@ parserSpec = do
        e `shouldBe` E.forAll ["a"] ((E.forAll ["b"] $ "a" @->: "b") @->: "b")
     do let Right e = E.unannT <$> parse P.typep "" "forall a. forall b. a -> b -> b"
        e `shouldBe` E.forAll ["a"] (E.forAll ["b"] $ "a" @->: "b" @->: "b")
+  
+  it "parses laters" $ do
+    do let Right e = E.unannT <$> parse P.typep "" "clocks k. forall a. |>k a -> a"
+       e `shouldBe` (E.clocks ["k"] $ E.forAll ["a"] $ E.later "k" "a" @->: "a")
+    do let Right e = E.unannT <$> parse P.typep "" "|>k (a -> a)"
+       e `shouldBe` (E.later "k" ("a" @->: "a"))
+    do let Right e = E.unannT <$> parse P.typep "" "|>k (|>k0 a -> a)"
+       e `shouldBe` (E.later "k" (E.later "k0" "a" @->: "a"))
+    do let Right e = E.unannT <$> parse P.typep "" "|>k (f a)"
+       e `shouldBe` (E.later "k" ("f" @@: "a"))
 
   it "parses clock quantifiers" $ do
     do let Right e = E.unannT <$> parse P.typep "" "clocks a. a"

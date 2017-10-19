@@ -19,7 +19,7 @@ recSpec = do
   let errs e x = fst x `shouldBe` e
   describe "recursive types" $ do
     it "works in very simple cases (Nat)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data NatF a = Z | S a.
         type Nat = Fix NatF.
 
@@ -50,7 +50,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "works in slightly more complex case (Nat)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data NatF a = Z | S a.
         type Nat = Fix NatF.
 
@@ -64,7 +64,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "works with some pattern matching (Nat)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data NatF a = Z | S a.
         type Nat = Fix NatF.
 
@@ -92,7 +92,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "works in very simple cases (List)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data ListF a f = Nil | Cons a f.
         type List a = Fix (ListF a).
 
@@ -117,7 +117,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "works with some pattern matching (List)" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data ListF a f = Nil | Cons a f.
         type List a = Fix (ListF a).
 
@@ -141,7 +141,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "works with Trees" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data TreeF a f = Empty | Branch a f f.
         type Tree a = Fix (TreeF a).
 
@@ -173,7 +173,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
     
     specify "primRec with Nat" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data NatF a = Z | S a. 
         type Nat = Fix NatF.
 
@@ -214,7 +214,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     specify "primRec with List" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data ListF a f = Nil | Cons a f.
         type List a = Fix (ListF a).
 
@@ -252,7 +252,7 @@ recSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     specify "primRec with Tree" $ do
-      let prog = [unsafeProg|
+      let Right prog = pprog [text|
         data TreeF a f = Empty | Branch a f f.
         type Tree a = Fix (TreeF a).
 

@@ -11,8 +11,6 @@ This way, the CloTT programs are parsed lazily
 module CloTT.Check.Poly.ProgSpec where
 
 import Test.Tasty.Hspec
-import NeatInterpolation
-import Data.Text (Text, unpack)
 
 import           CloTT.Check.Poly.TestUtils
 import           CloTT.Parser.Prog (parseProg)
@@ -26,7 +24,6 @@ import           CloTT.TestUtils
 
 progSpec :: Spec 
 progSpec = do
-  let pprog = parseProg . unpack
   let errs e x = (unann (fst x)) `shouldBe` e
   describe "checkProg" $ do
     it "fails programs with invalid types (1)" $ do

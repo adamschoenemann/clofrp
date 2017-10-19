@@ -223,6 +223,9 @@ cAbs k e = A () $ ClockAbs k e
 lete :: Pat () -> Expr () -> Expr () -> Expr ()
 lete p e1 e2 = A () $ Let p e1 e2
 
+later :: Name -> Type () Poly -> Type () Poly
+later n t = A () $ Later n t
+
 
 infixr 2 @->
 infixr 2 @:->

@@ -60,49 +60,50 @@ runSynth :: TypingRead a -> Expr a -> TypingMRes a (Type a Poly, TyCtx a)
 runSynth rd e = runTypingM (synthesize e) rd initState
 
 
-substCtx' :: TyCtx a -> Type a Poly -> Either Name (Type a Poly)
-substCtx' ctx (A a ty) = 
+substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
+substCtx ctx (A a ty) = 
   case ty of
     TFree x -> pure $ A a $ TFree x
     TVar x  -> pure $ A a $ TVar  x
     TExists x -> 
       case findAssigned x ctx of
-        Just tau -> substCtx' ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
+        Just tau -> substCtx ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
         Nothing
           | ctx `containsEVar` x -> pure $ A a $ TExists x
-          | otherwise            -> Left x
+          | otherwise            -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
 
     t1 `TApp` t2 -> do
-      t1' <- substCtx' ctx t1
-      t2' <- substCtx' ctx t2
+      t1' <- substCtx ctx t1
+      t2' <- substCtx ctx t2
       pure $ A a $ t1' `TApp` t2'
     
     t1 :->: t2 -> do
-      t1' <- substCtx' ctx t1
-      t2' <- substCtx' ctx t2
+      t1' <- substCtx ctx t1
+      t2' <- substCtx ctx t2
       pure $ A a $ t1' :->: t2'
     
     Forall x k t -> do
-      t' <- substCtx' ctx t
+      t' <- substCtx ctx t
       pure $ A a $ Forall x k t'
 
     Clock x t -> do
-      t' <- substCtx' ctx t
+      t' <- substCtx ctx t
       pure $ A a $ Clock x t'
 
     RecTy t -> do
-      t' <- substCtx' ctx t
+      t' <- substCtx ctx t
       pure $ A a $ RecTy t'
     
     TTuple ts -> do
-      A a . TTuple <$> sequence (map (substCtx' ctx) ts)
+      A a . TTuple <$> sequence (map (substCtx ctx) ts)
+    
+    Later k t -> do
+      cctx <- getCCtx
+      if k `isMemberOf` cctx
+        then A a . Later k <$> substCtx ctx t
+        else otherErr $ "Clock variable " ++ show k ++ " not in context during substitution"
+      
 
-
-substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
-substCtx ctx ty = 
-  case substCtx' ctx ty of
-    Left x -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
-    Right ctx' -> pure ctx'
 
 
 splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
@@ -175,7 +176,7 @@ insertAt at insertee = do
 
 
 kindOf :: Type a Poly -> TypingM a Kind
-kindOf ty = go ty `catchError` handler where 
+kindOf ty = go ty `decorateErr` decorate where 
   go (A _ t) = do
     kctx <- getKCtx
     ctx <- getCtx
@@ -219,12 +220,16 @@ kindOf ty = go ty `catchError` handler where
           Star -> pure ()
           k    -> otherErr $ show $ pretty tt <+> "must have kind *"
         
+      Later k tau -> do
+        k' <- go tau
+        case k' of
+          Star -> pure Star
+          _    -> otherErr $ show $ pretty tau <+> "must have kind * at" <+> pretty ty <+> "but had kind" <+> pretty k'
 
     where
       notFound = nameNotFound
 
-  handler (Other err, ctx) = withCtx (const ctx) $ otherErr $ err ++ " at kindOf " ++ (show $ pretty ty) -- TODO: Replace with decorator error constructor
-  handler err              = throwError err
+  decorate = Other $ show $ "kindOf" <+> (pretty ty)
 
 -- A type is wellformed
 -- this one, validType and kindOf should probably be merged somehow...
@@ -257,12 +262,15 @@ checkWfType ty@(A ann ty') = do
     -- ForallWF
     Forall x k t 
       | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context"
-      | otherwise                         -> withCtx (\g -> g <+ Uni x k) $ checkWfType t -- TODO: Kind anns
+      | otherwise                         -> withCtx (\g -> g <+ Uni x k) $ checkWfType t 
 
     TApp t1 t2 -> do
-      k <- kindOf t1
-      case k of
-        k' :->*: k''  -> checkWfType t1 *> checkWfType t2
+      k1 <- kindOf t1
+      k2 <- kindOf t2 
+      case k1 of
+        k11 :->*: k12  
+          | k11 == k2 -> checkWfType t1 *> checkWfType t2
+          | otherwise -> otherErr $ show $ pretty t2 <+> "must have kind" <+> pretty k1 <+> "at" <+> pretty ty
         _             -> do 
           otherErr $ show $ pretty t1 <+> "must be a type-constructor" <+> "in kctx" <+> pretty kctx
 
@@ -281,6 +289,12 @@ checkWfType ty@(A ann ty') = do
       fn tt = do
         errIf (kindOf tt) (/= Star) (\tt' -> Other $ show $ pretty tt' <+> "must have kind *")
         checkWfType tt
+    
+    Later k t -> do
+      cctx <- getCCtx
+      if k `isMemberOf` cctx
+        then checkWfType t
+        else otherErr $ show $ pretty k <+> "is not in clock context at" <+> pretty ty
 
   where 
     expred alpha = \case
