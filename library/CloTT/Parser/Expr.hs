@@ -108,13 +108,19 @@ atom =   nat
 expr :: Parser Expr
 expr = clockabs <|> try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
-    [ [Infix spacef AssocLeft]
+    [ [Infix spacef AssocLeft, Postfix tanno]
     ]
 
   spacef :: Parser (Expr -> Expr -> Expr)
   spacef =
     ws *> notFollowedBy (choice . map reservedOp $ opNames) *> app
        <?> "space application"
+  
+  tanno :: Parser (Expr -> Expr)
+  tanno = do
+    p <- getPosition
+    t <- reservedOp ":" *> T.typep
+    pure (\e -> A.A p $ E.Ann e t)
 
   -- clockf :: Parser (Expr -> Expr)
   -- clockf = do 

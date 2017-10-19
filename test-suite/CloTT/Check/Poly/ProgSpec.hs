@@ -97,6 +97,17 @@ progSpec = do
             | Cons x xs' -> the (b) x.
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for type annotations (3)" $ do
+      let Right prog = pprog [text|
+        data NEList a = One a | Cons a (NEList a).
+        foo : forall b. (forall a. NEList a) -> b.
+        foo = \xs -> 
+          case xs of
+            | One x -> x : b
+            | Cons x xs' -> x : b.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
     
     it "succeeds for programs with tuples" $ do
       let Right prog = pprog [text|

@@ -226,8 +226,8 @@ lete p e1 e2 = A () $ Let p e1 e2
 
 infixr 2 @->
 infixr 2 @:->
-infixl 9 @@
-infixl 3 @::
+infixl 8 @@
+infixl 9 @::
 
 class IsString a => LamCalc a t | a -> t where
   (@->) :: String -> a -> a

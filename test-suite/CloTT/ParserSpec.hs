@@ -123,6 +123,12 @@ parserSpec = do
     case E.unannE <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
       Left e -> failure $ show e
       Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: (E.free "Bool" @->: E.free "Int" @->: E.free "Int")
+    case E.unannE <$> parse P.expr "" "(\\x -> \\y -> 10) : Bool -> Int -> Int" of
+      Left e -> failure $ show e
+      Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: (E.free "Bool" @->: E.free "Int" @->: E.free "Int")
+    case E.unannE <$> parse P.expr "" "(\\x -> x : Int) : Bool -> Int" of
+      Left e -> failure $ show e
+      Right e -> e `shouldBe` (("x" @-> ("x" @:: "Int")) @:: (E.free "Bool" @->: E.free "Int"))
   
   it "parses case statements" $ do
     case E.unannE <$> parse P.expr "" "case x of | y -> y" of
