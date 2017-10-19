@@ -41,6 +41,7 @@ data Expr' a
   | Tuple [Expr a] -- n-ary tuples
   | Let (Pat a) (Expr a) (Expr a) -- let p = e1 in e2
   | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
+  | TypeApp (Expr a) (Type a Poly) -- e {τ}
   | Prim P.Prim -- primitive (will probably just include numbers in the end)
  
 deriving instance Eq a       => Eq (Expr' a)
@@ -64,10 +65,12 @@ prettyE' pars = \case
   ClockAbs kappa e -> "/\\" <> pretty kappa <+> "->" <+> pretty e
 
   Tuple es -> tupled (map (prettyE False) es)
-
   Let p e1 e2 -> "let" <+> pretty p <+> "=" <+> pretty e1 <+> "in" <> softline <> pretty e2
+
   Case e clauses ->
     "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
+  
+  TypeApp e t -> parensIf (pretty e <+> "@" <> braces (prettyT False t))
 
   Prim p -> fromString . show $ p
   where
@@ -116,4 +119,5 @@ unannE' = \case
   Tuple es -> Tuple (map unannE es)
   Let p e1 e2 -> Let (unannPat p) (unannE e1) (unannE e2)
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
+  TypeApp e t -> TypeApp (unannE e) (unannT t)
   Prim p -> Prim p

@@ -171,19 +171,6 @@ freeVars (A _ ty) =
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
--- iterType :: (Type a Poly -> Type a Poly) -> (Type a Poly -> Type a Poly) -> Type a Poly -> Type a Poly
--- iterType base go ty@(A ann ty') = 
---   case ty' of
---     TFree n -> base ty
---     TVar n  -> base ty
---     TExists n -> base ty
---     TApp x y   -> A ann $ TApp (go x) (go y)
---     x :->: y   -> A ann $ go x :->: go y
---     Forall n k t -> A ann $ Forall n k (go t)
---     Clock  n t -> A ann $ Clock  n (go t)
---     RecTy  t -> A ann $ RecTy (go t)
---     TTuple ts -> A ann $ TTuple (map go ts)
-
 asPolytype :: Type a s -> Type a Poly
 asPolytype (A a ty) = A a $ 
   case ty of

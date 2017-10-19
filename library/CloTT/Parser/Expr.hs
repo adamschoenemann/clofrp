@@ -109,6 +109,7 @@ expr :: Parser Expr
 expr = clockabs <|> try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
     [ [Infix spacef AssocLeft, Postfix tanno]
+    , [Postfix typeapp]
     ]
 
   spacef :: Parser (Expr -> Expr -> Expr)
@@ -122,12 +123,12 @@ expr = clockabs <|> try tickabs <|> lam <|> buildExpressionParser table atom whe
     t <- reservedOp ":" *> T.typep
     pure (\e -> A.A p $ E.Ann e t)
 
-  -- clockf :: Parser (Expr -> Expr)
-  -- clockf = do 
-  --   p <- getPosition
-  --   -- nasty hack to make it behave "infixl" ish 
-  --   nms <- many1 (ann <*> (symbol "[" *> lname <* symbol "]"))
-  --   pure (\e -> foldl (\acc (A.A ann nm) -> A.A ann $ E.ClockApp acc nm) e nms)
+  typeapp :: Parser (Expr -> Expr)
+  typeapp = do 
+    p <- getPosition
+    -- nasty hack to make it behave "infixl" ish 
+    ts <- many1 (ann <*> (char '@' *> braces T.typep))
+    pure (\e -> foldl (\acc (A.A ann t) -> A.A ann $ E.TypeApp acc t) e ts)
 
   app :: Parser (Expr -> Expr -> Expr)
   app = fn <$> getPosition where

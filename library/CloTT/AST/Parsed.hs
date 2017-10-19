@@ -218,6 +218,9 @@ lete p e1 e2 = A () $ Let p e1 e2
 later :: Name -> Type () Poly -> Type () Poly
 later n t = A () $ Later (A () $ TVar n) t
 
+typeapp :: Expr () -> Type () Poly -> Expr ()
+typeapp e t = A () $ TypeApp e t
+
 
 infixr 2 @->
 infixr 2 @:->
@@ -268,7 +271,7 @@ unannP (Prog ds) = Prog (map unannD ds)
 quantify :: [(Name, Kind)] -> Type a Poly -> Type a Poly
 quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\(nm,k) t' -> A ann $ Forall nm k t') (A ann t) bound) else id
 
--- substitute type for name in expr (traverses and substitutes in annotations)
+-- substitute type for name in expr (traverses and substitutes in annotations and type applications)
 substTVarInExpr :: Type a Poly -> Name -> Expr a -> Expr a 
 substTVarInExpr new nm = go where
   go (A a e') = A a $ go' e'
@@ -285,6 +288,7 @@ substTVarInExpr new nm = go where
     Tuple es -> Tuple (map go es)
     Let p e1 e2 -> Let p (go e1) (go e2)
     Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
+    TypeApp e t -> TypeApp (go e) (subst new nm t) 
     Prim p -> e'
 
 -- ridiculous to copy-paste all this stuff..
@@ -306,4 +310,5 @@ substClockVarInExpr new nm = go where
       Tuple es -> A a $ Tuple (map go es)
       Let p e1 e2 -> A a $ Let p (go e1) (go e2)
       Case e clauses -> A a $ (Case (go e) $ map (\(p,c) -> (p, go c)) clauses)
+      TypeApp e t -> A a $ TypeApp (go e) t 
       Prim p -> A a e'
