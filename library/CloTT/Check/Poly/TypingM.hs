@@ -26,6 +26,7 @@ import CloTT.AST.Name
 import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
 import CloTT.Pretty
+import CloTT.Context
 import CloTT.Check.Poly.Contexts
 
 branch :: Pretty r => TypingM a r -> TypingM a r
@@ -189,8 +190,17 @@ getDCtx = asks trDestrs
 getKCtx :: TypingM a (KindCtx a)
 getKCtx = asks trKinds
 
+-- TODO: Argh, nasty hack. Ideally, get rid of the clock-ctx entirely and just rely on
+-- the normal "local context", but I'm still not completely convinced it is a good idea..
 getCCtx :: TypingM a (ClockCtx a)
-getCCtx = asks trClocks
+getCCtx = do
+  clks <- asks trClocks
+  Gamma ctx <- getCtx
+  pure $ foldr folder clks ctx
+  where
+    folder (Uni x ClockK)    acc = extend x () acc
+    folder (Exists x ClockK) acc = extend x () acc
+    folder _                 acc = acc
 
 withCtx :: (TyCtx a -> TyCtx a) -> TypingM a r -> TypingM a r
 withCtx fn = local fn' where

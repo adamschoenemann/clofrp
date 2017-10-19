@@ -26,7 +26,7 @@ kind :: Parser E.Kind
 kind = buildExpressionParser table kindexpr where
   table = [[binary' "->" karr AssocRight]]
   karr = pure (E.:->*:)
-  kindexpr = symbol "*" *> pure E.Star
+  kindexpr = symbol "*" *> pure E.Star <|> reserved "Clock" *> pure E.ClockK
 
 boundp :: Parser (Name, E.Kind)
 boundp = (\n -> (UName n, E.Star)) <$> lidentifier 
@@ -78,5 +78,5 @@ typep = buildExpressionParser table typeexpr where
   later :: Parser (Type -> Type)
   later = do
     p <- getPosition
-    k <- string "|>" *> (UName <$> lidentifier)
+    k <- string "|>" *> (A.A p . E.TVar . UName <$> lidentifier)
     pure (\t -> A.A p $ E.Later k t)

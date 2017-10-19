@@ -70,7 +70,7 @@ substCtx ctx (A a ty) =
         Just tau -> substCtx ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
         Nothing
           | ctx `containsEVar` x -> pure $ A a $ TExists x
-          | otherwise            -> otherErr $ "existential " ++ show x ++ " not in context during substitution"
+          | otherwise            -> otherErr $ show $ "existential " <+> pretty x <+> " not in context" <+> pretty (A a ty)
 
     t1 `TApp` t2 -> do
       t1' <- substCtx ctx t1
@@ -97,11 +97,12 @@ substCtx ctx (A a ty) =
     TTuple ts -> do
       A a . TTuple <$> sequence (map (substCtx ctx) ts)
     
-    Later k t -> do
-      cctx <- getCCtx
-      if k `isMemberOf` cctx
-        then A a . Later k <$> substCtx ctx t
-        else otherErr $ "Clock variable " ++ show k ++ " not in context during substitution"
+    Later t1 t2 -> do
+      t1' <- substCtx ctx t1
+      t2' <- substCtx ctx t2
+      pure (A a $ Later t1' t2')
+
+  `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
       
 
 
@@ -264,6 +265,7 @@ checkWfType ty@(A ann ty') = do
       | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context"
       | otherwise                         -> withCtx (\g -> g <+ Uni x k) $ checkWfType t 
 
+    -- TAppWF
     TApp t1 t2 -> do
       k1 <- kindOf t1
       k2 <- kindOf t2 
@@ -281,20 +283,22 @@ checkWfType ty@(A ann ty') = do
         then otherErr $ show $ pretty kappa <+> "is already in clock-context"
         else withCCtx (extend kappa ()) $ checkWfType t
 
+    -- RecTyWF
     RecTy t -> kindOf t >>= \case
       Star :->*: k' -> checkWfType t
       k             -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but must be a type constructor"
     
+    -- TupleWF
     TTuple ts -> traverse fn ts *> pure () where
       fn tt = do
         errIf (kindOf tt) (/= Star) (\tt' -> Other $ show $ pretty tt' <+> "must have kind *")
         checkWfType tt
     
-    Later k t -> do
-      cctx <- getCCtx
-      if k `isMemberOf` cctx
-        then checkWfType t
-        else otherErr $ show $ pretty k <+> "is not in clock context at" <+> pretty ty
+    -- |>WF
+    Later t1 t2 -> 
+      kindOf t1 >>= \case
+        ClockK -> checkWfType t2
+        k      -> otherErr $ show $ pretty t1 <+> "has kind" <+> pretty k <+> "but should be a clock variable, at" <+> pretty ty
 
   where 
     expred alpha = \case
@@ -653,6 +657,14 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     ctx <- getCtx
     foldrM (\(t1, t2) acc -> branch $ withCtx (const acc) $ t1 `subtypeOf` t2) ctx (zip ts1 ts2)
 
+  -- <:Later
+  subtypeOf' (Later a1 a2) (Later b1 b2) = do
+    root $ "[<:Later]" <+> pretty ty1 <+> "<:" <+> pretty ty2
+    theta <- branch $ a1 `subtypeOf` b1
+    a2' <- substCtx theta a2
+    b2' <- substCtx theta b2
+    branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
+
   subtypeOf' t1 t2 = do
     -- root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
     root $ "[SubtypeError!]" <+> pretty t1 <+> "<:" <+> pretty t2
@@ -740,8 +752,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     case p of
       A _ (Bind nm) -> withCtx (const $ ctx' <+ (nm `HasType` ty1s)) $ branch $ check e2 ty
       _       -> snd <$> checkClause ty1s (p, e2) ty
-
-
+  
   -- Sub
   check' _ _ = do
     ctx <- getCtx
@@ -945,6 +956,7 @@ checkPat pat@(A ann p) ty = do
         pure ctx'
 
     PTuple pats -> do
+      -- generate a tuple destructor of length (length pats)
       let plen = genericLength pats
       let dname = UName $ "tuple_" ++ show plen
       let dbound = map (\x -> (DeBruijn x, Star)) [0 .. (plen - 1)]
@@ -952,13 +964,6 @@ checkPat pat@(A ann p) ty = do
       let dtyp = A ann $ TTuple $ dargs
       let d = Destr {name = dname, bound = dbound, typ = dtyp, args = dargs}
       branch $ checkPats pats d ty
-
-      -- TODO: Check tuple-patterns against existentials as well (instantiate basically)
-      -- case ty of
-      --   A tann (TTuple ts) -> 
-      --     foldrM (\(p',t) acc -> branch $ withCtx (const acc) $ checkPat p' t) ctx (zip pats ts)
-      --   _                     -> otherErr $ show $ pretty pat <+> "does not check against" <+> pretty ty
-    
 
 -- Take a destructor and "existentialize it" - replace its bound type-variables
 -- with fresh existentials
@@ -994,7 +999,7 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
       foldlM folder ctx' $ zip pats eargs
       where 
         folder acc (p, t) = do 
-          t' <- substCtx acc t
+          t' <- substCtx acc t `decorateErr` (Other $ show $ "substCtx" <+> pretty acc <+> pretty t)
           withCtx (const acc) $ checkPat p t'
   
 applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)

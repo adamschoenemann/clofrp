@@ -50,6 +50,7 @@ reservedNames = [ "if"
                 , "fold"
                 , "unfold"
                 , "primRec"
+                , "Clock"
                 ]
 
 languageDef :: Tok.LanguageDef ()

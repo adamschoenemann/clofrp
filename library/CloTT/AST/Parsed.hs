@@ -177,6 +177,10 @@ forAll :: [String] -> Type () Poly -> Type () Poly
 forAll nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Forall nm Star acc
 
+forAll' :: [(Name, Kind)] -> Type () Poly -> Type () Poly
+forAll' nms t = foldr fn t $ nms where
+  fn (nm,k) acc = A () $ Forall nm k acc
+
 clocks :: [String] -> Type () Poly -> Type () Poly
 clocks nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Clock nm acc
@@ -212,7 +216,7 @@ lete :: Pat () -> Expr () -> Expr () -> Expr ()
 lete p e1 e2 = A () $ Let p e1 e2
 
 later :: Name -> Type () Poly -> Type () Poly
-later n t = A () $ Later n t
+later n t = A () $ Later (A () $ TVar n) t
 
 
 infixr 2 @->
