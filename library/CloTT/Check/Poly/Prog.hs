@@ -251,9 +251,9 @@ elabProg (Prog decls) = do
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> TypingM a (ElabRes a)
     folder (A _ x) (ks, fs, ss, cs, ds, als) = case x of
-      DataD nm k b cs' ->
+      DataD dt@(Datatype nm b cs') ->
         let (tys, dstrs) = elabCs nm b cs' 
-        in  pure (extend nm k ks, fs, ss, tys <> cs, dstrs <> ds, als)
+        in  pure (extend nm (dtKind dt) ks, fs, ss, tys <> cs, dstrs <> ds, als)
 
       FunD nm e        -> pure (ks, M.insert nm e fs, ss, cs, ds, als)
       SigD nm t        -> pure (ks, fs, extend nm t ss, cs, ds, als)

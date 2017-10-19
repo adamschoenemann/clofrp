@@ -24,6 +24,7 @@ module CloTT.AST.Parsed
   , module CloTT.AST.Expr
   , module CloTT.AST.Alias
   , module CloTT.AST.Kind
+  , module CloTT.AST.Datatype
   , P.Prim(..)
   , Unann(..)
 ) where
@@ -40,41 +41,28 @@ import CloTT.AST.Pat
 import CloTT.AST.Expr
 import CloTT.AST.Alias
 import CloTT.AST.Kind
+import CloTT.AST.Datatype
 
 
 type Decl a = Annotated a (Decl' a)
 data Decl' a
   = FunD Name (Expr a)
-  -- |    name kind tvars  constructors
-  | DataD Name Kind [(Name,Kind)] [Constr a]
+  | DataD (Datatype a)
   | SigD Name (Type a Poly)
   | AliasD (Alias a)
 
 instance Pretty (Decl a) where
   pretty (A _ d) = prettyD d where
     prettyD = \case
-      FunD nm e       -> pretty nm <+> "=" <+> pretty e <> "."
-      DataD nm k b cs -> "data" <+> pretty nm <+> (sep $ map pretty b) <+> "=" <+> (encloseSep "" "" " | " $ map pretty cs) <> "."
-      SigD nm ty      -> pretty nm <+> ":" <+> pretty ty <> "."
-      AliasD al       -> pretty al <> "."
+      FunD nm e  -> pretty nm <+> "=" <+> pretty e <> "."
+      DataD dt   -> pretty dt <> "."
+      SigD nm ty -> pretty nm <+> ":" <+> pretty ty <> "."
+      AliasD al  -> pretty al <> "."
 
 deriving instance Show a     => Show (Decl' a)
 deriving instance Eq a       => Eq (Decl' a)
 deriving instance Data a     => Data (Decl' a)
 deriving instance Typeable a => Typeable (Decl' a)
-
-type Constr a = Annotated a (Constr' a)
-data Constr' a
-  = Constr Name [Type a Poly]
-
-instance Pretty (Constr a) where
-  pretty (A _ c) = prettyC c where
-    prettyC (Constr nm ps) = pretty nm <+> sep (map pretty ps)
-
-deriving instance Show a     => Show (Constr' a)
-deriving instance Eq a       => Eq (Constr' a)
-deriving instance Data a     => Data (Constr' a)
-deriving instance Typeable a => Typeable (Constr' a)
 
 data Prog a = Prog [Decl a]
   deriving (Show, Eq, Data, Typeable)
@@ -170,8 +158,8 @@ the t e = A () $ Ann e t
 constr :: Name -> [Type () Poly] -> Constr ()
 constr nm ts = A () $ Constr nm ts
 
-datad :: Name -> Kind -> [Name] -> [Constr ()] -> Decl ()
-datad nm k b cs = A () $ DataD nm k (map (,Star) b) cs
+datad :: Name -> [(Name, Kind)] -> [Constr ()] -> Decl ()
+datad nm bs cs = A () $ DataD (Datatype nm bs cs)
 
 fund :: Name -> Expr () -> Decl ()
 fund nm e =  A () $ FunD nm e
@@ -262,23 +250,15 @@ unannD = help go where
   help = conv' (const ())
   go = \case 
     FunD nm c -> FunD nm (unannE c) 
-    DataD nm k b cstrs -> DataD nm k b (map unannConstr cstrs)
-    SigD nm t  -> SigD nm (unannT t)
-    AliasD al  -> AliasD $ unann al
+    DataD dt  -> DataD $ unann dt 
+    SigD nm t -> SigD nm (unannT t)
+    AliasD al -> AliasD $ unann al
 
 instance Unann (Prog a) (Prog ()) where
   unann = unannP
 
 unannP :: Prog a -> Prog ()
 unannP (Prog ds) = Prog (map unannD ds)
-
-instance Unann (Constr a) (Constr ()) where
-  unann = unannConstr
-
-unannConstr :: Constr a -> Constr ()
-unannConstr (A _ c) =
-  case c of
-    Constr nm ts -> A () $ Constr nm (map unannT ts)
 
 -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
 quantify :: [(Name, Kind)] -> Type a Poly -> Type a Poly

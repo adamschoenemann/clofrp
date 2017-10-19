@@ -15,7 +15,7 @@ quasiSpec = do
     E.unannE expr01 `shouldBe` "x" @-> "y" @-> E.the (E.free "Nat") ("x" @@ "y" @@ E.true)
   it "decl quoter works" $ do
     E.unannD decl01 `shouldBe`
-      E.datad "Tree" (Star :->*: Star) ["a"]
+      E.datad "Tree"  [("a", Star)]
                       [ E.constr "Leaf" []
                       , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
                       ]
@@ -27,14 +27,12 @@ quasiSpec = do
       , E.sigd "twice" ("Nat" @->: "Tuple" @@: "Nat" @@: "Nat")
       , E.fund "twice" ("x" @-> (E.tup ["x", "x"]))
       , E.datad "Maybe" 
-          (Star :->*: Star)
-          ["a"]
+          [("a", Star)]
           [ E.constr "Nothing" []
           , E.constr "Just" ["a"]
           ]
       , E.datad "List" 
-          (Star :->*: Star)
-          ["a"]
+          [("a", Star)]
           [ E.constr "Nil" []
           , E.constr "Cons" ["a", "List" @@: "a"]
           ]
@@ -45,7 +43,6 @@ quasiSpec = do
     E.unannP prog02 `shouldBe`
       E.prog [
         E.datad "N" 
-          Star
           []
           [ E.constr "Z" []
           , E.constr "S" ["N"]

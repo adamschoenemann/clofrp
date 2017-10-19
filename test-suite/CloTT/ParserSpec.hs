@@ -285,22 +285,22 @@ declSpec :: Spec
 declSpec = do
   it "parses data type decls" $ do
     do let Right decl = E.unannD <$> parse P.decl "" "data Foo = ."
-       decl `shouldBe` E.datad "Foo" Star [] []
+       decl `shouldBe` E.datad "Foo" [] []
     do let Right decl = E.unannD <$> parse P.decl "" "data Foo a = ."
-       decl `shouldBe` E.datad "Foo" (Star :->*: Star) ["a"] []
+       decl `shouldBe` E.datad "Foo" [("a", Star)] []
     do let Right decl = E.unannD <$> parse P.decl "" "data Foo a b = ."
-       decl `shouldBe` E.datad "Foo" (Star :->*: Star :->*: Star) ["a", "b"] []
+       decl `shouldBe` E.datad "Foo" [("a", Star), ("b", Star)] []
     do let Right decl = E.unannD <$> parse P.decl "" "data Unit = MkUnit."
-       decl `shouldBe` E.datad "Unit" Star [] [E.constr "MkUnit" []]
+       decl `shouldBe` E.datad "Unit" [] [E.constr "MkUnit" []]
     do let Right decl = E.unannD <$> parse P.decl "" "data Bool = True | False."
-       decl `shouldBe` E.datad "Bool" Star [] [E.constr "True" [], E.constr "False" []]
+       decl `shouldBe` E.datad "Bool" [] [E.constr "True" [], E.constr "False" []]
     do let Right decl = E.unannD <$> parse P.decl "" "data Maybe a = Nothing | Just a."
-       decl `shouldBe` E.datad "Maybe" (Star :->*: Star) ["a"] [E.constr "Nothing" [], E.constr "Just" ["a"]]
+       decl `shouldBe` E.datad "Maybe" [("a", Star)] [E.constr "Nothing" [], E.constr "Just" ["a"]]
     do let Right decl = E.unannD <$> parse P.decl "" "data List a = Nil | Cons (List a)."
-       decl `shouldBe` E.datad "List" (Star :->*: Star) ["a"] [E.constr "Nil" [], E.constr "Cons" [E.free "List" @@: "a"]]
+       decl `shouldBe` E.datad "List" [("a", Star)] [E.constr "Nil" [], E.constr "Cons" [E.free "List" @@: "a"]]
     do let Right decl = E.unannD <$> parse P.decl "" "data Tree a = Leaf | Branch a (Tree a) (Tree a)."
        E.unannD decl `shouldBe`
-          E.datad "Tree" (Star :->*: Star) ["a"]
+          E.datad "Tree" [("a", Star)]
                           [ E.constr "Leaf" []
                           , E.constr "Branch" ["a", E.free "Tree" @@: "a", E.free "Tree" @@: "a"]
                           ]

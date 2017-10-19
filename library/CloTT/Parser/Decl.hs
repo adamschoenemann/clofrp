@@ -42,9 +42,8 @@ datad = ann <*> p where
   p = do 
     nm <- E.UName <$> (reserved "data" *> uidentifier)
     bound <- many P.boundp
-    let kind = foldr (\(_,k) b -> k E.:->*: b) E.Star bound
     constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) <* reservedOp "."
-    pure $ E.DataD nm kind bound constrs
+    pure $ E.DataD (E.Datatype nm bound constrs)
 
 
 constr :: Parser (E.Constr SourcePos)
