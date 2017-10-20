@@ -950,4 +950,16 @@ progSpec = do
         foo = const @{Unit} @{Bool} Unit True.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "Unit" `CannotSubtype` "Bool")
+
+    it "rejects explicit type applications correctly (3)" $ do
+      let Right prog = pprog [text|
+        data Unit = Unit.
+
+        id : forall a. a -> a.
+        id = \x -> x.
+
+        foo : forall a. a -> a.
+        foo = id @{forall a. a -> a} id.
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other "asMonotype")
     
