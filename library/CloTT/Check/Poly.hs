@@ -753,6 +753,21 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
       A _ (Bind nm) -> withCtx (const $ ctx' <+ (nm `HasType` ty1s)) $ branch $ check e2 ty
       _       -> snd <$> checkClause ty1s (p, e2) ty
   
+  -- TypeApp<=
+  -- check' (TypeApp ex arg) _ = do
+  --   root $ "[TypeApp<=]" <+> pretty e <+> "<=" <+> pretty ty
+  --   checkWfType arg
+  --   _ <- asMonotypeTM arg
+  --   (exty, theta) <- synthesize ex
+  --   extys <- substCtx theta exty
+  --   k' <- kindOf arg
+  --   case extys of 
+  --     A _ (Forall af k faty)
+  --       | k' == k -> ty `subtypeOf` subst arg af faty
+
+  --     _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg
+
+  
   -- Sub
   check' _ _ = do
     ctx <- getCtx
@@ -902,6 +917,21 @@ synthesize expr@(A ann expr') = synthesize' expr' where
       folder e (ts', acc) = do
         (t', acc') <- branch $ withCtx (const acc) $ synthesize e
         pure (t' : ts', acc')
+  
+  -- TypeApp=>
+  synthesize' (TypeApp ex arg) = do
+    root $ "[TypeApp=>]" <+> pretty ex
+    (exty, theta) <- synthesize ex
+    extys <- substCtx theta exty
+    checkWfType arg
+    _ <- asMonotypeTM arg
+    k' <- kindOf arg
+    case extys of 
+      A _ (Forall af k faty)
+        | k' == k -> pure (subst arg af faty, theta)
+
+      _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg
+
 
   synthesize' _ = cannotSynthesize expr
 

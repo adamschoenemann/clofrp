@@ -883,9 +883,71 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldFailWith` (\(e,_) -> e `shouldBe` Other "BoolThenUnits is recursive")
     
-    -- it "succeeds for higher-kinded types" $ do
-    --   let Right prog = pprog [text|
-    --     data Functor f = Functor (forall a b. (a -> b) -> f a -> f b) .
-    --   |]
-    --   pending
-      -- runCheckProg mempty prog `shouldYield` ()
+    it "accepts explicit type applications correctly (1)" $ do
+      let Right prog = pprog [text|
+        data Unit = Unit.
+        data Bool = True | False.
+        id : forall a. a -> a.
+        id = \x -> x.
+
+        uid : Unit -> Unit.
+        uid = id @{Unit}.
+
+        unit : Unit.
+        unit = id @{Unit} Unit.
+
+        const : forall a b. a -> b -> a.
+        const = \x y -> x.
+
+        foo : Unit.
+        foo = const @{Unit} @{Bool} Unit True.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "accepts explicit type applications correctly (2)" $ do
+      let Right prog = pprog [text|
+        data Unit = Unit.
+        data Bool = True | False.
+        app : forall a b. (a -> b) -> a -> b.
+        app = \f x -> f x.
+        const : forall a b. a -> b -> a.
+        const = \x y -> x.
+        foo : Unit -> Bool.
+        foo = app @{Unit} (const @{Bool} @{Unit} True).
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "rejects explicit type applications correctly (1)" $ do
+      let Right prog = pprog [text|
+        data Unit = Unit.
+        data Bool = True | False.
+        id : forall a. a -> a.
+        id = \x -> x.
+        unit : Bool -> Bool.
+        unit = id @{Unit}.
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ "Bool" `CannotSubtype` "Unit")
+
+    it "rejects explicit type applications correctly (2)" $ do
+      let Right prog = pprog [text|
+        data Unit = Unit.
+        data Bool = True | False.
+        const : forall a b. a -> b -> a.
+        const = \x y -> x.
+        foo : Unit.
+        foo = const @{Unit} @{Bool} Unit Unit.
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ "Unit" `CannotSubtype` "Bool")
+
+    it "rejects explicit type applications correctly (3)" $ do
+      let Right prog = pprog [text|
+        data Unit = Unit.
+        data Bool = True | False.
+        const : forall a b. a -> b -> a.
+        const = \x y -> x.
+        foo : Bool.
+        foo = const @{Unit} @{Bool} Unit True.
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ "Unit" `CannotSubtype` "Bool")
+    

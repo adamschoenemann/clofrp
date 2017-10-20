@@ -111,7 +111,7 @@ parserSpec = do
     do let Right e = E.unannE <$> parse P.expr "" "(e1 @{k1} @{k2}) e2"
        e `shouldBe` (("e1" `E.typeapp` "k1") `E.typeapp` "k2") @@ "e2"
   it "success: type application (5)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "(e1 e2 @{k2}) e2"
+    do let Right e = E.unannE <$> parse P.expr "" "(e1 e2) @{k2} e2"
        e `shouldBe` (("e1" @@ "e2") `E.typeapp` "k2") @@ "e2"
   it "success: type application (6)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "e1 @{k1} @{k2} e2"

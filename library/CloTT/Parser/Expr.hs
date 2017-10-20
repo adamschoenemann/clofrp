@@ -108,8 +108,7 @@ atom =   nat
 expr :: Parser Expr
 expr = clockabs <|> try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
-    [ [Infix spacef AssocLeft, Postfix tanno]
-    , [Postfix typeapp]
+    [ [Infix spacef AssocLeft, Postfix tanno, Postfix typeapp]
     ]
 
   spacef :: Parser (Expr -> Expr -> Expr)

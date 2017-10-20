@@ -76,6 +76,14 @@ clockSpec = do
         isNow = \x -> case x of
           | Now y -> True
           | Next y -> False.
+
+        not : Bool -> Bool.
+        not = \b -> case b of 
+          | True -> False
+          | False -> True.
+
+        isNext : forall (k : Clock) a. NowOrNext k a -> Bool.
+        isNext = \x -> not (isNow x).
         
         nextOrElse : forall (k : Clock) a. |>k a -> NowOrNext k a -> |>k a.
         nextOrElse = \d non ->
