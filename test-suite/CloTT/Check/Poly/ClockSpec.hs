@@ -67,7 +67,7 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ Other "Expected MkUnit to be a clock")
     
-    it "elabs program with data-decl and clocks" $ do
+    it "checks program with data-decl and clocks" $ do
       let Right prog = pprog [text|
         data NowOrNext (k : Clock) a = Now a | Next (|>k a).
         data Bool = True | False.
@@ -96,6 +96,13 @@ clockSpec = do
       case query "NowOrNext" (kinds ep ) of
         Just k -> k `shouldBe` ClockK :->*: Star :->*: Star
         Nothing -> failure "NowOrNext"
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "accepts simple prog with tick abstraction" $ do
+      let Right prog = pprog [text|
+        tid : forall (k : Clock) a. |>k a -> |>k a.
+        tid = \d -> \\(af : k) -> d {af}.
+      |]
       runCheckProg mempty prog `shouldYield` ()
       
       

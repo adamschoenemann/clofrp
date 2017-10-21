@@ -201,6 +201,11 @@ findMap fn = foldr fun Nothing where
 ctxFind :: (CtxElem a -> Bool) -> TyCtx a -> Maybe (CtxElem a)
 ctxFind p (Gamma xs) = find p xs
 
+lookupTy :: Name -> TyCtx a -> Maybe (Type a Poly)
+lookupTy nm (Gamma xs) = findMap p xs where
+  p (nm' `HasType` ty) | nm' == nm = Just ty
+  p _                  = Nothing
+
 elemBy :: (a -> Bool) -> [a] -> Bool
 elemBy fn = isJust . find fn
 

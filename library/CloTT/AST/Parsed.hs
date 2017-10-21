@@ -283,7 +283,12 @@ substTVarInExpr new nm = go where
     App e1 e2 -> App (go e1) (go e2)
     -- TODO: deal with name capture here
     Lam v mty e -> Lam v (subst new nm <$> mty) (go e)
-    TickAbs v kappa e -> TickAbs v kappa (go e)
+
+    -- FIXME: Hack
+    TickAbs v kappa e
+      | kappa == nm, A _ (TVar kappa') <- new -> TickAbs v kappa' (go e)
+      | otherwise -> TickAbs v kappa (go e)
+      
     ClockAbs kappa e -> ClockAbs kappa (go e)
     Tuple es -> Tuple (map go es)
     Let p e1 e2 -> Let p (go e1) (go e2)

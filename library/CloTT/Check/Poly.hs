@@ -104,9 +104,6 @@ substCtx ctx (A a ty) =
 
   `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
       
-
-
-
 splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
   case splitCtx' el ctx of
@@ -131,8 +128,6 @@ queryKind nm = do
       p (Exists x _) = x == nm
       p (x := _)     = x == nm
       p _             = False
-
-
 
 insertAt :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a)
 insertAt at insertee = do
@@ -377,6 +372,12 @@ assign nm ty = do
 
 asMonotypeTM :: Type a s -> TypingM a (Type a Mono)
 asMonotypeTM = maybe (otherErr "asMonotype") pure . asMonotype
+
+lookupTyTM :: Name -> TyCtx a -> TypingM a (Type a Poly)
+lookupTyTM nm c =
+  case lookupTy nm c of
+    Just t -> pure t
+    Nothing -> nameNotFound nm
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
@@ -868,6 +869,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     pure (A ann $ alphat :->: betat, delta)
   
   -- ->ClockE
+  -- TODO: Move to applysynth?
   synthesize' (App e1 (A _ (ClockVar kappa))) = do
     ctx <- getCtx
     root $ "[->ClockE]" <+> pretty expr <+> "in" <+> pretty ctx
@@ -878,6 +880,26 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         pure (ctysubst, theta)
       _ -> otherErr $ show $ "Cannot apply a clock variable to an expression that is not clock-quantified at" <+> pretty expr
 
+  -- ->TickE
+  -- TODO: Move to applysynth?
+  synthesize' (App e1 (A _ (TickVar alpha))) = do
+    ctx <- getCtx
+    root $ "[->ClockE]" <+> pretty expr <+> "in" <+> pretty ctx
+    (ty1, theta) <- branch $ synthesize e1
+    kappa <- lookupTyTM alpha ctx
+    (kappa', cty) <- assertLater ty1
+    if kappa =%= kappa'
+      then do 
+        ctysubst <- substCtx theta cty
+        pure (ctysubst, theta)
+      else otherErr $ show $ "Expected clock" <+> pretty kappa <+> "to be" <+> pretty kappa' <+> "at" <+> pretty expr
+    where
+      assertLater = \case 
+        (A _ (Later k t)) -> pure (k, t)
+        t                 -> 
+          otherErr $ show $ "Cannot apply a tick variable to an expression that is not guarded at" <+> pretty expr
+      
+
   -- ->UnfoldE=>
   synthesize' (A uann (Prim Unfold) `App` e2) = do
     root "[->UnfoldE=>]"
@@ -886,7 +908,6 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     case e2ty' of
       A ann2 (RecTy fty) -> pure (A ann2 $ fty `TApp` e2ty', theta)
       _                  -> otherErr $ show $ pretty e2ty' <+> "cannot be unfolded"
-
 
 
   -- ->E
@@ -917,6 +938,12 @@ synthesize expr@(A ann expr') = synthesize' expr' where
       folder e (ts', acc) = do
         (t', acc') <- branch $ withCtx (const acc) $ synthesize e
         pure (t' : ts', acc')
+  
+  synthesize' (TickAbs nm k e) = do
+    let kt = A ann $ TVar k
+    (ety, ctx') <- withCtx (\g -> g <+ nm `HasType` kt) $ synthesize e
+    let lty = A ann $ Later kt ety
+    pure (lty, ctx')
   
   -- TypeApp=>
   synthesize' (TypeApp ex arg) = do
@@ -1065,6 +1092,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     root $ "[->App]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
     delta <- branch $ check e aty
     pure (cty, delta)
+
   
   applysynth' (Clock _ _) = otherErr $ show $ "Expected" <+> pretty e <+> "to be a clock"
     
