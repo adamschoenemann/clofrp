@@ -60,10 +60,10 @@ var :: Parser Expr
 var = ann <*> (E.Var . UName <$> identifier)
 
 tickvar :: Parser Expr
-tickvar = ann <*> (E.TickVar <$> braces lname)
+tickvar = ann <*> (E.TickVar <$> brackets lname)
 
 clockvar :: Parser Expr
-clockvar = ann <*> (E.ClockVar <$> brackets lname)
+clockvar = ann <*> (E.ClockVar <$> braces lname)
 
 anno :: Parser Expr
 anno = ann <*> ((\t e -> E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)
@@ -97,6 +97,7 @@ atom =   nat
      <|> reserved "fold" *> (ann <*> pure (E.Prim E.Fold))
      <|> reserved "unfold" *> (ann <*> pure (E.Prim E.Unfold))
      <|> reserved "primRec" *> (ann <*> pure (E.Prim E.PrimRec))
+     <|> reserved "[<>]" *> (ann <*> pure (E.Prim E.Tick))
      <|> letp
      <|> var
      <|> tickvar

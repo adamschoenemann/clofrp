@@ -41,7 +41,7 @@ clockSpec = do
         idk = /\k -> \x -> x. 
 
         bar : clocks k. Unit.
-        bar = /\k -> idk [k] MkUnit.
+        bar = /\k -> idk {k} MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -52,7 +52,7 @@ clockSpec = do
         idk = /\k k' -> \x -> x. 
 
         bar : clocks k. Unit.
-        bar = /\k -> idk [k] [k] MkUnit.
+        bar = /\k -> idk {k} {k} MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -92,17 +92,24 @@ clockSpec = do
             | Next y -> y.
 
       |]
-      let (Right ep, st, wrt) = runTypingM0 (elabProg prog) mempty 
+      let (Right ep, _st, _wrt) = runTypingM0 (elabProg prog) mempty 
       case query "NowOrNext" (kinds ep ) of
         Just k -> k `shouldBe` ClockK :->*: Star :->*: Star
         Nothing -> failure "NowOrNext"
       runCheckProg mempty prog `shouldYield` ()
     
-    it "accepts simple prog with tick abstraction" $ do
+    it "accepts simple prog with tick abstraction and application" $ do
       let Right prog = pprog [text|
         tid : forall (k : Clock) a. |>k a -> |>k a.
-        tid = \d -> \\(af : k) -> d {af}.
+        tid = \d -> \\(af : k) -> d [af].
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    it "rejects non-productive pgoram with tick constant application" $ do
+      let Right prog = pprog [text|
+        bad : forall (k : Clock) a. |>k a -> a.
+        bad = \d -> d [<>].
+      |]
+      shouldFail $ runCheckProg mempty prog
       
       

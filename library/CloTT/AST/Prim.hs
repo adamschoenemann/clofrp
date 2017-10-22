@@ -14,14 +14,16 @@ data Prim
   | Fold 
   | Unfold
   | PrimRec
+  | Tick
   deriving (Eq, Data, Typeable)
 
 instance Show Prim where
-  show Unit = "()"
-  show (Nat x)  = show x
-  show Fold = "fold"
-  show Unfold = "unfold"
+  show Unit    = "()"
+  show (Nat x) = show x
+  show Fold    = "fold"
+  show Unfold  = "unfold"
   show PrimRec = "primRec"
+  show Tick    = "◇"
 
 
 instance Pretty Prim where

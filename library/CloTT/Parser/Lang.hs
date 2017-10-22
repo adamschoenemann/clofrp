@@ -51,6 +51,7 @@ reservedNames = [ "if"
                 , "unfold"
                 , "primRec"
                 , "Clock"
+                , "[<>]"
                 ]
 
 languageDef :: Tok.LanguageDef ()
@@ -61,8 +62,8 @@ languageDef = Tok.LanguageDef
   , Tok.nestedComments  = True
   , Tok.identStart      = letter
   , Tok.identLetter     = alphaNum <|> oneOf "_'"
-  , Tok.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
-  , Tok.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
+  , Tok.opStart         = oneOf ":!#$%&*+./=<>?@\\^|-~"
+  , Tok.opLetter        = oneOf ":!#$%&*+./=<>?@\\^|-~"
   , Tok.reservedNames   = reservedNames
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True

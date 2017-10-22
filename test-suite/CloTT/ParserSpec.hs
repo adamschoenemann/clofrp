@@ -83,20 +83,20 @@ parserSpec = do
        e `shouldBe` E.lete (E.match "S" [E.pTup ["m'", "r"]]) "m" ("plus" @@ "m'" @@ "n")
 
   it "success: clock application (1)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "e1 [k]"
-       e `shouldBe` "e1" @@ "[k]"
+    do let Right e = E.unannE <$> parse P.expr "" "e1 {k}"
+       e `shouldBe` "e1" @@ "{k}"
   it "success: clock application (2)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "(e1 [k1]) [k2]"
-       e `shouldBe` "e1" @@ "[k1]" @@ "[k2]"
+    do let Right e = E.unannE <$> parse P.expr "" "(e1 {k1}) {k2}"
+       e `shouldBe` "e1" @@ "{k1}" @@ "{k2}"
   it "success: clock application (3)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "e1 [k1] [k2]"
-       e `shouldBe` "e1" @@ "[k1]" @@ "[k2]"
+    do let Right e = E.unannE <$> parse P.expr "" "e1 {k1} {k2}"
+       e `shouldBe` "e1" @@ "{k1}" @@ "{k2}"
   it "success: clock application (4)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "(e1 [k1] [k2]) e2"
-       e `shouldBe` ("e1" @@ "[k1]" @@ "[k2]") @@ "e2"
+    do let Right e = E.unannE <$> parse P.expr "" "(e1 {k1} {k2}) e2"
+       e `shouldBe` ("e1" @@ "{k1}" @@ "{k2}") @@ "e2"
   it "success: clock application (5)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "(e1 e2 [k2]) e2"
-       e `shouldBe` ("e1" @@ "e2" @@ "[k2]") @@ "e2"
+    do let Right e = E.unannE <$> parse P.expr "" "(e1 e2 {k2}) e2"
+       e `shouldBe` ("e1" @@ "e2" @@ "{k2}") @@ "e2"
 
   it "success: type application (1)" $ do
     do let Right e = E.unannE <$> parse P.expr "" "e1 @{k}"
@@ -118,22 +118,28 @@ parserSpec = do
        e `shouldBe` (("e1" `E.typeapp` "k1") `E.typeapp` "k2") @@ "e2"
 
   it "success: tick application (1)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "{k}"
-       e `shouldBe` "{k}"
-    do let Right e = E.unannE <$> parse P.expr "" "e1 {k}"
-       e `shouldBe` "e1" @@ "{k}"
+    do let Right e = E.unannE <$> parse P.expr "" "[k]"
+       e `shouldBe` "[k]"
+    do let Right e = E.unannE <$> parse P.expr "" "e1 [k]"
+       e `shouldBe` "e1" @@ "[k]"
   it "success: tick application (2)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "(e1 {k1}) {k2}"
-       e `shouldBe` "e1" @@ "{k1}" @@ "{k2}"
+    do let Right e = E.unannE <$> parse P.expr "" "(e1 [k1]) [k2]"
+       e `shouldBe` "e1" @@ "[k1]" @@ "[k2]"
   it "success: tick application (3)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "e1 {k1} {k2}"
-       e `shouldBe` "e1" @@ "{k1}" @@ "{k2}"
+    do let Right e = E.unannE <$> parse P.expr "" "e1 [k1] [k2]"
+       e `shouldBe` "e1" @@ "[k1]" @@ "[k2]"
   it "success: tick application (4)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "(e1 {k1} {k2}) e2"
-       e `shouldBe` ("e1" @@ "{k1}" @@ "{k2}") @@ "e2"
+    do let Right e = E.unannE <$> parse P.expr "" "(e1 [k1] [k2]) e2"
+       e `shouldBe` ("e1" @@ "[k1]" @@ "[k2]") @@ "e2"
   it "success: tick application (5)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "(e1 e2 {k2}) e2"
-       e `shouldBe` ("e1" @@ "e2" @@ "{k2}") @@ "e2"
+    do let Right e = E.unannE <$> parse P.expr "" "(e1 e2 [k2]) e2"
+       e `shouldBe` ("e1" @@ "e2" @@ "[k2]") @@ "e2"
+  
+  it "success: tick constant" $ do
+    do let Right e = E.unannE <$> parse P.expr "" "[<>]"
+       e `shouldBe` E.tick
+    do let Right e = E.unannE <$> parse P.expr "" "e [<>]"
+       e `shouldBe` ("e" @@ E.tick)
   
   it "parses annotations" $ do
     case E.unannE <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of

@@ -951,7 +951,7 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "Unit" `CannotSubtype` "Bool")
 
-    it "rejects explicit type applications correctly (3)" $ do
+    it "rejects explicit type applications correctly (4)" $ do
       let Right prog = pprog [text|
         data Unit = Unit.
 

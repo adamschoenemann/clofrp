@@ -103,6 +103,9 @@ substCtx ctx (A a ty) =
       pure (A a $ Later t1' t2')
 
   `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
+
+mustBeStableUnder :: TyCtx a -> Name -> TypingM a ()
+mustBeStableUnder = IMPLEMENTME
       
 splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
@@ -870,7 +873,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   
   -- ->ClockE
   -- TODO: Move to applysynth?
-  synthesize' (App e1 (A _ (ClockVar kappa))) = do
+  synthesize' (e1 `App` A _ (ClockVar kappa)) = do
     ctx <- getCtx
     root $ "[->ClockE]" <+> pretty expr <+> "in" <+> pretty ctx
     (ty1, theta) <- branch $ synthesize e1
@@ -880,9 +883,9 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         pure (ctysubst, theta)
       _ -> otherErr $ show $ "Cannot apply a clock variable to an expression that is not clock-quantified at" <+> pretty expr
 
-  -- ->TickE
+  -- ->TickVarE
   -- TODO: Move to applysynth?
-  synthesize' (App e1 (A _ (TickVar alpha))) = do
+  synthesize' (e1 `App` A _ (TickVar alpha)) = do
     ctx <- getCtx
     root $ "[->ClockE]" <+> pretty expr <+> "in" <+> pretty ctx
     (ty1, theta) <- branch $ synthesize e1
@@ -897,8 +900,23 @@ synthesize expr@(A ann expr') = synthesize' expr' where
       assertLater = \case 
         (A _ (Later k t)) -> pure (k, t)
         t                 -> 
-          otherErr $ show $ "Cannot apply a tick variable to an expression that is not guarded at" <+> pretty expr
+          otherErr $ show $ "Only guarded expressions can be applied to a tick variable at" <+> pretty expr
       
+  -- ->TickE
+  -- TODO: Move to applysynth?
+  synthesize' (e1 `App` A _ (Prim Tick)) = do
+    ctx <- getCtx
+    root $ "[->TickE]" <+> pretty expr <+> "in" <+> pretty ctx
+    (ty1, theta) <- branch $ synthesize e1
+    (kappa, cty) <- assertLater ty1
+    ctx `mustBeStableUnder` kappa
+    ctysubst <- substCtx theta cty
+    pure (ctysubst, theta)
+    where
+      assertLater = \case 
+        (A _ (Later (A _ (TVar k)) t)) -> pure (k, t)
+        t                 -> 
+          otherErr $ show $ "Only guarded expressions can be applied to the constant at" <+> pretty expr
 
   -- ->UnfoldE=>
   synthesize' (A uann (Prim Unfold) `App` e2) = do
@@ -966,6 +984,11 @@ inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
   Nat _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
+  -- The tick constant unifies with any clock variable
+  Tick   -> do 
+    alpha <- freshName
+    ctx' <- (\g -> g <+ Exists alpha ClockK) <$> getCtx
+    pure (A ann $ TExists alpha, ctx')
 
   -- Fold=>
   Fold   -> do

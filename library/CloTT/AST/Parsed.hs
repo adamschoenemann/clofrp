@@ -221,6 +221,9 @@ later n t = A () $ Later (A () $ TVar n) t
 typeapp :: Expr () -> Type () Poly -> Expr ()
 typeapp e t = A () $ TypeApp e t
 
+tick :: Expr () 
+tick = A () $ Prim P.Tick
+
 
 infixr 2 @->
 infixr 2 @:->
