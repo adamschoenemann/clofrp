@@ -16,56 +16,52 @@ import CloTT.Context
 import CloTT.TestUtils
 import CloTT.Pretty
 
+import qualified CloTT.AST.Parsed as E
+import qualified CloTT.Annotated  as A
+
 clockSpec :: Spec 
 clockSpec = do
-  let errs e x = fst x `shouldBe` e
+  let errs e x = (A.unann . fst $ x) `shouldBe` e
+  let mname = A.A () . E.TVar . E.mname
   describe "clocks" $ do
     it "accepts veeery simple programs with clock quantification" $ do
       let prog = [unsafeProg|
-        foo : clocks k. forall a. a -> a.
-        foo = /\k -> \x -> x. 
+        foo : forall (k : Clock) a. a -> a.
+        foo = \x -> x. 
       |]
       runCheckProg mempty prog `shouldYield` ()
-
-    it "rejects veeery simple programs with clock quantification" $ do
-      let prog = [unsafeProg|
-        foo : clocks k. forall a. a -> a.
-        foo = /\k' -> \x -> x. 
-      |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ Other "Clock k' must be named k")
 
     it "accepts veeery simple programs with clock application (1)" $ do
       let prog = [unsafeProg|
         data Unit = MkUnit.
-        idk : clocks k. forall a. a -> a.
-        idk = /\k -> \x -> x. 
+        idk : forall (k : Clock) a. a -> a.
+        idk = \x -> x. 
 
-        bar : clocks k. Unit.
-        bar = /\k -> idk {k} MkUnit.
+        bar : forall (k : Clock). Unit.
+        bar = idk @{k} MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
     it "accepts veeery simple programs with clock application (2)" $ do
       let prog = [unsafeProg|
         data Unit = MkUnit.
-        idk : clocks k k'. forall a. a -> a.
-        idk = /\k k' -> \x -> x. 
+        idk : forall (k : Clock) (k' : Clock) a. a -> a.
+        idk = \x -> x. 
 
-        bar : clocks k. Unit.
-        bar = /\k -> idk {k} {k} MkUnit.
+        bar : forall (k : Clock). Unit.
+        bar = idk @{k} @{k} MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
     it "rejects veeery simple programs with clock application (1)" $ do
-      let prog = [unsafeProg|
-        data Unit = MkUnit.
-        idk : clocks k. forall a. a -> a.
-        idk = /\k -> \x -> x. 
+      let Right prog = pprog [text|
+        idk : forall (k : Clock) a. |>k a -> |>k a.
+        idk = \x -> x. 
 
-        bar : clocks k. Unit.
-        bar = /\k -> idk MkUnit.
+        bar : forall (k : Clock) (k' : Clock) a. |>k a -> |>k' a.
+        bar = \x -> idk @{k'} x.
       |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ Other "Expected MkUnit to be a clock")
+      runCheckProg mempty prog `shouldFailWith` (errs $ (mname 0) `CannotSubtype` (mname 1))
     
     it "checks program with data-decl and clocks" $ do
       let Right prog = pprog [text|

@@ -722,6 +722,16 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     markerName <- freshName
     delta'' <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty'' clauses tysubst
     pure delta''
+
+  -- TickAbsI
+  check' (TickAbs af k e2) (Later k' t2) = do
+    ctx <- getCtx
+    root $ "[TickAbsI]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    let kty = A eann $ TVar k 
+    if (kty =%= k')
+      then do
+        withCtx (\g -> g <+ af `HasType` kty) $ branch $ check e2 t2
+      else cannotSubtype kty k'
   
   -- ClockAbs
   check' (ClockAbs k body) (Clock k' t)

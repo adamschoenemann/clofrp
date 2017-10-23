@@ -52,9 +52,9 @@ deriving instance Typeable a => Typeable (Expr' a)
 prettyE' :: Bool -> Expr' a -> Doc ann
 prettyE' pars = \case 
   Var nm -> pretty nm
-  ClockVar nm -> brackets $ pretty nm
-  TickVar  nm -> "<" <> pretty nm <> ">"
-  Ann e t -> parensIf $ "the" <+> parens (pretty t) <+> prettyE False e
+  ClockVar nm -> braces $ pretty nm
+  TickVar  nm -> brackets $ pretty nm
+  Ann e t -> parens $ prettyE False e <+> ":" <+> pretty t
   App e1 e2 -> parensIf $ prettyE False e1 <+> prettyE True e2
 
   Lam nm mty e -> 

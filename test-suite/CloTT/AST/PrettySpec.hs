@@ -63,8 +63,8 @@ prettySpec = do
       pps ("Tuple" @@ a @@ b) `shouldBe` "Tuple a b"
       pps ("Tuple" @@ ("Just" @@ a) @@ b) `shouldBe` "Tuple (Just a) b"
       pps ("Tuple" @@ ("a" @-> c) @@ b) `shouldBe` "Tuple (\\a -> c) b"
-      pps (E.the "Nat" (E.nat 10)) `shouldBe` "the (Nat) 10"
-      pps (E.the ("Nat" @->: "Bool") (E.nat 10)) `shouldBe` "the (Nat -> Bool) 10"
+      pps (E.the "Nat" (E.nat 10)) `shouldBe` "(10 : Nat)"
+      pps (E.the ("Nat" @->: "Bool") (E.nat 10)) `shouldBe` "(10 : Nat -> Bool)"
       pps [unsafeExpr|case 10 of | x -> 0|] `shouldBe` "case 10 of | x -> 0"
       ppsw 100 [unsafeExpr|case b of | True -> 0 | False -> 1|] `shouldBe` "case b of | True -> 0 | False -> 1"
   

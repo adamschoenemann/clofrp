@@ -105,6 +105,35 @@ progSpec = do
             | Cons x xs' -> x : b.
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for type annotations (4)" $ do
+      let Right prog = pprog [text|
+
+        laterMap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        laterMap = \fn l -> \\(af : k) -> 
+          let x = l [af] : a
+          in  (fn : a -> b) x.
+        
+        id : forall a. a -> a.
+        id = \x -> (x : a) : a.
+
+        data Maybe a = Nothing | Just a.
+
+        maybeId : forall a. Maybe a -> Maybe a.
+        maybeId = \m ->
+          case m of
+          | Nothing -> Nothing
+          | Just x -> Just ((x : a) : a) : Maybe a.
+
+        maybeMap : forall a b. (a -> b) -> Maybe a -> Maybe b.
+        maybeMap = \f x ->
+          case x of
+          | Nothing -> Nothing : Maybe b
+          | Just x' -> Just ((f : a -> b) x') : Maybe b.
+        
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog 
     
     it "succeeds for programs with tuples" $ do
       let Right prog = pprog [text|
@@ -311,7 +340,7 @@ progSpec = do
         wrong = \a -> 
           let id = \x -> x in
           let a' = id a
-          in id B.
+          in  id B.
 
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ CannotSubtype "B" "A")

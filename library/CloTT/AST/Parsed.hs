@@ -282,7 +282,7 @@ substTVarInExpr new nm = go where
     Var _ -> e'
     ClockVar _ -> e'
     TickVar _ -> e'
-    Ann e t -> Ann e (subst new nm t)
+    Ann e t -> Ann (go e) (subst new nm t)
     App e1 e2 -> App (go e1) (go e2)
     -- TODO: deal with name capture here
     Lam v mty e -> Lam v (subst new nm <$> mty) (go e)
