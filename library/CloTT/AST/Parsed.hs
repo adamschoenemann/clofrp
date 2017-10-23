@@ -209,9 +209,6 @@ debrjn = A () . TVar . DeBruijn
 tAbs :: (Name, Name) -> Expr () -> Expr ()
 tAbs (a, k) e = A () $ TickAbs a k e
 
-cAbs :: Name -> Expr () -> Expr ()
-cAbs k e = A () $ ClockAbs k e
-
 lete :: Pat () -> Expr () -> Expr () -> Expr ()
 lete p e1 e2 = A () $ Let p e1 e2
 
@@ -280,7 +277,6 @@ substTVarInExpr new nm = go where
   go (A a e') = A a $ go' e'
   go' e' = case e' of
     Var _ -> e'
-    ClockVar _ -> e'
     TickVar _ -> e'
     Ann e t -> Ann (go e) (subst new nm t)
     App e1 e2 -> App (go e1) (go e2)
@@ -292,31 +288,8 @@ substTVarInExpr new nm = go where
       | kappa == nm, A _ (TVar kappa') <- new -> TickAbs v kappa' (go e)
       | otherwise -> TickAbs v kappa (go e)
       
-    ClockAbs kappa e -> ClockAbs kappa (go e)
     Tuple es -> Tuple (map go es)
     Let p e1 e2 -> Let p (go e1) (go e2)
     Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
     TypeApp e t -> TypeApp (go e) (subst new nm t) 
     Prim p -> e'
-
--- ridiculous to copy-paste all this stuff..
-substClockVarInExpr :: Expr a -> Name -> Expr a -> Expr a 
-substClockVarInExpr new nm = go where
-  go (A a e') = 
-    case e' of
-      Var _ -> A a e'
-      ClockVar v
-        | v == nm -> new
-        | otherwise -> A a e'
-      TickVar _ -> A a e'
-      Ann e t -> A a $ Ann e t -- (subst new nm t)
-      App e1 e2 -> A a $ App (go e1) (go e2)
-      -- TODO: deal with name capture here
-      Lam v mty e -> A a $ Lam v mty (go e)
-      TickAbs v kappa e -> A a $ TickAbs v kappa (go e)
-      ClockAbs kappa e -> A a $ ClockAbs kappa (go e)
-      Tuple es -> A a $ Tuple (map go es)
-      Let p e1 e2 -> A a $ Let p (go e1) (go e2)
-      Case e clauses -> A a $ (Case (go e) $ map (\(p,c) -> (p, go c)) clauses)
-      TypeApp e t -> A a $ TypeApp (go e) t 
-      Prim p -> A a e'

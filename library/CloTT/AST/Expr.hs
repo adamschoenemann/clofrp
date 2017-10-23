@@ -31,18 +31,16 @@ type Expr a = Annotated a (Expr' a)
 
 data Expr' a
   = Var Name -- a
-  | ClockVar Name -- [a]
-  | TickVar Name -- {a}
+  | TickVar Name -- [a]
   | Ann (Expr a) (Type a Poly) -- the τ a
   | App (Expr a) (Expr a) -- e1 e2
   | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx -> e OR λ(x : A) -> e
   | TickAbs Name Name (Expr a) -- λ(α : κ) -> e
-  | ClockAbs Name (Expr a) -- /\κ -> e
   | Tuple [Expr a] -- n-ary tuples
   | Let (Pat a) (Expr a) (Expr a) -- let p = e1 in e2
   | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
   | TypeApp (Expr a) (Type a Poly) -- e {τ}
-  | Prim P.Prim -- primitive (will probably just include numbers in the end)
+  | Prim P.Prim -- primitive (will probably just include ints in the end)
  
 deriving instance Eq a       => Eq (Expr' a)
 deriving instance Data a     => Data (Expr' a)
@@ -52,7 +50,6 @@ deriving instance Typeable a => Typeable (Expr' a)
 prettyE' :: Bool -> Expr' a -> Doc ann
 prettyE' pars = \case 
   Var nm -> pretty nm
-  ClockVar nm -> braces $ pretty nm
   TickVar  nm -> brackets $ pretty nm
   Ann e t -> parens $ prettyE False e <+> ":" <+> pretty t
   App e1 e2 -> parensIf $ prettyE False e1 <+> prettyE True e2
@@ -62,7 +59,6 @@ prettyE' pars = \case
     in  parensIf $ "\\" <> pretty nm <> tyann <+> "->" <+> prettyE False e
   
   TickAbs  nm kappa e -> "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
-  ClockAbs kappa e -> "/\\" <> pretty kappa <+> "->" <+> pretty e
 
   Tuple es -> tupled (map (prettyE False) es)
   Let p e1 e2 -> "let" <+> pretty p <+> "=" <+> pretty e1 <+> "in" <> softline <> pretty e2
@@ -94,7 +90,6 @@ instance IsString (Expr ()) where
     [] -> error "illegal empty name"
     xs 
       | length xs > 2, head xs == '[', last xs == ']' -> TickVar . UName . tail . init $ xs
-      | length xs > 2, head xs == '{', last xs == '}' -> ClockVar . UName . tail . init $ xs
       | otherwise -> Var . UName $ xs
 
 instance Unann (Expr a) (Expr ()) where
@@ -109,13 +104,11 @@ instance Unann (Expr' a) (Expr' ()) where
 unannE' :: Expr' a -> Expr' ()
 unannE' = \case
   Var nm      -> Var nm
-  ClockVar nm -> ClockVar nm
   TickVar nm  -> TickVar nm
   Ann e t -> Ann (unannE e) (unannT t)
   App e1 e2 -> App (unannE e1) (unannE e2)
   Lam nm mty e -> Lam nm (unannT <$> mty) (unannE e)
   TickAbs nm kappa e -> TickAbs nm kappa (unannE e)
-  ClockAbs kappa e -> ClockAbs kappa (unannE e)
   Tuple es -> Tuple (map unannE es)
   Let p e1 e2 -> Let (unannPat p) (unannE e1) (unannE e2)
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses

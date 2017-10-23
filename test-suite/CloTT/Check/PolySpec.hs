@@ -80,7 +80,6 @@ polySpec = do
   
   describe "checkRecAliases" $ do
     let checkAl x = runTypingM0 @() (checkRecAliases x) mempty
-    let errs e x = fst x `shouldBe` e
     it "rejects recursive type aliases" $ do
       checkAl [al "Foo" [] "Foo"]                             `shouldFailWith` errs (Other "Foo is recursive")
       checkAl [al "Foo" ["a"] $ "Foo" @@: "a"]                `shouldFailWith` errs (Other "Foo is recursive")

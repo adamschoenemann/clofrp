@@ -733,22 +733,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
         withCtx (\g -> g <+ af `HasType` kty) $ branch $ check e2 t2
       else cannotSubtype kty k'
   
-  -- ClockAbs
-  check' (ClockAbs k body) (Clock k' t)
-    | k == k' = do
-        root "[ClockAbs]"
-        (k `isMemberOf`) <$> getCCtx >>= \case
-          True -> otherErr $ show $ pretty k <+> "is already in clock context"
-          _     -> do 
-            -- alpha rename
-            kappa <- freshName
-            let tsubst    = subst (A tann $ TVar kappa) k t
-            let bodysubst = substClockVarInExpr (A eann $ ClockVar kappa) k body
-            withCCtx (\g -> extend kappa () g) $ branch $ check bodysubst tsubst
-    | otherwise = do 
-        root "[ClockAbs]"
-        otherErr $ show $ "Clock" <+> pretty k <+> "must be named" <+> pretty k'
-  
   -- FoldApp (optimization)
   -- check' (A fann (Prim Fold) `App` e2) (RecTy fty) = do
   --   root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
@@ -893,18 +877,6 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     (delta, _, theta) <- splitCtx (x `HasType` alphat) ctx'
     pure (A ann $ alphat :->: betat, delta)
   
-  -- ->ClockE
-  -- TODO: Move to applysynth?
-  synthesize' (e1 `App` A _ (ClockVar kappa)) = do
-    ctx <- getCtx
-    root $ "[->ClockE]" <+> pretty expr <+> "in" <+> pretty ctx
-    (ty1, theta) <- branch $ synthesize e1
-    case ty1 of 
-      A _ (Clock kappa' cty) -> do
-        ctysubst <- substCtx theta cty
-        pure (ctysubst, theta)
-      _ -> otherErr $ show $ "Cannot apply a clock variable to an expression that is not clock-quantified at" <+> pretty expr
-
   -- ->TickVarE
   -- TODO: Move to applysynth?
   synthesize' (e1 `App` A _ (TickVar alpha)) = do

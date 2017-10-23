@@ -26,14 +26,6 @@ tuple = ann <*> (E.Tuple <$> parens (expr `sepBy2` comma))
 lname :: Parser Name
 lname = UName <$> lidentifier
 
-clockabs :: Parser Expr
-clockabs = do
-  ps <- symbol "/\\" *> many1 param
-  bd <- reservedOp "->" *> expr
-  pure $ foldr (\(A.A a kappa) acc -> A.A a $ E.ClockAbs kappa acc) bd ps
-  where
-    param = ann <*> lname
-
 tickabs :: Parser Expr
 tickabs = do
   ps <- symbol "\\\\" *> many1 param
@@ -61,9 +53,6 @@ var = ann <*> (E.Var . UName <$> identifier)
 
 tickvar :: Parser Expr
 tickvar = ann <*> (E.TickVar <$> brackets lname)
-
-clockvar :: Parser Expr
-clockvar = ann <*> (E.ClockVar <$> braces lname)
 
 anno :: Parser Expr
 anno = ann <*> ((\t e -> E.Ann e t) <$> (reserved "the" *> parens T.typep) <*> expr)
@@ -101,13 +90,12 @@ atom =   nat
      <|> letp
      <|> var
      <|> tickvar
-     <|> clockvar
      <|> anno
      <|> casep
      <|> parens expr
 
 expr :: Parser Expr
-expr = clockabs <|> try tickabs <|> lam <|> buildExpressionParser table atom where
+expr = try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
     [ [Infix spacef AssocLeft, Postfix typeapp]
     , [Postfix tanno]
@@ -129,7 +117,7 @@ expr = clockabs <|> try tickabs <|> lam <|> buildExpressionParser table atom whe
     p <- getPosition
     -- nasty hack to make it behave "infixl" ish 
     ts <- many1 (ann <*> (char '@' *> braces T.typep))
-    pure (\e -> foldl (\acc (A.A ann t) -> A.A ann $ E.TypeApp acc t) e ts)
+    pure (\e -> foldl (\acc (A.A a t) -> A.A a $ E.TypeApp acc t) e ts)
 
   app :: Parser (Expr -> Expr -> Expr)
   app = fn <$> getPosition where

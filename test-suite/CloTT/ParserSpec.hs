@@ -203,14 +203,6 @@ parserSpec = do
     do let Right e = E.unannE <$> parse P.expr "" "\\\\(a : k) (b : k') -> \\x -> x"
        e `shouldBe` (("a", "k") `E.tAbs` (("b", "k'") `E.tAbs` ("x" @-> "x")))
 
-  it "parses clock abstractions (1)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "/\\k -> e1 [k]"
-       e `shouldBe` ("k" `E.cAbs` ("e1" @@ "[k]"))
-
-  it "parses clock abstractions (2)" $ do
-    do let Right e = E.unannE <$> parse P.expr "" "/\\k1 k2 -> e1 [k1] (e2 [k2])"
-       e `shouldBe` ("k1" `E.cAbs` ("k2" `E.cAbs` ("e1" @@ "[k1]" @@ ("e2" @@ "[k2]"))))
-  
   it "parses fold and unfold" $ do
     do let Right e = E.unannE <$> parse P.expr "" "fold"
        e `shouldBe` E.foldf
