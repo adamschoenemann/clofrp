@@ -2,9 +2,6 @@
 
 For my master's thesis at ITU
 
-
-[clott]: https://github.com/adamschoenemann/clott
-
 ## TODO
 - Support higher-kinded types (should be not that hard)
   - Infer kind of tvar syntactically
@@ -52,3 +49,5 @@ For my master's thesis at ITU
   just have Fix NatF and still treat Fix as a special construct, but substitutions
   would just be one extra type application to its functor.
   - This also means we can check that the kind of the argument to fix is (* -> *)
+
+[clott]: https://github.com/adamschoenemann/clott
