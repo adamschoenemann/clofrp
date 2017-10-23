@@ -344,7 +344,6 @@ wfContext (Gamma elems) = foldrM fn [] elems *> pure () where
   -- TODO: fix this to account for HasType constructor as well
   notInDom nm el = do
     ctx <- getCtx
-    -- if (\x -> Uni nm _ == x || Exists nm _ == x) `elem'` ctx
     if (isJust $ ctxFind p ctx)
       then notWfContext el
       else pure ()
@@ -352,7 +351,7 @@ wfContext (Gamma elems) = foldrM fn [] elems *> pure () where
       p (Uni x _)    = x == nm
       p (Exists x _) = x == nm
       p (x := _)     = x == nm
-      p _             = False
+      p _            = False
 
 validType :: KindCtx a -> Type a Poly -> TypingM a ()
 validType kctx t = do
