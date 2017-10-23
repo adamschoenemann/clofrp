@@ -116,7 +116,7 @@ expr = try tickabs <|> lam <|> buildExpressionParser table atom where
   typeapp = do 
     p <- getPosition
     -- nasty hack to make it behave "infixl" ish 
-    ts <- many1 (ann <*> (char '@' *> braces T.typep))
+    ts <- many1 (ann <*> braces T.typep)
     pure (\e -> foldl (\acc (A.A a t) -> A.A a $ E.TypeApp acc t) e ts)
 
   app :: Parser (Expr -> Expr -> Expr)

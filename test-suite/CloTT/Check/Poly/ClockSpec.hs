@@ -38,7 +38,7 @@ clockSpec = do
         idk = \x -> x. 
 
         bar : forall (k : Clock). Unit.
-        bar = idk @{k} MkUnit.
+        bar = idk {k} MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -49,7 +49,7 @@ clockSpec = do
         idk = \x -> x. 
 
         bar : forall (k : Clock). Unit.
-        bar = idk @{k} @{k} MkUnit.
+        bar = idk {k} {k} MkUnit.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -59,7 +59,7 @@ clockSpec = do
         idk = \x -> x. 
 
         bar : forall (k : Clock) (k' : Clock) a. |>k a -> |>k' a.
-        bar = \x -> idk @{k'} x.
+        bar = \x -> idk {k'} x.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ (mname 0) `CannotSubtype` (mname 1))
     

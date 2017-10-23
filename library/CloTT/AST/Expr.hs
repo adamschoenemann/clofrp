@@ -66,7 +66,7 @@ prettyE' pars = \case
   Case e clauses ->
     "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
   
-  TypeApp e t -> parensIf (pretty e <+> "@" <> braces (prettyT False t))
+  TypeApp e t -> parensIf (pretty e <+> braces (prettyT False t))
 
   Prim p -> fromString . show $ p
   where

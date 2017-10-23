@@ -941,16 +941,16 @@ progSpec = do
         id = \x -> x.
 
         uid : Unit -> Unit.
-        uid = id @{Unit}.
+        uid = id {Unit}.
 
         unit : Unit.
-        unit = id @{Unit} Unit.
+        unit = id {Unit} Unit.
 
         const : forall a b. a -> b -> a.
         const = \x y -> x.
 
         foo : Unit.
-        foo = const @{Unit} @{Bool} Unit True.
+        foo = const {Unit} {Bool} Unit True.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -963,7 +963,7 @@ progSpec = do
         const : forall a b. a -> b -> a.
         const = \x y -> x.
         foo : Unit -> Bool.
-        foo = app @{Unit} (const @{Bool} @{Unit} True).
+        foo = app {Unit} (const {Bool} {Unit} True).
 
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -975,7 +975,7 @@ progSpec = do
         id : forall a. a -> a.
         id = \x -> x.
         unit : Bool -> Bool.
-        unit = id @{Unit}.
+        unit = id {Unit}.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "Bool" `CannotSubtype` "Unit")
 
@@ -986,7 +986,7 @@ progSpec = do
         const : forall a b. a -> b -> a.
         const = \x y -> x.
         foo : Unit.
-        foo = const @{Unit} @{Bool} Unit Unit.
+        foo = const {Unit} {Bool} Unit Unit.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "Unit" `CannotSubtype` "Bool")
 
@@ -997,7 +997,7 @@ progSpec = do
         const : forall a b. a -> b -> a.
         const = \x y -> x.
         foo : Bool.
-        foo = const @{Unit} @{Bool} Unit True.
+        foo = const {Unit} {Bool} Unit True.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "Unit" `CannotSubtype` "Bool")
 
@@ -1009,7 +1009,7 @@ progSpec = do
         id = \x -> x.
 
         foo : forall a. a -> a.
-        foo = id @{forall a. a -> a} id.
+        foo = id {forall a. a -> a} id.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ Other "asMonotype")
     
