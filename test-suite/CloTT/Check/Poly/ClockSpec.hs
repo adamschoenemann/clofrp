@@ -105,11 +105,23 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "rejects non-productive pgoram with tick constant application" $ do
+    it "rejects non-productive program with tick constant application" $ do
       let Right prog = pprog [text|
         bad : forall (k : Clock) a. |>k a -> a.
         bad = \d -> d [<>].
       |]
-      shouldFail $ runCheckProg mempty prog
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other "Context not stable wrt `a due to d : ⊳`a `b")
+
+    it "accepts productive program with tick constant application" $ do
+      let Right prog = pprog [text|
+        good : forall (k : Clock) a. a -> a.
+        good = \x -> (\\(af : k) -> x) [<>].
+
+        good2 : forall (k : Clock) a. a -> a.
+        good2 = \x -> 
+          let x' = \\(af : k) -> x
+          in  x' [<>].
+      |]
+      runCheckProg mempty prog `shouldYield` ()
       
       

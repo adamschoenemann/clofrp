@@ -60,6 +60,23 @@ polySpec = do
 
   let als = M.fromList 
   let al x b e = (x, E.Alias x (map (,Star) b) e)
+  let errs e x = (unann (fst x)) `shouldBe` e
+
+  describe "mustBeStableUnder" $ do
+    let runmsu c k = runTypingM0 (c `mustBeStableUnder` k) mempty
+    specify "nil is stable under all k's" $ do
+      runmsu nil "k" `shouldYield` ()
+    specify "nil <+ a is stable under all k's" $ do
+      runmsu (nil <+ exists "a") "k" `shouldYield` ()
+    specify "nil <+ k is stable under all k's" $ do
+      runmsu (nil <+ exists "k") "k" `shouldYield` ()
+    specify "nil <+ x : Nat -> Nat is stable under all k's" $ do
+      runmsu (nil <+ "k" `HasType` ("Nat" @->: "Nat")) "k" `shouldYield` ()
+    specify "nil <+ x : |>k' Nat is stable under all k's" $ do
+      runmsu (nil <+ "k" `HasType` E.later "k'" "Nat") "k" `shouldYield` ()
+    specify "nil <+ x : |>k Nat is not stable under all k's" $ do
+      runmsu (nil <+ "x" `HasType` E.later "k" "Nat") "k" `shouldFailWith` (errs $ Other "Context not stable wrt k due to x : ⊳k Nat")
+
   
   describe "checkRecAliases" $ do
     let checkAl x = runTypingM0 @() (checkRecAliases x) mempty

@@ -105,7 +105,15 @@ substCtx ctx (A a ty) =
   `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
 
 mustBeStableUnder :: TyCtx a -> Name -> TypingM a ()
-mustBeStableUnder = IMPLEMENTME
+mustBeStableUnder ctx@(Gamma xs) k = traverse traversal xs *> pure () where 
+  traversal = \case
+    nm `HasType` ty 
+      | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty (nm `HasType` ty)
+    nm := ty
+      | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty (nm := ty)
+    _                     -> pure ()
+
+
       
 splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
