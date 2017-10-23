@@ -1,4 +1,4 @@
-# [clott][Simply Typed Clocked Type Theory]
+# [Simply Typed Clocked Type Theory][clott]
 
 For my master's thesis at ITU
 
