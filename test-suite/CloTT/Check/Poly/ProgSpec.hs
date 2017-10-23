@@ -131,7 +131,28 @@ progSpec = do
         pairAssocR = \p ->
           case p of
             | ((x, y), z) -> (x, (y, z)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
+    it "accepts more tuples" $ do
+      let Right prog = pprog [text|
+        data List a = Nil | Cons a (List a).
+        data Maybe a = Nothing | Just a.
+
+        foo : forall a. a -> (a, List a, List a, Maybe a).
+        foo = \x -> (x, Cons x Nil, Nil, Just x).
+
+        uncons : forall a. List a -> Maybe (a, List a).
+        uncons = \xs -> 
+          let r = \ys -> case ys of 
+            | Nil -> Nothing
+            | Cons x xs' -> Just (x, xs')
+          in r xs.
+        
+        trip : forall a. a -> (a, a, a).
+        trip = \x ->
+          let trip' = \x' -> (x', x', x')
+          in  trip' x.
       |]
       runCheckProg mempty prog `shouldYield` ()
 

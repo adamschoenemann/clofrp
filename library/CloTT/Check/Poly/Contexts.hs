@@ -52,7 +52,7 @@ instance Pretty (CtxElem a) where
     Exists nm k    -> parens ("^" <> pretty nm <+> ":" <+> pretty k)
     nm `HasType` ty -> pretty nm <+> ":" <+> pretty (unann ty)
     nm := ty        -> "^" <> pretty nm <+> "=" <+> pretty (unann ty)
-    Marker nm       -> "▷" <> pretty nm
+    Marker nm       -> "†" <> pretty nm
 
 instance Show (CtxElem a) where
   show = show . pretty

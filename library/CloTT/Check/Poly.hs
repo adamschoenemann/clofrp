@@ -687,9 +687,9 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
 
   -- 1I (PrimI)
   check' (Prim p) _ = do
-    root "[PrimI]"
     (pty, theta) <- inferPrim eann p
-    withCtx (const theta) $ branch $ ty `subtypeOf` pty
+    root $ "[PrimI]" <+> pretty e <+> "<=" <+> pretty ty
+    withCtx (const theta) $ branch $ pty `subtypeOf` ty
   
   -- ∀I
   check' _ (Forall alpha k aty) = do
@@ -739,12 +739,12 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
         root "[ClockAbs]"
         otherErr $ show $ "Clock" <+> pretty k <+> "must be named" <+> pretty k'
   
-  -- FoldApp
+  -- FoldApp (optimization)
   -- check' (A fann (Prim Fold) `App` e2) (RecTy fty) = do
   --   root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
   --   branch $ check e2 (A tann $ fty `TApp` ty)
 
-  -- UnfoldApp
+  -- UnfoldApp (optimization)
   -- check' (A ufann (Prim Unfold) `App` e2) (ftor `TApp` unfty) = do
   --   root "[UnfoldApp]"
     -- branch $ check e2 $ unfty
@@ -754,7 +754,11 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     root $ "[Tuple<=]" <+> pretty e <+> "<=" <+> pretty ty
     ctx <- getCtx
     -- TODO: How should we propagate contexts here? right-to-left? left-to-right? Not at all?
-    foldrM (\(el, t) acc -> branch $ withCtx (const acc) $ check el t) ctx (zip es ts)
+    foldrM fold ctx (zip es ts)
+    where
+      fold (el,t) acc = do 
+        t' <- substCtx acc t
+        branch $ withCtx (const acc) $ check el t'
   
   -- Let<=
   check' (Let p e1 e2) _ = do
@@ -1001,21 +1005,24 @@ inferPrim ann p = case p of
   -- Fold=>
   Fold   -> do
     ctx <- getCtx
-    -- root $ "[Fold=>]" <+> "in" <+> pretty ctx
-    a1 <- freshName
-    let a1t = A ann (TExists a1)
+    let a1 = UName "f"
+    let a1t = A ann (TVar a1)
     let folded = A ann $ RecTy a1t
     let unfolded = A ann $ a1t `TApp` folded
-    pure (A ann (unfolded :->: folded), ctx <+ Exists a1 (Star :->*: Star))
+    let arr = A ann (unfolded :->: folded)
+    let quanted = A ann (Forall a1 (Star :->*: Star) arr)
+    pure (quanted, ctx)
 
   -- Unfold=>
   Unfold -> do
     ctx <- getCtx
-    a1 <- freshName
-    let a1t = A ann (TExists a1)
+    let a1 = UName "f"
+    let a1t = A ann (TVar a1)
     let folded = A ann $ RecTy a1t
     let unfolded = A ann $ a1t `TApp` folded
-    pure (A ann (folded :->: unfolded), ctx <+ Exists a1 (Star :->*: Star))
+    let arr = A ann (folded :->: unfolded)
+    let quanted = A ann (Forall a1 (Star :->*: Star) arr)
+    pure (quanted, ctx)
   
   PrimRec -> do
     let resultty = A ann (TVar "A")
