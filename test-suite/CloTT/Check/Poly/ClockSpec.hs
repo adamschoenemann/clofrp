@@ -132,8 +132,69 @@ clockSpec = do
 
     it "accepts the encoding of the force" $ do
       let Right prog = pprog [text|
-        force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
+        force : forall (k : Clock) a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
         force = \x -> x {k} [<>].
       |]
       runCheckProg mempty prog `shouldYield` ()
+  
+  describe "fix" $ do
+    it "has the correct type" $ do
+      let Right prog = pprog [text|
+        fix' : forall (k : Clock) a. (|>k a -> a) -> a.
+        fix' = fix.
+
+        fix'' : forall (k : Clock) a. (|>k a -> a) -> a.
+        fix'' = \x -> fix x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
+    it "implements the constant guarded stream" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        
+        repeat : forall (k : Clock) a. a -> Stream k a.
+        repeat = \x ->
+          let body = (\xs -> fold (Cons x xs)) 
+          in  fix body.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "implements the example from the 'clocks are ticking' paper" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        
+        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        cons = \x xs -> fold (Cons x xs).
+
+        hd : forall (k : Clock) a. Stream k a -> a.
+        hd = \xs ->
+          case unfold xs of
+          | Cons x xs' -> x.
+
+        tl : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+        tl = \xs ->
+          case unfold xs of
+          | Cons x xs' -> xs'.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "implements some good old stream functions" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+
+        mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
+        mapfix = \f g xs ->
+          case unfold xs of
+          | Cons x xs' -> 
+            let ys = \\(af : k) -> g [af] (xs' [af])
+            in  fold (Cons (f x) ys).
+
+        map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+        map = \f -> fix (mapfix f).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
       

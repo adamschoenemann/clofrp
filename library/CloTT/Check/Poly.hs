@@ -133,7 +133,7 @@ queryKind nm = do
     Just (Exists _ k) -> pure k
     Just (Uni _ k)    -> pure k
     Just (_ := ty)    -> kindOf (asPolytype ty) `decorateErr` Other ("queryKind")
-    _                 -> otherErr $ show $ "Cannot lookup kind of" <+> pretty nm
+    _                 -> otherErr $ showW 3000 $ "queryKind: Cannot lookup kind of" <+> pretty nm <+> "in" <+> pretty ctx
   where 
       p (Uni x _)    = x == nm
       p (Exists x _) = x == nm
@@ -320,7 +320,7 @@ checkWfType ty@(A ann ty') = do
 -- will completely ignore trCtx in the TypingM monad
 -- TODO: Also fail ctx such as [a := tau, a] or [a, a := tau]
 wfContext :: forall a. TyCtx a -> TypingM a ()
-wfContext (Gamma elems) = foldrM fn [] elems *> pure () where
+wfContext (Gamma elems) = (foldrM fn [] elems *> pure ()) `decorateErr` (Other "wfContext") where
   fn :: CtxElem a -> [CtxElem a] -> TypingM a [CtxElem a]
   fn el acc = do 
     _ <- withCtx (const $ Gamma acc) $ checkIt el 
@@ -388,6 +388,9 @@ lookupTyTM nm c =
   case lookupTy nm c of
     Just t -> pure t
     Nothing -> nameNotFound nm
+
+-- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
+-- at least implement them both in terms of a more general combinator
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
 instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
@@ -465,6 +468,22 @@ instL ahat ty@(A a ty') =
             folder (af, t) acc = do 
               tsubst <- substCtx acc t
               branch $ withCtx (const acc) $ tsubst `instR` af
+
+        -- InstLLater. Similar to instantiation of other type-combinators
+        Later t1 t2 -> do
+          root $ "[InstLLater]" <+> pretty ahat <+> ":<=" <+> pretty ty
+          af1 <- freshName
+          af2 <- freshName
+          errIf (kindOf t1) (/= ClockK) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected Clock")
+          errIf (kindOf t2) (/= Star)   (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected *")
+          let ahat1 = Exists af1 ClockK
+          let ahat2 = Exists af2 Star
+          let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
+          ctx' <- insertAt (Exists ahat Star) (mempty <+ ahat1 <+ ahat2 <+ ahat := ltr)
+          omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
+          substed <- substCtx omega t2
+          r <- withCtx (const omega) $ branch (af2 `instL` substed)
+          pure r
 
         -- InstLRec
         RecTy t -> do
@@ -559,6 +578,22 @@ instR ty@(A a ty') ahat =
               folder (af, t) acc = do 
                 tsubst <- substCtx acc t
                 branch $ withCtx (const acc) $ af `instL` tsubst
+
+          -- InstRLater. Similar to instantiation of other type-combinators
+          Later t1 t2 -> do
+            root $ "[InstRLater]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            af1 <- freshName
+            af2 <- freshName
+            errIf (kindOf t1) (/= ClockK) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected Clock")
+            errIf (kindOf t2) (/= Star)   (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected *")
+            let ahat1 = Exists af1 ClockK
+            let ahat2 = Exists af2 Star
+            let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
+            ctx' <- insertAt (Exists ahat Star) (mempty <+ ahat1 <+ ahat2 <+ ahat := ltr)
+            omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
+            substed <- substCtx omega t2
+            r <- withCtx (const omega) $ branch (substed `instR` af2)
+            pure r
           
           _ -> do
             ctx <- getCtx
@@ -1013,21 +1048,38 @@ inferPrim ann p = case p of
     let a1 = UName "f"
     let a1t = A ann (TVar a1)
     let folded = A ann $ RecTy a1t
-    let unfolded = A ann $ a1t `TApp` folded
-    let arr = A ann (folded :->: unfolded)
-    let quanted = A ann (Forall a1 (Star :->*: Star) arr)
-    pure (quanted, ctx)
+    let unfolded = a1t `tapp` folded
+    let arr = folded --> unfolded
+    pure (fall a1 (Star :->*: Star) arr, ctx)
   
   PrimRec -> do
-    let resultty = A ann (TVar "A")
-    let ftorty = A ann (TVar "F")
-    let ftorq = A ann . Forall "F" (Star :->*: Star)
-    let resultq = A ann . Forall "A" Star 
+    let resultty = tv "A"
+    let ftorty = tv "F"
+    let ftorq = fall "F" (Star :->*: Star)
+    let resultq = fall "A" Star 
     let inductivet = A ann $ RecTy ftorty
-    let ftorresultty = A ann (ftorty `TApp` A ann (TTuple [A ann $ RecTy ftorty, resultty]))
-    let body = A ann (ftorresultty :->: resultty)
+    let ftorresultty = ftorty `tapp` ttuple [inductivet, resultty]
+    let body = ftorresultty --> resultty
     ctx <- getCtx
-    pure (ftorq . resultq $ A ann (body :->: A ann (inductivet :->: resultty)), ctx)
+    pure (ftorq . resultq $ body --> inductivet --> resultty, ctx)
+  
+  Fix -> do
+    let ltr k = A ann . Later k
+    let kappa = tv "k"
+    let at = tv "a"
+    let aq = fall "a" Star
+    let kq = fall "k" ClockK
+    ctx <- getCtx
+    pure (kq . aq $ (ltr kappa at --> at) --> at, ctx)
+
+  where
+    infixr 9 --> 
+    x --> y = A ann (x :->: y)
+    fall n k = A ann . Forall n k
+    tv = A ann . TVar . UName
+    tapp t1 = A ann . TApp t1
+    ttuple = A ann . TTuple
+
 
 -- check that patterns type-check and return a new ctx extended with bound variables
 checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)

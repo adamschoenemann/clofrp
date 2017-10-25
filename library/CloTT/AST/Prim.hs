@@ -15,6 +15,7 @@ data Prim
   | Unfold
   | PrimRec
   | Tick
+  | Fix
   deriving (Eq, Data, Typeable)
 
 instance Show Prim where
@@ -24,6 +25,7 @@ instance Show Prim where
   show Unfold  = "unfold"
   show PrimRec = "primRec"
   show Tick    = "◇"
+  show Fix     = "fix"
 
 
 instance Pretty Prim where

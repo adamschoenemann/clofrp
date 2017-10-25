@@ -9,6 +9,8 @@
     "**/.DS_Store": true,
     "**/*.o": true,
     "**/*.hi": true,
-    "**/*.dump-hi": true
+    "**/*.dump-hi": true,
+    "**/*.mix": true,
+    "**/*.tix": true
   }
 }

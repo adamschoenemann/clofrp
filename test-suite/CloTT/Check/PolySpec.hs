@@ -73,8 +73,10 @@ polySpec = do
       runmsu (nil <+ "k" <\: ("Nat" @->: "Nat")) "k" `shouldYield` ()
     specify "nil <+ x : |>k' Nat is stable under all k's" $ do
       runmsu (nil <+ "k" <\: E.later "k'" "Nat") "k" `shouldYield` ()
-    specify "nil <+ x : |>k Nat is not stable under all k's" $ do
+    specify "nil <+ x λ: |>k Nat is not stable under all k's" $ do
       runmsu (nil <+ "x" <\: E.later "k" "Nat") "k" `shouldFailWith` (errs $ Other "Context not stable wrt k due to x λ: ⊳k Nat")
+    specify "nil <+ x : |>k Nat *is* stable under all k's" $ do
+      runmsu (nil <+ "x" .: E.later "k" "Nat") "k" `shouldYield` ()
 
   
   describe "checkRecAliases" $ do

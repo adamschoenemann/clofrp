@@ -177,11 +177,11 @@ recSpec = do
         data NatF a = Z | S a. 
         type Nat = Fix NatF.
 
-        -- plusRec : Nat -> NatF (Nat, Nat) -> Nat.
-        -- plusRec = \n x ->
-        --   case x of
-        --     | Z -> n
-        --     | S (m', r) -> fold (S r).
+        plusRec : Nat -> NatF (Nat, Nat) -> Nat.
+        plusRec = \n x ->
+          case x of
+            | Z -> n
+            | S (m', r) -> fold (S r).
         
         -- without annotations :O
         plus : Nat -> Nat -> Nat.
@@ -192,23 +192,23 @@ recSpec = do
               | S (m', r) -> fold (S r)
           in  primRec body m.
 
-        -- multRec : Nat -> NatF (Nat, Nat) -> Nat.
-        -- multRec = \n x ->
-        --   case x of
-        --     | Z -> fold Z
-        --     | S (m', r) -> plus n r.
+        multRec : Nat -> NatF (Nat, Nat) -> Nat.
+        multRec = \n x ->
+          case x of
+            | Z -> fold Z
+            | S (m', r) -> plus n r.
         
-        -- mult : Nat -> Nat -> Nat.
-        -- mult = \m n ->
-        --   primRec (multRec n) m.
+        mult : Nat -> Nat -> Nat.
+        mult = \m n ->
+          primRec (multRec n) m.
 
-        -- -- without annotations :O
-        -- mult' : Nat -> Nat -> Nat.
-        -- mult' = \m n ->
-        --   let body = \x -> case x of
-        --     | Z -> fold Z
-        --     | S (m', r) -> plus n r
-        --   in primRec body m.
+        -- without annotations :O
+        mult' : Nat -> Nat -> Nat.
+        mult' = \m n ->
+          let body = \x -> case x of
+            | Z -> fold Z
+            | S (m', r) -> plus n r
+          in primRec body m.
 
       |]
       runCheckProg mempty prog `shouldYield` ()
