@@ -121,14 +121,14 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
       
-    it "accepts productive program with tick constant application (2)" $ do
+    it "rejects beta-equivalent def of id (productive but we cannot type it)" $ do
       let Right prog = pprog [text|
         data Wrap a = MkWrap a.
 
         foo : forall (k : Clock) a. |>k a -> |>k a.
         foo = \x -> (\\(af : k) -> x) [<>].
       |]
-      runCheckProg mempty prog `shouldYield` ()
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other "Context not stable wrt `a due to x λ: ⊳`a `b")
 
     it "accepts the encoding of the force" $ do
       let Right prog = pprog [text|
