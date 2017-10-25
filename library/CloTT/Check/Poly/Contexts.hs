@@ -27,10 +27,12 @@ import CloTT.Context
 import CloTT.Annotated
 import CloTT.Pretty
 
+data Binding = LamB | LetB deriving (Eq, Show)
+
 data CtxElem a
   = Uni Name Kind -- ^ Universal
   | Exists Name Kind -- ^ Existential
-  | Name `HasType` Type a Poly -- ^ x : A
+  | (Binding, Name) `HasType` Type a Poly -- ^ (λ?)x : A
   | Name := Type a Mono -- ^ a = t
   | Marker Name -- ^ |>a
   deriving Eq
@@ -40,7 +42,7 @@ instance Unann (CtxElem a) (CtxElem ()) where
     case el of
       Uni nm k        -> Uni nm k
       Exists nm k     -> Exists nm k
-      nm `HasType` ty -> nm `HasType` unann ty
+      (b,nm) `HasType` ty -> (b,nm) `HasType` unann ty
       nm := ty        -> nm := unann ty
       Marker nm       -> Marker nm
 
@@ -50,7 +52,12 @@ instance Pretty (CtxElem a) where
     Uni nm k    -> parens (pretty nm <+> ":" <+> pretty k)
     Exists nm Star -> "^" <> pretty nm
     Exists nm k    -> parens ("^" <> pretty nm <+> ":" <+> pretty k)
-    nm `HasType` ty -> pretty nm <+> ":" <+> pretty (unann ty)
+    (b, nm) `HasType` ty ->
+      pretty nm <+> p b <> ":" <+> pretty (unann ty) 
+      where 
+        p LamB = "λ"
+        p LetB = ""
+
     nm := ty        -> "^" <> pretty nm <+> "=" <+> pretty (unann ty)
     Marker nm       -> "†" <> pretty nm
 
@@ -66,6 +73,12 @@ marker = Marker
 
 uni :: Name -> CtxElem a
 uni nm = Uni nm Star
+
+(<\:) :: Name -> Type a Poly -> CtxElem a
+x <\: t = (LamB, x) `HasType` t
+
+(.:) :: Name -> Type a Poly -> CtxElem a
+x .: t = (LetB, x) `HasType` t
 
 -- Free contexts contains "global" mappings from names to types
 newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
@@ -203,7 +216,7 @@ ctxFind p (Gamma xs) = find p xs
 
 lookupTy :: Name -> TyCtx a -> Maybe (Type a Poly)
 lookupTy nm (Gamma xs) = findMap p xs where
-  p (nm' `HasType` ty) | nm' == nm = Just ty
+  p ((_,nm') `HasType` ty) | nm' == nm = Just ty
   p _                  = Nothing
 
 elemBy :: (a -> Bool) -> [a] -> Bool
@@ -220,7 +233,7 @@ isAssigned = isJust .*. findAssigned where
 
 hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a Poly)
 hasTypeInCtx nm (Gamma xs) = findMap fn xs where
-  fn (nm' `HasType` ty) | nm == nm' = pure ty
+  fn ((_,nm') `HasType` ty) | nm == nm' = pure ty
   fn _                             = Nothing
 
 hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a Poly)

@@ -184,6 +184,20 @@ progSpec = do
           in  trip' x.
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "types `flip id` correctly" $ do
+      let Right prog = pprog [text|
+        id : forall a. a -> a.
+        id = \x -> x.
+
+        flip : forall a b c. (a -> b -> c) -> b -> a -> c.
+        flip = \fn y x -> fn x y.
+
+        appinv : forall a b. a -> (a -> b) -> b.
+        appinv = flip id.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
 
     it "rejects invalid programs that assign existentials inside case expressions" $ do
       let Right prog = pprog [text|
@@ -192,7 +206,7 @@ progSpec = do
 
         foo : forall a b s. (s -> a) -> Arr s b.
         foo = \f -> MkArr (\s -> case f s of | x -> x).
-        |]
+      |]
       -- runCheckProg mempty prog `shouldYield` ()
       shouldFail $ runCheckProg mempty prog 
 
@@ -329,6 +343,25 @@ progSpec = do
           bar Unit.
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    it "let-bound lambdas (1)" $ do
+      let Right prog = pprog [text|
+        foo : forall a. a -> a.
+        foo = \x ->
+          let y = (\z -> z) 
+          in z.
+      |]
+      runCheckProg mempty prog `shouldFailWith` (errs $ NameNotFound "z")
+
+    it "let-bound lambdas (2)" $ do
+      let Right prog = pprog [text|
+        foo : forall (k : Clock) a. a -> a.
+        foo = \x ->
+          let y = (\\(af : k) -> x)
+          in y [af].
+      |]
+      -- runCheckProg mempty prog `shouldYield` ()
+      runCheckProg mempty prog `shouldFailWith` (errs $ NameNotFound "af")
 
     it "rejects generalized let bindings" $ do
       let Right prog = pprog [text|

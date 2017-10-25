@@ -106,18 +106,34 @@ clockSpec = do
         bad : forall (k : Clock) a. |>k a -> a.
         bad = \d -> d [<>].
       |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ Other "Context not stable wrt `a due to d : ⊳`a `b")
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other "Context not stable wrt `a due to d λ: ⊳`a `b")
 
-    it "accepts productive program with tick constant application" $ do
+    it "accepts productive program with tick constant application (1)" $ do
       let Right prog = pprog [text|
         good : forall (k : Clock) a. a -> a.
         good = \x -> (\\(af : k) -> x) [<>].
 
+        -- let bindings are ignored in terms of the kappa-stable context judgment
         good2 : forall (k : Clock) a. a -> a.
         good2 = \x -> 
-          let x' = \\(af : k) -> x
+          let x' = (\\(af : k) -> x) : |>k a
           in  x' [<>].
       |]
       runCheckProg mempty prog `shouldYield` ()
       
+    it "accepts productive program with tick constant application (2)" $ do
+      let Right prog = pprog [text|
+        data Wrap a = MkWrap a.
+
+        foo : forall (k : Clock) a. |>k a -> |>k a.
+        foo = \x -> (\\(af : k) -> x) [<>].
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "accepts the encoding of the force" $ do
+      let Right prog = pprog [text|
+        force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
+        force = \x -> x {k} [<>].
+      |]
+      runCheckProg mempty prog `shouldYield` ()
       

@@ -106,11 +106,11 @@ substCtx ctx (A a ty) =
 
 mustBeStableUnder :: TyCtx a -> Name -> TypingM a ()
 mustBeStableUnder ctx@(Gamma xs) k = traverse traversal xs *> pure () where 
-  traversal = \case
-    nm `HasType` ty 
-      | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty (nm `HasType` ty)
-    nm := ty
-      | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty (nm := ty)
+  traversal ce = case ce of
+    (LamB, nm) `HasType` ty 
+      | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty ce
+    -- nm := ty
+    --   | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty ce
     _                     -> pure ()
 
 
@@ -332,7 +332,7 @@ wfContext (Gamma elems) = foldrM fn [] elems *> pure () where
   checkIt el = case el of
     Uni nm _        -> notInDom nm el
     Exists nm _     -> notInDom nm el
-    nm `HasType` ty -> notInDom nm el *> checkWfType (asPolytype ty)
+    (_, nm) `HasType` ty -> notInDom nm el *> checkWfType (asPolytype ty)
     nm := ty        -> notInDom nm el *> checkWfType (asPolytype ty)
     Marker nm       -> do 
       _ <- notInDom nm el 
@@ -707,7 +707,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   check' (Lam x Nothing e2) (aty :->: bty) = do
     ctx <- getCtx
     root $ "[->I]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
-    let c = x `HasType` aty
+    let c = (LamB, x) `HasType` aty
     (delta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 bty)
     pure delta
   
@@ -729,7 +729,9 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     let kty = A eann $ TVar k 
     if (kty =%= k')
       then do
-        withCtx (\g -> g <+ af `HasType` kty) $ branch $ check e2 t2
+        let c = (LamB, af) `HasType` kty
+        (delta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 t2)
+        pure delta
       else cannotSubtype kty k'
   
   -- FoldApp (optimization)
@@ -754,12 +756,16 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
         branch $ withCtx (const acc) $ check el t'
   
   -- Let<=
+  -- NOTE: We should introduce a marker and remove new context-elements right of the marker to
+  -- remove unnecessary existentials. But we'll need to generalize over the let-binding (in case
+  -- it is a lambdas) to do this properly, otherwise the type of a let binding can have free
+  -- existentials that would be removed. For now, we'll just keep all the cruft around.
   check' (Let p e1 e2) _ = do
     root $ "[Let<=]" <+> pretty e <+> "<=" <+> pretty ty
     (ty1, ctx') <- branch $ synthesize e1
     ty1s <- substCtx ctx' ty1
     case p of
-      A _ (Bind nm) -> withCtx (const $ ctx' <+ (nm `HasType` ty1s)) $ branch $ check e2 ty
+      A _ (Bind nm) -> withCtx (const $ ctx' <+ ((LetB, nm) `HasType` ty1s)) $ branch $ check e2 ty
       _       -> snd <$> checkClause ty1s (p, e2) ty
   
   -- TypeApp<=
@@ -871,9 +877,9 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         betac  = Exists beta Star
         alphat = A ann $ TExists alpha 
         betat  = A ann $ TExists beta
-    ctx' <- withCtx (\g -> g <+ alphac <+ betac <+ x `HasType` alphat) $
+    ctx' <- withCtx (\g -> g <+ alphac <+ betac <+ (LamB, x) `HasType` alphat) $
                     branch (check e betat)
-    (delta, _, theta) <- splitCtx (x `HasType` alphat) ctx'
+    (delta, _, theta) <- splitCtx ((LamB, x) `HasType` alphat) ctx'
     pure (A ann $ alphat :->: betat, delta)
   
   -- ->TickVarE
@@ -901,8 +907,9 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     ctx <- getCtx
     root $ "[->TickE]" <+> pretty expr <+> "in" <+> pretty ctx
     (ty1, theta) <- branch $ synthesize e1
-    (kappa, cty) <- assertLater ty1
-    ctx `mustBeStableUnder` kappa
+    ty1' <- substCtx theta ty1
+    (kappa, cty) <- assertLater ty1'
+    theta `mustBeStableUnder` kappa
     ctysubst <- substCtx theta cty
     pure (ctysubst, theta)
     where
@@ -942,6 +949,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
   -- Tuple=>
   synthesize' (Tuple es) = do
+    root $ "[Tuple=>]" <+> pretty expr
     ctx <- getCtx
     (ts, ctx') <- foldrM folder ([], ctx) es
     pure (A ann $ TTuple ts, ctx')
@@ -949,12 +957,16 @@ synthesize expr@(A ann expr') = synthesize' expr' where
       folder e (ts', acc) = do
         (t', acc') <- branch $ withCtx (const acc) $ synthesize e
         pure (t' : ts', acc')
-  
+
+  -- [TickAbs=>]
   synthesize' (TickAbs nm k e) = do
+    root $ "[TickAbs=>]" <+> pretty expr
     let kt = A ann $ TVar k
-    (ety, ctx') <- withCtx (\g -> g <+ nm `HasType` kt) $ synthesize e
+    let c = (LamB, nm) `HasType` kt
+    (ety, ctx') <- withCtx (\g -> g <+ c) $ synthesize e
+    (delta, _, _) <- splitCtx c ctx'
     let lty = A ann $ Later kt ety
-    pure (lty, ctx')
+    pure (lty, delta)
   
   -- TypeApp=>
   synthesize' (TypeApp ex arg) = do
@@ -977,7 +989,8 @@ inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
   Nat _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
-  -- The tick constant unifies with any clock variable
+
+  -- TODO: The tick constant unifies with any clock variable?
   Tick   -> do 
     alpha <- freshName
     ctx' <- (\g -> g <+ Exists alpha ClockK) <$> getCtx
@@ -1023,7 +1036,7 @@ checkPat pat@(A ann p) ty = do
   root $ "[CheckPat]" <+> pretty pat <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
   dctx <- getDCtx
   case p of
-    Bind nm -> pure $ ctx <+ nm `HasType` ty 
+    Bind nm -> pure $ ctx <+ (LetB, nm) `HasType` ty 
 
     Match nm pats -> case query nm dctx of
       Nothing    -> otherErr $ "Pattern " ++ show nm ++ " not found in context."
