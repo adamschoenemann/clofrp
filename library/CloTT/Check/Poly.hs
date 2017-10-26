@@ -70,7 +70,7 @@ substCtx ctx (A a ty) =
         Just tau -> substCtx ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
         Nothing
           | ctx `containsEVar` x -> pure $ A a $ TExists x
-          | otherwise            -> otherErr $ show $ "existential " <+> pretty x <+> " not in context" <+> pretty (A a ty)
+          | otherwise            -> otherErr $ show $ "existential" <+> pretty x <+> "not in context"
 
     t1 `TApp` t2 -> do
       t1' <- substCtx ctx t1
@@ -225,7 +225,7 @@ kindOf ty = go ty `decorateErr` decorate where
       TTuple ts -> (traverse fn ts) *> pure Star where
         fn tt = kindOf tt >>= \case
           Star -> pure ()
-          k    -> otherErr $ show $ pretty tt <+> "must have kind *"
+          k    -> otherErr $ show $ pretty tt <+> "must have kind * but had kind" <+> pretty k
         
       Later k tau -> do
         k' <- go tau
@@ -262,8 +262,8 @@ checkWfType ty@(A ann ty') = do
 
     -- ArrowWF
     t1 :->: t2 -> do 
-      errIf (kindOf t1) (/= Star) (const $ Other $ show $ pretty t1 <+> "must have kind *")
-      errIf (kindOf t2) (/= Star) (const $ Other $ show $ pretty t2 <+> "must have kind *")
+      errIf (kindOf t1) (/= Star) (\k -> Other $ show $ pretty t1 <+> "must have kind * but had kind" <+> pretty k)
+      errIf (kindOf t2) (/= Star) (\k -> Other $ show $ pretty t2 <+> "must have kind * but had kind" <+> pretty k)
       checkWfType t1 *> checkWfType t2
 
     -- ForallWF
@@ -913,7 +913,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         pure (ty, ctx)
 
       Nothing -> root "[Var]" *> nameNotFound nm
-  
+ 
   -- TickVar
   synthesize' (TickVar nm) = 
     synthesize' (Var nm) `decorateErr` (Other "TickVar")

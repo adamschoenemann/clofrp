@@ -361,7 +361,7 @@ progSpec = do
           in y [af].
       |]
       -- runCheckProg mempty prog `shouldYield` ()
-      runCheckProg mempty prog `shouldFailWith` (errs $ NameNotFound "af")
+      runCheckProg mempty prog `shouldFailWith` (errs $ Decorate (Other "TickVar") $ NameNotFound "af")
 
     it "rejects generalized let bindings" $ do
       let Right prog = pprog [text|
