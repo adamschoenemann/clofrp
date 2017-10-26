@@ -204,78 +204,77 @@ clockSpec = do
                 case unfold xs of
                 | Cons x xs' -> 
                   let ys = \\(af : k) -> g [af] (xs' [af])
-                  in cons x ys
+                  in cons x xs'
           in fix fn.
 
-        -- map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
-        -- map = \f -> 
-        --   --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
-        --   let mapfix = \g xs ->
-        --         case unfold xs of
-        --         | Cons x xs' -> 
-        --           let ys = \\(af : k) -> g [af] (xs' [af])
-        --           in  cons (f x) ys
-        --   in fix mapfix.
+        map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+        map = \f -> 
+          --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
+          let mapfix = \g xs ->
+                case unfold xs of
+                | Cons x xs' -> 
+                  let ys = \\(af : k) -> g [af] (xs' [af])
+                  in  cons (f x) ys
+          in fix mapfix.
         
 
-        -- -- applicative structure        
-        -- pure : forall (k : Clock) a. a -> |>k a.
-        -- pure = \x -> \\(af : k) -> x.
+        -- applicative structure        
+        pure : forall (k : Clock) a. a -> |>k a.
+        pure = \x -> \\(af : k) -> x.
 
-        -- app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
-        -- app = \lf la -> \\(af : k) -> 
-        --   let f = lf [af] in
-        --   let a = la [af] in
-        --   f a.
+        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+        app = \lf la -> \\(af : k) -> 
+          let f = lf [af] in
+          let a = la [af] in
+          f a.
 
-        -- -- functor
-        -- fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-        -- fmap = \f la -> app (pure f) la.
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> app (pure f) la.
 
-        -- data NatF f = Z | S f.
-        -- type Nat = Fix NatF.
+        data NatF f = Z | S f.
+        type Nat = Fix NatF.
 
-        -- z : Nat.
-        -- z = fold Z.
+        z : Nat.
+        z = fold Z.
 
-        -- s : Nat -> Nat.
-        -- s = \x -> fold (S x).
+        s : Nat -> Nat.
+        s = \x -> fold (S x).
 
-        -- nats : forall (k : Clock). Stream k Nat.
-        -- nats = fix (\g -> cons z (fmap (map s) g)).
-        -- -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
+        nats : forall (k : Clock). Stream k Nat.
+        nats = fix (\g -> cons z (fmap (map s) g)).
+        -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
 
-        -- hdk : forall (k : Clock) a. Stream k a -> a.
-        -- hdk = \xs ->
-        --   case unfold xs of
-        --   | Cons x xs' -> x.
+        hdk : forall (k : Clock) a. Stream k a -> a.
+        hdk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> x.
 
-        -- tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
-        -- tlk = \xs ->
-        --   case unfold xs of
-        --   | Cons x xs' -> xs'.
+        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+        tlk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> xs'.
 
-        -- hd : forall a. CoStream a -> a.
-        -- hd = \xs -> hdk {K0} xs.
+        hd : forall a. CoStream a -> a.
+        hd = \xs -> hdk {K0} xs.
         
-        -- tl : forall a. CoStream a -> CoStream a.
-        -- tl = \xs -> (tlk xs) [<>].
+        tl : forall a. CoStream a -> CoStream a.
+        tl = \xs -> (tlk xs) [<>].
         
-        -- test : forall (k' : Clock) a. |>k' (forall (k : Clock). Stream k a) -> |>k' (Stream k' a).
-        -- test = \xs -> \\(af : k') ->
-        --   let h = hd (xs [af]) in
-        --   let t = tl (xs [af]) in
-        --   cons h t.
+        test : forall (k' : Clock) a. |>k' (forall (k : Clock). Stream k a) -> |>k' (Stream k' a).
+        test = \xs -> \\(af : k') -> 
+          let h = hdk (xs [af]) in
+          let t = tlk (xs [af]) in
+          cons h t.
 
-        -- eof : forall (k : Clock) a. |>k ((forall (k' : Clock). Stream k' a) -> Stream k a) -> (forall (k' : Clock). Stream k' a) -> Stream k a.
-        -- eof = \f xs -> 
-        --   let tl2 = tl (tl xs) in
-        --   let dtl = (\\(af : k) -> (f [af]) tl2) : |>k (Fix (StreamF k a)) in
-        --   xs.
-          -- cons (hd xs) dtl.
+        eof : forall (k : Clock) a. |>k ((forall (k' : Clock). Stream k' a) -> Stream k a) -> (forall (k' : Clock). Stream k' a) -> Stream k a.
+        eof = \f xs -> 
+          let tl2 = tl (tl xs) in
+          let dtl = (\\(af : k) -> (f [af]) tl2) in
+          cons (hd xs) dtl.
 
-        -- eo : forall (k : Clock) a. (forall (k' : Clock). Stream k' a) -> Stream k a.
-        -- eo = fix (eof {k} {a}).
+        eo : forall (k : Clock) a. (forall (k' : Clock). Stream k' a) -> Stream k a.
+        eo = fix (eof {k} {a}).
 
         -- data ListF a f = Nil | LCons a f.
         -- type List a = Fix (ListF a).

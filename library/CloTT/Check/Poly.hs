@@ -1185,21 +1185,39 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     let atysubst = subst (A tann $ TExists alpha') alpha aty
     withCtx (\g -> g <+ Exists alpha' k) $ branch $ applysynth atysubst e
   
-  -- ^alpha App
-  applysynth' (TExists alpha) = do
-    ctx <- getCtx
-    root $ "[αApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
-    if ctx `containsEVar` alpha
-      then do
-        a1 <- freshName
-        a2 <- freshName
-        let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
-        alphak <- queryKind alpha
-        ctx' <- insertAt (Exists alpha alphak) (mempty <+ Exists a2 Star <+ Exists a1 Star <+ alpha := a1toa2)
-        delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
-        pure (A tann $ TExists a2, delta)
-      else
-        nameNotFound alpha
+  applysynth' (TExists alpha) = 
+    case e of
+      -- ^alpha TickApp
+      (A _ (TickVar tv)) -> do
+        ctx <- getCtx
+        root $ "[αTickApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+        if ctx `containsEVar` alpha
+          then do
+            a1 <- freshName
+            a2 <- freshName
+            let a1toa2 = A tann $ Later (A tann (TExists a1)) (A tann (TExists a2))
+            alphak <- queryKind alpha
+            ctx' <- insertAt (Exists alpha alphak) (mempty <+ Exists a2 Star <+ Exists a1 ClockK <+ alpha := a1toa2)
+            delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
+            pure (A tann $ TExists a2, delta)
+          else
+            nameNotFound alpha
+
+    -- ^alpha App
+      _  -> do 
+        ctx <- getCtx
+        root $ "[αApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+        if ctx `containsEVar` alpha
+          then do
+            a1 <- freshName
+            a2 <- freshName
+            let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
+            alphak <- queryKind alpha
+            ctx' <- insertAt (Exists alpha alphak) (mempty <+ Exists a2 Star <+ Exists a1 Star <+ alpha := a1toa2)
+            delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
+            pure (A tann $ TExists a2, delta)
+          else
+            nameNotFound alpha
 
   -- ->TickVarApp
   applysynth' (Later kappa cty) = do
