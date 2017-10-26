@@ -116,7 +116,7 @@ clockSpec = do
         -- let bindings are ignored in terms of the kappa-stable context judgment
         good2 : forall (k : Clock) a. a -> a.
         good2 = \x -> 
-          let x' = (\\(af : k) -> x) : |>k a
+          let x' = (\\(af : k) -> x)
           in  x' [<>].
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -132,7 +132,7 @@ clockSpec = do
 
     it "accepts the encoding of the force" $ do
       let Right prog = pprog [text|
-        force : forall (k : Clock) a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
+        force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
         force = \x -> x {k} [<>].
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -185,15 +185,30 @@ clockSpec = do
         data StreamF (k : Clock) a f = Cons a (|>k f).
         type Stream (k : Clock) a = Fix (StreamF k a).
 
-        mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
-        mapfix = \f g xs ->
+        -- demonstrate inference with stupid identity
+        id : forall (k : Clock) a. Stream k a -> Stream k a.
+        id = fix (\g xs -> 
           case unfold xs of
           | Cons x xs' -> 
             let ys = \\(af : k) -> g [af] (xs' [af])
-            in  fold (Cons (f x) ys).
+            in  fold (Cons x ys)
+        ).
+
+        -- mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
+        -- mapfix = \f g xs ->
+        --   case unfold xs of
+        --   | Cons x xs' -> 
+        --     let ys = \\(af : k) -> g [af] (xs' [af])
+        --     in  fold (Cons (f x) ys).
 
         map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
-        map = \f -> fix (mapfix f).
+        map = \f -> 
+          let mapfix = \f g xs ->
+                case unfold xs of
+                | Cons x xs' -> 
+                  let ys = \\(af : k) -> g [af] (xs' [af])
+                  in  fold (Cons (f x) ys)
+          in fix (mapfix f).
       |]
       runCheckProg mempty prog `shouldYield` ()
 

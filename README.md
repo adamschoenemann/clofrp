@@ -31,6 +31,7 @@ For my master's thesis at ITU
     to possibly incorrect source-locations in errors
 - Check data decls and type aliases for well-formedness before elaboration
 - Is OK to re-assign an existential iff it is the same type we're attempting to assign?
+- Improve inference for "unfold"
 
 ## Type Aliases
 - Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:
@@ -45,9 +46,5 @@ For my master's thesis at ITU
 
 ## Recursive Types
 - Is it really a good idea to expose the recursive primitives to the user?
-- Do we need the parameter at all? E.g. we have Fix x. NatF x, but we could
-  just have Fix NatF and still treat Fix as a special construct, but substitutions
-  would just be one extra type application to its functor.
-  - This also means we can check that the kind of the argument to fix is (* -> *)
 
 [clott]: https://github.com/adamschoenemann/clott

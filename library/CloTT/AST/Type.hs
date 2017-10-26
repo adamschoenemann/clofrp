@@ -80,7 +80,7 @@ prettyT' pars = \case
           p (Clock n' t')  = Just (n',t')
           p _            = Nothing
   
-  RecTy t -> parensIf $ "Fix" <+> prettyT False t
+  RecTy t -> parensIf $ "Fix" <+> prettyT True t
   TTuple ts -> tupled $ map (prettyT False) ts
   Later t1 t2 -> parensIf $ "⊳" <> prettyT True t1 <+> prettyT True t2
   where

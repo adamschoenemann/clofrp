@@ -58,7 +58,7 @@ prettyE' pars = \case
     let tyann = maybe "" (\t -> space <> ":" <+> pretty t) mty
     in  parensIf $ "\\" <> pretty nm <> tyann <+> "->" <+> prettyE False e
   
-  TickAbs  nm kappa e -> "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
+  TickAbs  nm kappa e -> parens $ "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
 
   Tuple es -> tupled (map (prettyE False) es)
   Let p e1 e2 -> "let" <+> pretty p <+> "=" <+> pretty e1 <+> "in" <> softline <> pretty e2

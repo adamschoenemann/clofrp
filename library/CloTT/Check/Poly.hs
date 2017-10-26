@@ -762,12 +762,11 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     ctx <- getCtx
     root $ "[TickAbsI]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
     let kty = A eann $ TVar k 
-    if (kty =%= k')
-      then do
-        let c = (LamB, af) `HasType` kty
-        (delta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 t2)
-        pure delta
-      else cannotSubtype kty k'
+    delta <- branch $ k' `subtypeOf` kty
+    kty' <- substCtx delta kty
+    let c = (LamB, af) `HasType` kty'
+    (theta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 t2)
+    pure theta
   
   -- FoldApp (optimization)
   -- check' (A fann (Prim Fold) `App` e2) (RecTy fty) = do
@@ -831,7 +830,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   sanityCheck ty0 = (do
     ctx <- getCtx
     _ <- wfContext ctx
-    checkWfType ty0) `decorateErr` (Other $ "Sanity check")
+    checkWfType ty0) `decorateErr` (Other $ show $ "Sanity check at" <+> pretty e <+> "<=" <+> pretty ty)
   
   -- just introduce forall-quantified variables as existentials
   -- in the current context
@@ -918,49 +917,44 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     pure (A ann $ alphat :->: betat, delta)
   
   -- ->TickVarE
-  -- TODO: Move to applysynth?
+  -- TODO: Move to applysynth
   synthesize' (e1 `App` A _ (TickVar alpha)) = do
     ctx <- getCtx
-    root $ "[->ClockE]" <+> pretty expr <+> "in" <+> pretty ctx
-    (ty1, theta) <- branch $ synthesize e1
+    root $ "[->TickVarE]" <+> pretty expr <+> "in" <+> pretty ctx
+    (ty1, delta) <- branch $ synthesize e1
     kappa <- lookupTyTM alpha ctx
-    (kappa', cty) <- assertLater ty1
-    if kappa =%= kappa'
-      then do 
-        ctysubst <- substCtx theta cty
-        pure (ctysubst, theta)
-      else otherErr $ show $ "Expected clock" <+> pretty kappa <+> "to be" <+> pretty kappa' <+> "at" <+> pretty expr
-    where
-      assertLater = \case 
-        (A _ (Later k t)) -> pure (k, t)
-        t                 -> 
-          otherErr $ show $ "Only guarded expressions can be applied to a tick variable at" <+> pretty expr
+    (kappa', cty, theta) <- withCtx (const delta) $ assertLater ty1
+    omega <- withCtx (const theta) $ branch $ kappa `subtypeOf` kappa' 
+    ctysubst <- substCtx omega cty
+    pure (ctysubst, omega)
       
   -- ->TickE
-  -- TODO: Move to applysynth?
+  -- TODO: Move to applysynth
   synthesize' (e1 `App` A _ (Prim Tick)) = do
     ctx <- getCtx
     root $ "[->TickE]" <+> pretty expr <+> "in" <+> pretty ctx
-    (ty1, theta) <- branch $ synthesize e1
-    ty1' <- substCtx theta ty1
-    (kappa, cty) <- assertLater ty1'
+    (ty1, delta) <- branch $ synthesize e1
+    ty1' <- substCtx delta ty1
+    (kappat, cty, theta) <- withCtx (const delta) $ assertLater ty1'
+    kappa <- extractKappa kappat
     theta `mustBeStableUnder` kappa
     ctysubst <- substCtx theta cty
     pure (ctysubst, theta)
-    where
-      assertLater = \case 
-        (A _ (Later (A _ (TVar k)) t)) -> pure (k, t)
-        t                 -> 
-          otherErr $ show $ "Only guarded expressions can be applied to the constant at" <+> pretty expr
+    where 
+      extractKappa (A _ kv) = 
+        case kv of
+          TExists k -> pure k
+          TVar    k -> pure k
+          _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
 
   -- ->UnfoldE=>
-  synthesize' (A uann (Prim Unfold) `App` e2) = do
-    root "[->UnfoldE=>]"
-    (e2ty, theta) <- branch $ synthesize e2 
-    e2ty' <- substCtx theta e2ty 
-    case e2ty' of
-      A ann2 (RecTy fty) -> pure (A ann2 $ fty `TApp` e2ty', theta)
-      _                  -> otherErr $ show $ pretty e2ty' <+> "cannot be unfolded"
+  -- synthesize' (A uann (Prim Unfold) `App` e2) = do
+  --   root "[->UnfoldE=>]"
+  --   (e2ty, theta) <- branch $ synthesize e2 
+  --   e2ty' <- substCtx theta e2ty 
+  --   case e2ty' of
+  --     A ann2 (RecTy fty) -> pure (A ann2 $ fty `TApp` e2ty', theta)
+  --     _                  -> otherErr $ show $ pretty e2ty' <+> "cannot be unfolded"
 
 
   -- ->E
@@ -1019,6 +1013,17 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
 
   synthesize' _ = cannotSynthesize expr
+  
+  assertLater t = do
+    kappa <- freshName
+    alpha <- freshName
+    let kappat = A ann $ TExists kappa
+    let alphat  = A ann $ TExists alpha
+    let lt = A ann (Later kappat alphat)
+    theta <- branch $ withCtx (\g -> g <+ Exists kappa ClockK <+ Exists alpha Star) $ t `subtypeOf` lt 
+    kappat' <- substCtx theta kappat
+    alphat' <- substCtx theta alphat
+    pure (kappat', alphat', theta)
 
 inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
@@ -1156,8 +1161,8 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   
   -- ^alpha App
   applysynth' (TExists alpha) = do
-    root "̂[αApp]"
     ctx <- getCtx
+    root $ "[αApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
     if ctx `containsEVar` alpha
       then do
         a1 <- freshName
@@ -1165,7 +1170,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
         let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
         alphak <- queryKind alpha
         ctx' <- insertAt (Exists alpha alphak) (mempty <+ Exists a2 Star <+ Exists a1 Star <+ alpha := a1toa2)
-        delta <- branch $ check e (A tann $ TExists a1)
+        delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
         pure (A tann $ TExists a2, delta)
       else
         nameNotFound alpha
