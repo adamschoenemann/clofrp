@@ -817,7 +817,8 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   check' (Let p e1 e2) _ = do
     root $ "[Let<=]" <+> pretty e <+> "<=" <+> pretty ty
     (ty1, ctx') <- branch $ synthesize e1
-    ty1s <- substCtx ctx' ty1
+    root $ "[Info] Let synthesized" <+> pretty (ty1, ctx')
+    ty1s <- substCtx ctx' ty1 `decorateErr` (Other "[Let<=]")
     case p of
       A _ (Bind nm) -> withCtx (const $ ctx' <+ ((LetB, nm) `HasType` ty1s)) $ branch $ check e2 ty
       _       -> snd <$> checkClause ty1s (p, e2) ty
@@ -843,8 +844,8 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     root $ "[Sub]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
     (aty, theta) <- branch $ synthesize e
     branch $ root $ "[Info] Synthesized" <+> pretty (aty, theta)
-    atysubst <- substCtx theta aty
-    btysubst <- substCtx theta ty
+    atysubst <- substCtx theta aty `decorateErr` (Other "Sub.1")
+    btysubst <- substCtx theta ty `decorateErr` (Other "Sub.2")
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
   
   sanityCheck ty0 = (do
@@ -986,7 +987,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     ctx <- getCtx
     root $ "[->E]" <+> pretty expr <+> "in" <+> pretty ctx
     (ty1, theta) <- branch $ synthesize e1
-    ty1subst <- substCtx theta ty1
+    ty1subst <- substCtx theta ty1 `decorateErr` (Other "[->E]")
     withCtx (const theta) $ branch $ applysynth ty1subst e2 
 
   -- Prim=>
@@ -1016,9 +1017,10 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     root $ "[TickAbs=>]" <+> pretty expr
     let kt = A ann $ TVar k
     let c = (LamB, nm) `HasType` kt
-    (ety, ctx') <- withCtx (\g -> g <+ c) $ synthesize e
+    (ety, ctx') <- withCtx (\g -> g <+ c) $ branch $ synthesize e
+    ety' <- substCtx ctx' ety
     (delta, _, _) <- splitCtx c ctx'
-    let lty = A ann $ Later kt ety
+    let lty = A ann $ Later kt ety'
     pure (lty, delta)
   
   -- TypeApp=>

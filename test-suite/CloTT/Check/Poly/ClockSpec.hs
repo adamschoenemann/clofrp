@@ -105,7 +105,7 @@ clockSpec = do
         tid' : forall (k : Clock) a. |>k a -> |>k a.
         tid' = \d -> 
           let r = \\(af : k) -> id (d [af])
-          in id r.
+          in r.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
