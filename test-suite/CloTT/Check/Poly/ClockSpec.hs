@@ -273,8 +273,13 @@ clockSpec = do
           let dtl = (\\(af : k) -> (f [af]) tl2) in
           cons (hd xs) dtl.
 
+        -- needs to use annotated body (eof above) or directly use body in fix
         eo : forall (k : Clock) a. (forall (k' : Clock). Stream k' a) -> Stream k a.
-        eo = fix (eof {k} {a}).
+        eo = fix (\f xs -> 
+          let tl2 = tl (tl xs) in
+          let dtl = (\\(af : k) -> (f [af]) tl2) in
+          cons (hd xs) dtl
+        ).
 
         -- data ListF a f = Nil | LCons a f.
         -- type List a = Fix (ListF a).

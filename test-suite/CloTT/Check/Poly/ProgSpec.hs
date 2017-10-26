@@ -361,7 +361,7 @@ progSpec = do
           in y [af].
       |]
       -- runCheckProg mempty prog `shouldYield` ()
-      runCheckProg mempty prog `shouldFailWith` (errs $ Decorate (Other "TickVar") $ NameNotFound "af")
+      runCheckProg mempty prog `shouldFailWith` (errs $ Decorate (Other "TickVar") $  NameNotFound "af")
 
     it "rejects generalized let bindings" $ do
       let Right prog = pprog [text|
@@ -1050,7 +1050,7 @@ progSpec = do
         foo : forall a. a -> a.
         foo = id {forall a. a -> a} id.
       |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ Other "asMonotype")
+      runCheckProg mempty prog `shouldFailWith` (errs $ Other "∀a. a -> a is not a monotype")
     
     -- it "accepts tricky higher-order stuff (not sure if we should)" $ do
     --   let Right prog = pprog [text|

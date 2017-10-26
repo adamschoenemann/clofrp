@@ -381,7 +381,7 @@ assign nm ty = do
         fn x (xs', b)                          = (x : xs', b)
 
 asMonotypeTM :: Type a s -> TypingM a (Type a Mono)
-asMonotypeTM = maybe (otherErr "asMonotype") pure . asMonotype
+asMonotypeTM t = maybe (otherErr $ show $ pretty t <+> "is not a monotype") pure . asMonotype $ t
 
 lookupTyTM :: Name -> TyCtx a -> TypingM a (Type a Poly)
 lookupTyTM nm c =
@@ -422,7 +422,7 @@ instL ahat ty@(A a ty') =
           let ahat1 = Exists af1 Star
           let ahat2 = Exists af2 Star
           let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-          ctx' <- insertAt (exists ahat) $ mempty <+ ahat1 <+ ahat2 <+ ahat := arr
+          ctx' <- insertAt (Exists ahat Star) $ mempty <+ ahat1 <+ ahat2 <+ ahat := arr
           omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
           substed <- substCtx omega t2
           r <- withCtx (const omega) $ branch (af2 `instL` substed)
@@ -445,7 +445,7 @@ instL ahat ty@(A a ty') =
               -- only type (id (\x -> x)) : forall b. (forall a. a) -> b even though it should
               -- be equivalent to the one above
               unsafepath = do 
-                ctxUNSAFE <- insertAt (exists ahat) $ mempty <+ Uni beta' k <+ exists ahat
+                ctxUNSAFE <- insertAt (Exists ahat Star) $ mempty <+ Uni beta' k <+ Exists ahat Star
                 markerName <- freshName
                 ctx' <- withCtx (const (ctxUNSAFE <+ Marker markerName)) $ branch (ahat `instL` bty')
                 (delta, _, delta') <- splitCtx (Marker markerName) ctx'
@@ -678,8 +678,8 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
     root $ "[<:->]" <+> pretty ty1 <+> "<:" <+> pretty ty2
     ctx' <- branch (b1 `subtypeOf` a1)
-    a2' <- substCtx ctx' a2
-    b2' <- substCtx ctx' b2
+    a2' <- substCtx ctx' a2 `decorateErr` (Other "<:->.1")
+    b2' <- substCtx ctx' b2` decorateErr` (Other "<:->.2")
     r <- withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
     pure r
 
@@ -690,7 +690,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     root $ "[<:∀R]" <+> pretty ty1 <+> "<:" <+> pretty ty2 <+> "in" <+> pretty ctx
     let ty2' = subst (A ann $ TVar a') a (A ann $ t2)
     ctx' <- withCtx (\g -> g <+ Uni a' k) $ branch (ty1 `subtypeOf` ty2')
-    pure $ dropTil (uni a') ctx'
+    pure $ dropTil (Uni a' k) ctx'
 
   -- <:∀L
   subtypeOf' (Forall nm k (A at1 t1)) _ = do
@@ -699,7 +699,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     nm' <- freshName
     let t1' = subst (A at1 $ TExists nm') nm (A at1 t1)
     ctx' <- withCtx (\g -> g <+ marker nm' <+ Exists nm' k) $ branch (t1' `subtypeOf` ty2)
-    pure $ dropTil (marker nm') ctx'
+    pure $ dropTil (Marker nm') ctx'
   
   
   -- <:TApp
@@ -837,6 +837,16 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
 
   --     _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg
 
+  -- Fixpoint<=
+  check' (A _ (Prim Fix) `App` e2) _ = do
+    ctx <- getCtx
+    root $ "[Fixpoint<=]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    kappa <- freshName
+    let kappat = A tann (TExists kappa)
+    let fixty = A tann (A tann (Later kappat ty) :->: ty)
+    withCtx (\g -> g <+ Exists kappa ClockK) $ branch $ check e2 fixty
+
+
   
   -- Sub
   check' _ _ = do
@@ -951,12 +961,11 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     (delta, _, theta) <- splitCtx ce ctx'
     pure (A ann $ argty :->: betat, delta)
   
-      
-  -- ->TickE
+  -- TickE=>
   -- TODO: Move to applysynth
   synthesize' (e1 `App` A _ (Prim Tick)) = do
     ctx <- getCtx
-    root $ "[->TickE]" <+> pretty expr <+> "in" <+> pretty ctx
+    root $ "[TickE=>]" <+> pretty expr <+> "in" <+> pretty ctx
     (ty1, delta) <- branch $ synthesize e1
     ty1' <- substCtx delta ty1
     (kappat, cty, theta) <- withCtx (const delta) $ assertLater ty1'
@@ -1185,6 +1194,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     let atysubst = subst (A tann $ TExists alpha') alpha aty
     withCtx (\g -> g <+ Exists alpha' k) $ branch $ applysynth atysubst e
   
+  -- TODO: Abstract the common stuff in these two
   applysynth' (TExists alpha) = 
     case e of
       -- ^alpha TickApp
