@@ -250,7 +250,7 @@ clockSpec = do
         hd = \xs -> hdk {K0} xs.
         
         -- tl : forall a. (forall (k : Clock). Stream k a) -> forall (k : Clock). Stream k a.
-        tl : forall (k' : Clock) a. CoStream a -> Stream k' a.
+        tl : forall a. CoStream a -> CoStream a.
         tl = \xs -> (tlk xs) [<>].
         
         -- test : forall (k' : Clock) a. |>k' (forall (k : Clock). Stream k a) -> |>k' (Stream k' a).
@@ -259,13 +259,15 @@ clockSpec = do
         --   let t = tl (xs [af]) in
         --   cons h t.
 
-        eo : forall (k' : Clock) a. (forall (k : Clock). Stream k a) -> Stream k' a.
-        eo = fix (\f (xs : forall (kl : Clock). Fix (StreamF kl a)) -> tl (xs {k'})
-          -- case unfold xs of
-          -- | Cons x xs' -> xs' [<>]
-          -- let ntl = tl (tl xs) : (forall (k' : Clock). Fix (StreamF k' a))
-          -- in  xs -- cons (hd xs) (\\(af : k) -> (f [af]) (tl (tl xs)))
-        ).
+        eof : forall (k : Clock) a. |>k ((forall (k' : Clock). Stream k' a) -> Stream k a) -> (forall (k' : Clock). Stream k' a) -> Stream k a.
+        eof = \f xs -> 
+          let tl2 = tl (tl xs) in
+          let dtl = (\\(af : k) -> (f [af]) tl2) : |>k (Fix (StreamF k a)) in
+          xs.
+          -- cons (hd xs) dtl.
+
+        -- eo : forall (k : Clock) a. (forall (k' : Clock). Stream k' a) -> Stream k a.
+        -- eo = fix (eof {k} {a}).
 
         -- data ListF a f = Nil | LCons a f.
         -- type List a = Fix (ListF a).

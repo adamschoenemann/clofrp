@@ -434,16 +434,23 @@ instL ahat ty@(A a ty') =
           root $ "[InstLAllR]" <+> pretty ahat <+> ":<=" <+> pretty bty <+> "in" <+> pretty ctx
           beta' <- freshName
           let bty' = subst (A a $ TVar beta') beta bty
-          -- TODO: Find out of this is sound. We insert the quantified variable right before
-          -- the existential we're trying to assign. This allows us to type
-          -- (id (\x -> x)) : (forall a. a) -> forall b. b. Without this addition, we could
-          -- only type (id (\x -> x)) : forall b. (forall a. a) -> b even though it should
-          -- be equivalent to the one above
-          ctxUNSAFE <- insertAt (exists ahat) $ mempty <+ Uni beta' k <+ exists ahat
-          ctxSAFE <- (<+ Uni beta' k) <$> getCtx
-          ctx' <- withCtx (const ctxSAFE) $ branch (ahat `instL` bty')
-          (delta, _, delta') <- splitCtx (uni beta') ctx'
-          pure delta
+          let safepath = do 
+                ctxSAFE <- (<+ Uni beta' k) <$> getCtx
+                ctx' <- withCtx (const ctxSAFE) $ branch (ahat `instL` bty')
+                (delta, _, delta') <- splitCtx (Uni beta' k) ctx'
+                pure delta
+              -- TODO: Find out of this is sound. We insert the quantified variable right before
+              -- the existential we're trying to assign. This allows us to type
+              -- (id (\x -> x)) : (forall a. a) -> forall b. b. Without this addition, we could
+              -- only type (id (\x -> x)) : forall b. (forall a. a) -> b even though it should
+              -- be equivalent to the one above
+              unsafepath = do 
+                ctxUNSAFE <- insertAt (exists ahat) $ mempty <+ Uni beta' k <+ exists ahat
+                markerName <- freshName
+                ctx' <- withCtx (const (ctxUNSAFE <+ Marker markerName)) $ branch (ahat `instL` bty')
+                (delta, _, delta') <- splitCtx (Marker markerName) ctx'
+                pure delta
+          safepath
 
         -- InstLTApp. Identical to InstLArr
         TApp t1 t2 -> do
@@ -907,6 +914,10 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
       Nothing -> root "[Var]" *> nameNotFound nm
   
+  -- TickVar
+  synthesize' (TickVar nm) = 
+    synthesize' (Var nm) `decorateErr` (Other "TickVar")
+  
   -- Anno
   synthesize' (Ann e ty) = do
     root $ "[Anno]" <+> pretty e <+> ":" <+> pretty ty
@@ -939,17 +950,6 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     (delta, _, theta) <- splitCtx ce ctx'
     pure (A ann $ argty :->: betat, delta)
   
-  -- ->TickVarE
-  -- TODO: Move to applysynth
-  synthesize' (e1 `App` A _ (TickVar alpha)) = do
-    ctx <- getCtx
-    root $ "[->TickVarE]" <+> pretty expr <+> "in" <+> pretty ctx
-    (ty1, delta) <- branch $ synthesize e1
-    kappa <- lookupTyTM alpha ctx
-    (kappa', cty, theta) <- withCtx (const delta) $ assertLater ty1
-    omega <- withCtx (const theta) $ branch $ kappa `subtypeOf` kappa' 
-    ctysubst <- substCtx omega cty
-    pure (ctysubst, omega)
       
   -- ->TickE
   -- TODO: Move to applysynth
@@ -1023,8 +1023,8 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   
   -- TypeApp=>
   synthesize' (TypeApp ex arg) = do
-    root $ "[TypeApp=>]" <+> pretty ex
-    (exty, theta) <- synthesize ex
+    root $ "[TypeApp=>]" <+> pretty expr
+    (exty, theta) <- branch $ synthesize ex
     extys <- substCtx theta exty
     checkWfType arg
     _ <- asMonotypeTM arg
@@ -1198,6 +1198,20 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
         pure (A tann $ TExists a2, delta)
       else
         nameNotFound alpha
+
+  -- ->TickVarApp
+  applysynth' (Later kappa cty) = do
+    ctx <- getCtx
+    root $ "[TickVarApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+    delta <- branch $ check e kappa
+    pure (cty, delta)
+
+    -- (ty1, delta) <- branch $ synthesize e1
+    -- kappa <- lookupTyTM alpha ctx
+    -- (kappa', cty, theta) <- withCtx (const delta) $ assertLater ty1
+    -- omega <- withCtx (const theta) $ branch $ kappa `subtypeOf` kappa' 
+    -- ctysubst <- substCtx omega cty
+    -- pure (ctysubst, omega)
   
   -- ->App
   applysynth' (aty :->: cty) = do
