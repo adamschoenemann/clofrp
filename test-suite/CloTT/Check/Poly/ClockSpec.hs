@@ -185,30 +185,65 @@ clockSpec = do
         data StreamF (k : Clock) a f = Cons a (|>k f).
         type Stream (k : Clock) a = Fix (StreamF k a).
 
+        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        cons = \x xs -> fold (Cons x xs).
+
         -- demonstrate inference with stupid identity
         id : forall (k : Clock) a. Stream k a -> Stream k a.
         id = fix (\g xs -> 
           case unfold xs of
           | Cons x xs' -> 
             let ys = \\(af : k) -> g [af] (xs' [af])
-            in  fold (Cons x ys)
+            in cons x ys
         ).
-
-        -- mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
-        -- mapfix = \f g xs ->
-        --   case unfold xs of
-        --   | Cons x xs' -> 
-        --     let ys = \\(af : k) -> g [af] (xs' [af])
-        --     in  fold (Cons (f x) ys).
 
         map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
         map = \f -> 
+          --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
           let mapfix = \f g xs ->
                 case unfold xs of
                 | Cons x xs' -> 
                   let ys = \\(af : k) -> g [af] (xs' [af])
-                  in  fold (Cons (f x) ys)
+                  in  cons (f x) ys
           in fix (mapfix f).
+        
+
+        -- applicative structure        
+        pure : forall (k : Clock) a. a -> |>k a.
+        pure = \x -> \\(af : k) -> x.
+
+        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+        app = \lf la -> \\(af : k) -> 
+          let f = lf [af] in
+          let a = la [af] in
+          f a.
+
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> app (pure f) la.
+
+        data NatF f = Z | S f.
+        type Nat = Fix NatF.
+
+        z : Nat.
+        z = fold Z.
+
+        s : Nat -> Nat.
+        s = \x -> fold (S x).
+
+        nats : forall (k : Clock). Stream k Nat.
+        nats = fix (\g -> cons z (fmap (map s) g)).
+        -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
+
+        data ListF a f = Nil | LCons a f.
+        type List a = Fix (ListF a).
+
+        nil : forall a. List a.
+        nil = fold Nil.
+
+        lcons : forall a. a -> List a -> List a.
+        lcons = \x xs -> fold (LCons x xs).
+
       |]
       runCheckProg mempty prog `shouldYield` ()
 

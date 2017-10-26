@@ -224,6 +224,11 @@ freshName = do
   modify $ \s -> s {names = names s + 1}
   pure $ MName i
 
+resetNameState :: TypingM a ()
+resetNameState = do
+  modify $ \s -> s {names = 0}
+  pure ()
+
 initState :: TypingState
 initState = TS 0 0
 
