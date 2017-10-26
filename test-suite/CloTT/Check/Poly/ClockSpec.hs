@@ -184,6 +184,7 @@ clockSpec = do
       let Right prog = pprog [text|
         data StreamF (k : Clock) a f = Cons a (|>k f).
         type Stream (k : Clock) a = Fix (StreamF k a).
+        type CoStream a = forall (k : Clock). Stream k a.
 
         cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
         cons = \x xs -> fold (Cons x xs).
@@ -235,14 +236,45 @@ clockSpec = do
         nats = fix (\g -> cons z (fmap (map s) g)).
         -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
 
-        data ListF a f = Nil | LCons a f.
-        type List a = Fix (ListF a).
+        hdk : forall (k : Clock) a. Stream k a -> a.
+        hdk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> x.
 
-        nil : forall a. List a.
-        nil = fold Nil.
+        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+        tlk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> xs'.
 
-        lcons : forall a. a -> List a -> List a.
-        lcons = \x xs -> fold (LCons x xs).
+        hd : forall a. CoStream a -> a.
+        hd = \xs -> hdk {K0} xs.
+        
+        -- tl : forall a. (forall (k : Clock). Stream k a) -> forall (k : Clock). Stream k a.
+        tl : forall (k' : Clock) a. CoStream a -> Stream k' a.
+        tl = \xs -> (tlk xs) [<>].
+        
+        -- test : forall (k' : Clock) a. |>k' (forall (k : Clock). Stream k a) -> |>k' (Stream k' a).
+        -- test = \xs -> \\(af : k') ->
+        --   let h = hd (xs [af]) in
+        --   let t = tl (xs [af]) in
+        --   cons h t.
+
+        eo : forall (k' : Clock) a. (forall (k : Clock). Stream k a) -> Stream k' a.
+        eo = fix (\f (xs : forall (kl : Clock). Fix (StreamF kl a)) -> tl (xs {k'})
+          -- case unfold xs of
+          -- | Cons x xs' -> xs' [<>]
+          -- let ntl = tl (tl xs) : (forall (k' : Clock). Fix (StreamF k' a))
+          -- in  xs -- cons (hd xs) (\\(af : k) -> (f [af]) (tl (tl xs)))
+        ).
+
+        -- data ListF a f = Nil | LCons a f.
+        -- type List a = Fix (ListF a).
+
+        -- nil : forall a. List a.
+        -- nil = fold Nil.
+
+        -- lcons : forall a. a -> List a -> List a.
+        -- lcons = \x xs -> fold (LCons x xs).
 
       |]
       runCheckProg mempty prog `shouldYield` ()

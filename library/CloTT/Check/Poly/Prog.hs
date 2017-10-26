@@ -294,7 +294,8 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases}) = do
     checkDefs  = M.traverseWithKey traverseDefs defs
     checkAliases = traverse traverseAlias aliases
 
-    ctx = TR {trKinds = kinds, trFree = types, trDestrs = destrs, trCtx = mempty, trClocks = mempty}
+    initKinds = extend "K0" ClockK kinds
+    ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trClocks = mempty}
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor

@@ -188,8 +188,8 @@ kindOf ty = go ty `decorateErr` decorate where
     kctx <- getKCtx
     ctx <- getCtx
     case t of
-      TFree v -> maybe (notFound v) pure $ query v kctx
-      
+      TFree v -> maybe (freeNotFound v) pure $ query v kctx
+
       TVar v -> queryKind v
 
       TExists  v -> queryKind v
@@ -234,7 +234,7 @@ kindOf ty = go ty `decorateErr` decorate where
           _    -> otherErr $ show $ pretty tau <+> "must have kind * at" <+> pretty ty <+> "but had kind" <+> pretty k'
 
     where
-      notFound = nameNotFound
+      freeNotFound v = nameNotFound v `decorateErr` (Other "looking up a free variable")
 
   decorate = Other $ show $ "kindOf" <+> (pretty ty)
 
@@ -320,7 +320,7 @@ checkWfType ty@(A ann ty') = do
 -- will completely ignore trCtx in the TypingM monad
 -- TODO: Also fail ctx such as [a := tau, a] or [a, a := tau]
 wfContext :: forall a. TyCtx a -> TypingM a ()
-wfContext (Gamma elems) = (foldrM fn [] elems *> pure ()) `decorateErr` (Other "wfContext") where
+wfContext (Gamma elems) = (foldrM fn [] elems *> pure ())  where
   fn :: CtxElem a -> [CtxElem a] -> TypingM a [CtxElem a]
   fn el acc = do 
     _ <- withCtx (const $ Gamma acc) $ checkIt el 
@@ -332,8 +332,8 @@ wfContext (Gamma elems) = (foldrM fn [] elems *> pure ()) `decorateErr` (Other "
   checkIt el = case el of
     Uni nm _        -> notInDom nm el
     Exists nm _     -> notInDom nm el
-    (_, nm) `HasType` ty -> notInDom nm el *> checkWfType (asPolytype ty)
-    nm := ty        -> notInDom nm el *> checkWfType (asPolytype ty)
+    (_, nm) `HasType` ty -> notInDom nm el *> checkWfType (asPolytype ty) `decorateErr` (NotWfContext el)
+    nm := ty        -> notInDom nm el *> checkWfType (asPolytype ty) `decorateErr` (NotWfContext el)
     Marker nm       -> do 
       _ <- notInDom nm el 
       Gamma ctx <- getCtx
@@ -372,7 +372,7 @@ assign nm ty = do
     Nothing ->
       case foldr fn ([], False) xs of
         (xs', True) -> do
-          _ <- wfContext (Gamma xs') `decorateErr` (Other $ "Assign")
+          _ <- wfContext (Gamma xs') `decorateErr` (Other $ show $ "Assigning" <+> pretty nm <+> "to" <+> pretty ty)
           pure (Gamma xs')
         (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything" 
       where
@@ -398,9 +398,9 @@ instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
 instL ahat ty@(A a ty') = 
   let solve = do
         ctx <- getCtx
-        root $ "[InstLSolve]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
         mty <- asMonotypeTM ty
         ctx' <- assign ahat mty 
+        root $ "[InstLSolve]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
         pure ctx'
   in solve `catchError` \err -> 
       case ty' of
@@ -433,14 +433,22 @@ instL ahat ty@(A a ty') =
           ctx <- getCtx
           root $ "[InstLAllR]" <+> pretty ahat <+> ":<=" <+> pretty bty <+> "in" <+> pretty ctx
           beta' <- freshName
-          let bty' = subst (A a $ TFree beta') beta bty
-          ctx' <- withCtx (\g -> g <+ Uni beta' k) $ branch (ahat `instL` bty')
+          let bty' = subst (A a $ TVar beta') beta bty
+          -- TODO: Find out of this is sound. We insert the quantified variable right before
+          -- the existential we're trying to assign. This allows us to type
+          -- (id (\x -> x)) : (forall a. a) -> forall b. b. Without this addition, we could
+          -- only type (id (\x -> x)) : forall b. (forall a. a) -> b even though it should
+          -- be equivalent to the one above
+          ctxUNSAFE <- insertAt (exists ahat) $ mempty <+ Uni beta' k <+ exists ahat
+          ctxSAFE <- (<+ Uni beta' k) <$> getCtx
+          ctx' <- withCtx (const ctxSAFE) $ branch (ahat `instL` bty')
           (delta, _, delta') <- splitCtx (uni beta') ctx'
           pure delta
 
         -- InstLTApp. Identical to InstLArr
         TApp t1 t2 -> do
-          root $ "[InstLTApp]" <+> pretty ahat <+> ":<=" <+> pretty ty
+          ctx <- getCtx
+          root $ "[InstLTApp]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
           af1 <- freshName
           af2 <- freshName
           t1k <- kindOf t1
@@ -519,7 +527,8 @@ instR ty@(A a ty') ahat =
 
           -- InstRArr
           t1 :->: t2 -> do
-            root $ "InstRArr"
+            ctx <- getCtx
+            root $ "[InstRArr]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "≜" <+> pretty ctx
             af1 <- freshName
             af2 <- freshName
             let ahat1 = Exists af1 Star
@@ -533,7 +542,8 @@ instR ty@(A a ty') ahat =
           
           -- InstRAllL
           Forall beta k bty -> do
-            root $ "[InstRAllL]"
+            ctx <- getCtx
+            root $ "[InstRAllL]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "≜" <+> pretty ctx
             beta' <- freshName
             let substedB = subst (A a $ TExists beta') beta bty
             ctx' <- withCtx (\g -> g <+ marker beta' <+ Exists beta' k) $ branch (substedB `instR` ahat)
@@ -638,6 +648,25 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
         then pure ctx
         else branch $ nameNotFound a
 
+  -- <:InstantiateL
+  subtypeOf' (TExists ahat) _
+    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
+    | otherwise = do 
+        ctx <- getCtx
+        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2 <+> "in" <+> pretty ctx
+        _ <- checkWfType (A ann1 $ TExists ahat)
+        r <- branch (ahat `instL` ty2)
+        pure r
+
+  -- <:InstantiateR
+  subtypeOf' _ (TExists ahat)
+    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
+    | otherwise = do 
+        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
+        _ <- checkWfType (A ann2 $ TExists ahat)
+        r <- branch (ty1 `instR` ahat)
+        pure r
+
   -- <:->
   subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
     root $ "[<:->]" <+> pretty ty1 <+> "<:" <+> pretty ty2
@@ -665,24 +694,6 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     ctx' <- withCtx (\g -> g <+ marker nm' <+ Exists nm' k) $ branch (t1' `subtypeOf` ty2)
     pure $ dropTil (marker nm') ctx'
   
-  -- <:InstantiateL
-  subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
-    | otherwise = do 
-        ctx <- getCtx
-        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2 <+> "in" <+> pretty ctx
-        _ <- checkWfType (A ann1 $ TExists ahat)
-        r <- branch (ahat `instL` ty2)
-        pure r
-
-  -- <:InstantiateR
-  subtypeOf' _ (TExists ahat)
-    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
-    | otherwise = do 
-        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
-        _ <- checkWfType (A ann2 $ TExists ahat)
-        r <- branch (ty1 `instR` ahat)
-        pure r
   
   -- <:TApp
   subtypeOf' (TApp a1 a2) (TApp b1 b2) = do
@@ -739,12 +750,14 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     pure delta
   
   -- ->I
-  check' (Lam x Nothing e2) (aty :->: bty) = do
+  check' (Lam x mty e2) (aty :->: bty) = do
     ctx <- getCtx
     root $ "[->I]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    ctx' <- maybe getCtx (aty `subtypeOf`) mty
     let c = (LamB, x) `HasType` aty
-    (delta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 bty)
+    (delta, _, _) <- splitCtx c =<< withCtx (const $ ctx' <+ c) (branch $ check e2 bty)
     pure delta
+
   
   -- Case<=
   check' (Case on clauses) _ = do
@@ -902,19 +915,29 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     _ <- branch $ check e ty'
     (ty, ) <$> getCtx
   
-  -- ->L=>
+  -- ->I=>
   synthesize' (Lam x Nothing e) = do
-    root $ "[->L=>]" <+> pretty expr
+    root $ "[->I=>]" <+> pretty expr
     alpha <- freshName
     beta <- freshName
     let alphac = Exists alpha Star
         betac  = Exists beta Star
         alphat = A ann $ TExists alpha 
         betat  = A ann $ TExists beta
-    ctx' <- withCtx (\g -> g <+ alphac <+ betac <+ (LamB, x) `HasType` alphat) $
-                    branch (check e betat)
+    ctx' <- withCtx (\g -> g <+ alphac <+ betac <+ (LamB, x) `HasType` alphat) $ branch (check e betat)
     (delta, _, theta) <- splitCtx ((LamB, x) `HasType` alphat) ctx'
     pure (A ann $ alphat :->: betat, delta)
+
+  -- ->(Anno)I=>
+  synthesize' (Lam x (Just argty) e) = do
+    root $ "[->(Anno)I=>]" <+> pretty expr
+    beta <- freshName
+    let betac  = Exists beta Star
+        betat  = A ann $ TExists beta
+    let ce = (LamB, x) `HasType` argty
+    ctx' <- withCtx (\g -> g <+ betac <+ ce) $ branch (check e betat)
+    (delta, _, theta) <- splitCtx ce ctx'
+    pure (A ann $ argty :->: betat, delta)
   
   -- ->TickVarE
   -- TODO: Move to applysynth
@@ -945,6 +968,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         case kv of
           TExists k -> pure k
           TVar    k -> pure k
+          TFree  "K0" -> pure "K0"
           _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
 
   -- ->UnfoldE=>

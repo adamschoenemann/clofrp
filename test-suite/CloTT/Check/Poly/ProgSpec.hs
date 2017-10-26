@@ -438,6 +438,12 @@ progSpec = do
           case e of
             | Left x -> x
             | Right x -> x.
+
+        id : forall a. a -> a.
+        id = \x -> x.
+        
+        foo : forall a. a -> a.
+        foo = id id id id id.
       |]
       shouldFail $ runCheckProg mempty prog 
 
@@ -1045,4 +1051,18 @@ progSpec = do
         foo = id {forall a. a -> a} id.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ Other "asMonotype")
+    
+    -- it "accepts tricky higher-order stuff (not sure if we should)" $ do
+    --   let Right prog = pprog [text|
+
+    --     id : forall a. a -> a.
+    --     id = \x -> x.
+        
+    --     foo : (forall a. a) -> forall b. b.
+    --     foo = id (\xs -> xs).
+
+    --   |]
+    --   runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog 
+
     
