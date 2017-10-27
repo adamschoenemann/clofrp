@@ -268,7 +268,7 @@ checkWfType ty@(A ann ty') = do
 
     -- ForallWF
     Forall x k t 
-      | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context"
+      | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context" <+> pretty ctx
       | otherwise                         -> withCtx (\g -> g <+ Uni x k) $ checkWfType t 
 
     -- TAppWF
@@ -455,7 +455,7 @@ instL ahat ty@(A a ty') =
                 ctx' <- withCtx (const (ctxUNSAFE <+ Marker markerName)) $ branch (ahat `instL` bty')
                 (delta, _, delta') <- splitCtx (Marker markerName) ctx'
                 pure delta
-          safepath
+          unsafepath
 
         -- InstLTApp. Identical to InstLArr
         TApp t1 t2 -> do
@@ -668,6 +668,25 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     r <- withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
     pure r
 
+  -- <:InstantiateL
+  subtypeOf' (TExists ahat) _
+    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
+    | otherwise = do 
+        ctx <- getCtx
+        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
+        _ <- checkWfType (A ann1 $ TExists ahat)
+        r <- branch (ahat `instL` ty2)
+        pure r
+
+  -- <:InstantiateR
+  subtypeOf' _ (TExists ahat)
+    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
+    | otherwise = do 
+        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
+        _ <- checkWfType (A ann2 $ TExists ahat)
+        r <- branch (ty1 `instR` ahat)
+        pure r
+
   -- <:∀R
   subtypeOf' t1 (Forall a k (A ann t2)) = do
     a' <- freshName
@@ -714,24 +733,6 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     b2' <- substCtx theta b2
     branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
 
-  -- <:InstantiateL
-  subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
-    | otherwise = do 
-        ctx <- getCtx
-        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
-        _ <- checkWfType (A ann1 $ TExists ahat)
-        r <- branch (ahat `instL` ty2)
-        pure r
-
-  -- <:InstantiateR
-  subtypeOf' _ (TExists ahat)
-    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
-    | otherwise = do 
-        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
-        _ <- checkWfType (A ann2 $ TExists ahat)
-        r <- branch (ty1 `instR` ahat)
-        pure r
 
 
   subtypeOf' t1 t2 = do

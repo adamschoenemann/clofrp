@@ -282,17 +282,36 @@ clockSpec = do
         ).
 
         eo : forall a. (forall (k : Clock). Stream k a) -> forall (k : Clock). Stream k a.
-        eo = \xs -> eo xs.
-        -- eo = fix eof.
+        eo = \xs -> eok xs.
 
-        -- data ListF a f = Nil | LCons a f.
-        -- type List a = Fix (ListF a).
+        data ListF a f = Nil | LCons a f.
+        type List a = Fix (ListF a).
 
-        -- nil : forall a. List a.
-        -- nil = fold Nil.
+        nil : forall a. List a.
+        nil = fold Nil.
 
-        -- lcons : forall a. a -> List a -> List a.
-        -- lcons = \x xs -> fold (LCons x xs).
+        lcons : forall a. a -> List a -> List a.
+        lcons = \x xs -> fold (LCons x xs).
+
+        force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
+        force = \x -> x {k} [<>].
+
+        uncons : forall a. CoStream a -> (a, CoStream a).
+        uncons = \xs ->
+          let h = hd xs in
+          let t = tl xs
+          in  (h, t).
+
+        takeBody : forall a. NatF (Nat, CoStream a -> List a) -> CoStream a -> List a.
+        takeBody = \m xs ->
+          case m of
+          | Z -> nil
+          | S (m', r) -> 
+            let (x, xs') = uncons xs
+            in  nil.
+
+        -- take : forall a. Nat -> CoStream a -> List a.
+        -- take = \n -> primRec takeBody n.
 
       |]
       runCheckProg mempty prog `shouldYield` ()
