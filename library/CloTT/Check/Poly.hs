@@ -557,8 +557,8 @@ instR ty@(A a ty') ahat =
             ctx <- getCtx
             rule "InstRAllL" (pretty ty <+> "=<:" <+> pretty ahat)
             beta' <- freshName
-            let substedB = subst (A a $ TExists beta') beta bty
-            ctx' <- withCtx (\g -> g <+ marker beta' <+ Exists beta' k) $ branch (substedB `instR` ahat)
+            let bty' = subst (A a $ TExists beta') beta bty
+            ctx' <- withCtx (\g -> g <+ marker beta' <+ Exists beta' k) $ branch (bty' `instR` ahat)
             (delta, _, delta') <- splitCtx (Marker beta') ctx'
             pure delta
           
@@ -640,7 +640,6 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
         | otherwise ->
             root ("[<:Free]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> cannotSubtype ty1 ty2
             
-
   -- <:Var
   subtypeOf' (TVar x) (TVar x')
         | x == x'   = do
@@ -659,6 +658,15 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
       if ctx `containsEVar` a
         then pure ctx
         else branch $ nameNotFound a
+
+  -- <:->
+  subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
+    root $ "[<:->]" <+> pretty ty1 <+> "<:" <+> pretty ty2
+    ctx' <- branch (b1 `subtypeOf` a1)
+    a2' <- substCtx ctx' a2 `decorateErr` (Other "<:->.1")
+    b2' <- substCtx ctx' b2` decorateErr` (Other "<:->.2")
+    r <- withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
+    pure r
 
   -- <:InstantiateL
   subtypeOf' (TExists ahat) _
@@ -679,15 +687,6 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
         r <- branch (ty1 `instR` ahat)
         pure r
 
-  -- <:->
-  subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
-    root $ "[<:->]" <+> pretty ty1 <+> "<:" <+> pretty ty2
-    ctx' <- branch (b1 `subtypeOf` a1)
-    a2' <- substCtx ctx' a2 `decorateErr` (Other "<:->.1")
-    b2' <- substCtx ctx' b2` decorateErr` (Other "<:->.2")
-    r <- withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
-    pure r
-
   -- <:∀R
   subtypeOf' t1 (Forall a k (A ann t2)) = do
     a' <- freshName
@@ -705,7 +704,6 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     let t1' = subst (A at1 $ TExists nm') nm (A at1 t1)
     ctx' <- withCtx (\g -> g <+ marker nm' <+ Exists nm' k) $ branch (t1' `subtypeOf` ty2)
     pure $ dropTil (Marker nm') ctx'
-  
   
   -- <:TApp
   subtypeOf' (TApp a1 a2) (TApp b1 b2) = do
@@ -733,6 +731,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     a2' <- substCtx theta a2
     b2' <- substCtx theta b2
     branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
+
 
   subtypeOf' t1 t2 = do
     -- root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
@@ -850,8 +849,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     let kappat = A tann (TExists kappa)
     let fixty = A tann (A tann (Later kappat ty) :->: ty)
     withCtx (\g -> g <+ Exists kappa ClockK) $ branch $ check e2 fixty
-
-
   
   -- Sub
   check' _ _ = do

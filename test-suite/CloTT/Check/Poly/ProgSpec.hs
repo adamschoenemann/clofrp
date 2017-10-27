@@ -818,6 +818,20 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
+    it "succeeds for deep quantifiers" $ do
+      let Right prog = pprog [text|
+        app : forall a b. (a -> b) -> a -> b.
+        app = \f x -> f x.
+
+        -- worksWithUnsafefoo : forall a. (forall b. a -> b) -> a -> forall b'. b'.
+        -- worksWithUnsafefoo = \f -> app f.
+
+        foo : forall a. (forall b. a -> b) -> a -> forall b'. b'.
+        foo = \f x -> app f x.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog 
+
     it "fails for impossible defs" $ do
       let Right prog = pprog [text|
         foo : forall a b. a -> b.

@@ -300,6 +300,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases}) = do
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor
         resetNameState
+        -- local (const ctx) $ check expr ty
         censor (const []) $ local (const ctx) $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
