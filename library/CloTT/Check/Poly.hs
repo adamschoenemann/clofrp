@@ -436,7 +436,7 @@ instL ahat ty@(A a ty') =
         -- InstLAllR
         Forall beta k bty -> do
           ctx <- getCtx
-          rule "InstLAllR" (pretty ahat <+> ":<=" <+> pretty bty) 
+          rule "InstLAllR" (pretty ahat <+> ":<=" <+> pretty ty) 
           beta' <- freshName
           let bty' = subst (A a $ TVar beta') beta bty
           let safepath = do 
@@ -668,30 +668,11 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     r <- withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
     pure r
 
-  -- <:InstantiateL
-  subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
-    | otherwise = do 
-        ctx <- getCtx
-        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
-        _ <- checkWfType (A ann1 $ TExists ahat)
-        r <- branch (ahat `instL` ty2)
-        pure r
-
-  -- <:InstantiateR
-  subtypeOf' _ (TExists ahat)
-    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
-    | otherwise = do 
-        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
-        _ <- checkWfType (A ann2 $ TExists ahat)
-        r <- branch (ty1 `instR` ahat)
-        pure r
-
   -- <:∀R
   subtypeOf' t1 (Forall a k (A ann t2)) = do
     a' <- freshName
     ctx <- getCtx
-    root $ "[<:∀R]" <+> pretty ty1 <+> "<:" <+> pretty ty2
+    rule "<:∀R" (pretty ty1 <+> "<:" <+> pretty ty2)
     let ty2' = subst (A ann $ TVar a') a (A ann $ t2)
     ctx' <- withCtx (\g -> g <+ Uni a' k) $ branch (ty1 `subtypeOf` ty2')
     pure $ dropTil (Uni a' k) ctx'
@@ -716,9 +697,10 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   
   -- <:Rec
   subtypeOf' (RecTy b1) (RecTy b2) = do
-    root $ "[<:Rec]" <+> pretty ty1 <+> "<:" <+> pretty ty2
+    rule "<:Rec" (pretty ty1 <+> "<:" <+> pretty ty2)
     branch $ b1 `subtypeOf` b2
 
+  -- <:Tuple
   subtypeOf' (TTuple ts1) (TTuple ts2) = do
     root $ "[<:Tuple]" <+> pretty ty1 <+> "<:" <+> pretty ty2
     ctx <- getCtx
@@ -731,6 +713,25 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     a2' <- substCtx theta a2
     b2' <- substCtx theta b2
     branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
+
+  -- <:InstantiateL
+  subtypeOf' (TExists ahat) _
+    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
+    | otherwise = do 
+        ctx <- getCtx
+        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
+        _ <- checkWfType (A ann1 $ TExists ahat)
+        r <- branch (ahat `instL` ty2)
+        pure r
+
+  -- <:InstantiateR
+  subtypeOf' _ (TExists ahat)
+    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
+    | otherwise = do 
+        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
+        _ <- checkWfType (A ann2 $ TExists ahat)
+        r <- branch (ty1 `instR` ahat)
+        pure r
 
 
   subtypeOf' t1 t2 = do
@@ -1066,6 +1067,7 @@ inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
   Nat _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
+  Undefined -> (A ann $ Forall "a" Star (A ann $ TVar "a"), ) <$> getCtx
 
   -- TODO: The tick constant unifies with any clock variable?
   Tick   -> do 

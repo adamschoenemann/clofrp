@@ -16,6 +16,7 @@ data Prim
   | PrimRec
   | Tick
   | Fix
+  | Undefined
   deriving (Eq, Data, Typeable)
 
 instance Show Prim where
@@ -26,6 +27,8 @@ instance Show Prim where
   show PrimRec = "primRec"
   show Tick    = "◇"
   show Fix     = "fix"
+  show Undefined  = "⊥"
+
 
 
 instance Pretty Prim where

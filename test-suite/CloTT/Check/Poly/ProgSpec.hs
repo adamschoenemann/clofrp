@@ -820,14 +820,34 @@ progSpec = do
 
     it "succeeds for deep quantifiers" $ do
       let Right prog = pprog [text|
-        app : forall a b. (a -> b) -> a -> b.
-        app = \f x -> f x.
+        data Unit = MkUnit.
+        f : Unit -> forall a. a. 
+        f = \x -> undefined x.
+
+        -- imp : (forall a. a) -> forall b. b.
+        -- imp = \x -> undefined.
+
+        -- id : forall a. a -> a.
+        -- id = \x -> x.
+
+        -- ididid : (forall a. a) -> (forall a. a).
+        -- ididid = \x -> id x.
+        -- idid : forall b. (forall a. a) -> b.
+        -- idid = \x -> id (\x -> x) x.
+
+
+        -- eta : Unit -> Unit.
+        -- eta = \x -> f x.
+        -- app : forall b. (Unit -> b) -> Unit -> b.
+        -- app = \f x -> f x.
 
         -- worksWithUnsafefoo : forall a. (forall b. a -> b) -> a -> forall b'. b'.
         -- worksWithUnsafefoo = \f -> app f.
 
-        foo : forall a. (forall b. a -> b) -> a -> forall b'. b'.
-        foo = \f x -> app f x.
+
+        -- foo : (forall b. Unit -> b) -> Unit -> forall b'. b'.
+        -- foo = \f -> app f.
+
       |]
       runCheckProg mempty prog `shouldYield` ()
       -- shouldFail $ runCheckProg mempty prog 

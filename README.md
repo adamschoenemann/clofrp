@@ -47,4 +47,24 @@ For my master's thesis at ITU
 ## Recursive Types
 - Is it really a good idea to expose the recursive primitives to the user?
 
+## Impredicativity and the eta-law
+In general, the inference system should preserve eta-equivalence, such that if
+(λx. f x) : A then f : A. However, this is complicated by predicativity.
+
+Consider a polymorphic function such as `f : () -> ∀a. a`. If we have `⊥ : ∀a. a`
+then we can implement `f` as `f = ⊥`. But this will not type check, as we would
+have to set `a = () -> ∀a. a`, which is an impredicative instantiation.
+(sidenote: Haskell will actually allow this, even though it doesn't support impredicativity?)
+However, we can typecheck `f` as `f = λx -> ⊥ x`, since that will allow us to introduce the
+type-variable into scope first (call it `a'`), and we'll simply set `a = a'`. 
+So this is an example where predicativity breaks the eta-rule.
+
+Another example of the above problem is changing the type of `f` to the equivalent
+`f' : ∀a. () -> a` by floating the positive quantifier left.
+Then we have eta-equivalence. But since the types are equivalent,
+we should have eta-equivalence for `f` as well...
+
+Is this a general problem that you cannot have "full" eta-equivalence with predicative types? I know that it seems undecidable to have both eta-equivalence and impredicative types in SystemF, but since this system is predicative, I feel like I should have "full" eta-equivalence
+
+
 [clott]: https://github.com/adamschoenemann/clott
