@@ -20,7 +20,7 @@ import CloTT.Pretty
 
 
 swidth :: Num a => a
-swidth = 2000
+swidth = 200
 
 shouldYield :: (Show a1, Pretty a1, Show a2, Eq a2) 
             => (Either a1 a2, t, TypingWrite a) -> a2 -> Expectation

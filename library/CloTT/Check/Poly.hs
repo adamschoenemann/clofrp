@@ -389,6 +389,11 @@ lookupTyTM nm c =
     Just t -> pure t
     Nothing -> nameNotFound nm
 
+rule :: Doc () -> Doc () -> TypingM a ()
+rule name info = do
+  ctx <- getCtx
+  root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
+
 -- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
 -- at least implement them both in terms of a more general combinator
 
@@ -400,7 +405,7 @@ instL ahat ty@(A a ty') =
         ctx <- getCtx
         mty <- asMonotypeTM ty
         ctx' <- assign ahat mty 
-        root $ "[InstLSolve]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
+        rule "InstLSolve" (pretty ahat <+> ":<=" <+> pretty ty) 
         pure ctx'
   in solve `catchError` \err -> 
       case ty' of
@@ -408,7 +413,7 @@ instL ahat ty@(A a ty') =
         TExists bhat -> do
           ak <- queryKind ahat
           bk <- queryKind bhat
-          root $ "[InstLReach]" <+> "^" <> pretty bhat <+> "=" <+> "^" <> pretty ahat
+          rule "InstLReach" ("^" <> pretty bhat <+> "=" <+> "^" <> pretty ahat)
           Exists ahat ak `before` Exists bhat bk >>= \case
             True -> assign bhat (A a $ TExists ahat)
             False -> otherErr $ "[InstLReach] error"
@@ -416,7 +421,7 @@ instL ahat ty@(A a ty') =
         -- InstLArr
         t1 :->: t2 -> do
           ctx <- getCtx
-          root $ "[InstLArr]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
+          rule "InstLArr" (pretty ahat <+> ":<=" <+> pretty ty) 
           af1 <- freshName
           af2 <- freshName
           let ahat1 = Exists af1 Star
@@ -431,7 +436,7 @@ instL ahat ty@(A a ty') =
         -- InstLAllR
         Forall beta k bty -> do
           ctx <- getCtx
-          root $ "[InstLAllR]" <+> pretty ahat <+> ":<=" <+> pretty bty <+> "in" <+> pretty ctx
+          rule "InstLAllR" (pretty ahat <+> ":<=" <+> pretty bty) 
           beta' <- freshName
           let bty' = subst (A a $ TVar beta') beta bty
           let safepath = do 
@@ -455,7 +460,7 @@ instL ahat ty@(A a ty') =
         -- InstLTApp. Identical to InstLArr
         TApp t1 t2 -> do
           ctx <- getCtx
-          root $ "[InstLTApp]" <+> pretty ahat <+> ":<=" <+> pretty ty <+> "in" <+> pretty ctx
+          rule "InstLTApp" (pretty ahat <+> ":<=" <+> pretty ty) 
           af1 <- freshName
           af2 <- freshName
           t1k <- kindOf t1
@@ -473,7 +478,7 @@ instL ahat ty@(A a ty') =
 
         -- InstLTuple
         TTuple ts -> do
-          root $ "[InstLTuple]" <+> pretty ty <+> "=<:" <+> pretty ahat
+          rule "InstLTuple" (pretty ty <+> "=<:" <+> pretty ahat)
           nms <- traverse (const freshName) ts
           tyk <- kindOf ty
           let existstup = A a $ TTuple $ map (A a . TExists) nms
@@ -486,7 +491,7 @@ instL ahat ty@(A a ty') =
 
         -- InstLLater. Similar to instantiation of other type-combinators
         Later t1 t2 -> do
-          root $ "[InstLLater]" <+> pretty ahat <+> ":<=" <+> pretty ty
+          rule "InstLLater" (pretty ahat <+> ":<=" <+> pretty ty)
           af1 <- freshName
           af2 <- freshName
           errIf (kindOf t1) (/= ClockK) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected Clock")
@@ -502,14 +507,14 @@ instL ahat ty@(A a ty') =
 
         -- InstLRec
         RecTy t -> do
-          root $ "[InstLRec]" <+> pretty ahat <+> ":<=" <+> pretty ty
+          rule "InstLRec" (pretty ahat <+> ":<=" <+> pretty ty)
           a1 <- freshName
           let rt = A a $ RecTy (A a $ TExists a1)
           ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 (Star :->*: Star) <+ ahat := rt)
           withCtx (const ctx') $ branch (a1 `instL` t)
         
         _ -> do
-          root $ "[InstLError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty
+          rule "InstLError" ("^" <> pretty ahat <+> "=" <+> pretty ty)
           throwError err
 
 
@@ -519,7 +524,7 @@ instR ty@(A a ty') ahat =
   let solve = do
         mty <- asMonotypeTM ty
         ctx' <- assign ahat mty 
-        root $ "[InstRSolve]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "≜" <+> pretty ctx'
+        rule "InstRSolve" (pretty ty <+> "=<:" <+> pretty ahat)
         pure ctx'
   in  solve `catchError` \err ->
         case ty' of
@@ -527,7 +532,7 @@ instR ty@(A a ty') ahat =
           TExists bhat -> do 
             ak <- queryKind ahat
             bk <- queryKind bhat
-            root $ "[InstRReach]" <+> "^" <> pretty ahat <+> "=" <+> "^" <> pretty bhat
+            rule "InstRReach" ("^" <> pretty ahat <+> "=" <+> "^" <> pretty bhat)
             Exists ahat ak `before` Exists bhat bk >>= \case
               True -> assign bhat (A a $ TExists ahat)
               False -> otherErr $ "[InstRReachError]"
@@ -535,7 +540,7 @@ instR ty@(A a ty') ahat =
           -- InstRArr
           t1 :->: t2 -> do
             ctx <- getCtx
-            root $ "[InstRArr]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "≜" <+> pretty ctx
+            rule "InstRArr" (pretty ty <+> "=<:" <+> pretty ahat)
             af1 <- freshName
             af2 <- freshName
             let ahat1 = Exists af1 Star
@@ -550,7 +555,7 @@ instR ty@(A a ty') ahat =
           -- InstRAllL
           Forall beta k bty -> do
             ctx <- getCtx
-            root $ "[InstRAllL]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "≜" <+> pretty ctx
+            rule "InstRAllL" (pretty ty <+> "=<:" <+> pretty ahat)
             beta' <- freshName
             let substedB = subst (A a $ TExists beta') beta bty
             ctx' <- withCtx (\g -> g <+ marker beta' <+ Exists beta' k) $ branch (substedB `instR` ahat)
@@ -560,7 +565,7 @@ instR ty@(A a ty') ahat =
           -- InstRTApp. Identical to InstRArr
           TApp t1 t2 -> do
             ctx <- getCtx
-            root $ "[InstRTApp]" <+> pretty ty <+> "=<:" <+> pretty ahat <+> "in" <+> pretty ctx
+            rule "InstRTApp" (pretty ty <+> "=<:" <+> pretty ahat)
             af1 <- freshName
             af2 <- freshName
             t1k <- kindOf t1
@@ -577,7 +582,7 @@ instR ty@(A a ty') ahat =
 
           -- InstRRec
           RecTy t -> do
-            root $ "[InstRRec]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            rule "InstRRec" (pretty ty <+> "=<:" <+> pretty ahat)
             a1 <- freshName
             let rt = A a $ RecTy (A a $ TExists a1)
             ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 (Star :->*: Star) <+ ahat := rt)
@@ -585,7 +590,7 @@ instR ty@(A a ty') ahat =
           
           -- InstRTuple
           TTuple ts -> do
-            root $ "[InstRTuple]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            rule "InstRTuple" (pretty ty <+> "=<:" <+> pretty ahat)
             nms <- traverse (const freshName) ts
             tyk <- kindOf ty
             let existstup = A a $ TTuple $ map (A a . TExists) nms
@@ -598,7 +603,7 @@ instR ty@(A a ty') ahat =
 
           -- InstRLater. Similar to instantiation of other type-combinators
           Later t1 t2 -> do
-            root $ "[InstRLater]" <+> pretty ty <+> "=<:" <+> pretty ahat
+            rule "InstRLater" (pretty ty <+> "=<:" <+> pretty ahat)
             af1 <- freshName
             af2 <- freshName
             errIf (kindOf t1) (/= ClockK) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected Clock")
@@ -614,7 +619,7 @@ instR ty@(A a ty') ahat =
           
           _ -> do
             ctx <- getCtx
-            root $ "[InstRError]" <+> "^" <> pretty ahat <+> "=" <+> pretty ty <+> "in" <+> pretty ctx
+            rule "InstRError" ("^" <> pretty ahat <+> "=" <+> pretty ty)
             throwError err
             -- otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
 
@@ -660,7 +665,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do 
         ctx <- getCtx
-        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2 <+> "in" <+> pretty ctx
+        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
         _ <- checkWfType (A ann1 $ TExists ahat)
         r <- branch (ahat `instL` ty2)
         pure r
@@ -687,7 +692,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   subtypeOf' t1 (Forall a k (A ann t2)) = do
     a' <- freshName
     ctx <- getCtx
-    root $ "[<:∀R]" <+> pretty ty1 <+> "<:" <+> pretty ty2 <+> "in" <+> pretty ctx
+    root $ "[<:∀R]" <+> pretty ty1 <+> "<:" <+> pretty ty2
     let ty2' = subst (A ann $ TVar a') a (A ann $ t2)
     ctx' <- withCtx (\g -> g <+ Uni a' k) $ branch (ty1 `subtypeOf` ty2')
     pure $ dropTil (Uni a' k) ctx'
@@ -695,7 +700,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:∀L
   subtypeOf' (Forall nm k (A at1 t1)) _ = do
     ctx <- getCtx
-    root $ "[<:∀L]" <+> pretty ty1 <+> "<:" <+> pretty ty2 <+> "in" <+> pretty ctx
+    rule "<:∀L" (pretty ty1 <+> "<:" <+> pretty ty2)
     nm' <- freshName
     let t1' = subst (A at1 $ TExists nm') nm (A at1 t1)
     ctx' <- withCtx (\g -> g <+ marker nm' <+ Exists nm' k) $ branch (t1' `subtypeOf` ty2)
@@ -705,7 +710,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:TApp
   subtypeOf' (TApp a1 a2) (TApp b1 b2) = do
     ctx <- getCtx
-    root $ "[<:TApp]" <+> pretty ty1 <+> "<:" <+> pretty ty2 <+> "in" <+> pretty ctx
+    rule "<:TApp" (pretty ty1 <+> "<:" <+> pretty ty2)
     theta <- branch $ a1 `subtypeOf` b1
     a2' <- substCtx theta a2
     b2' <- substCtx theta b2
@@ -746,7 +751,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- ∀I
   check' _ (Forall alpha k aty) = do
     ctx <- getCtx
-    root $ "[∀I]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    rule "∀I" (pretty e <+> "<=" <+> pretty ty)
     alpha' <- freshName
     let alphat = A tann $ TVar alpha'
     let aty' = subst alphat alpha aty
@@ -759,7 +764,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- ->I
   check' (Lam x mty e2) (aty :->: bty) = do
     ctx <- getCtx
-    root $ "[->I]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    rule "->I" (pretty e <+> "<=" <+> pretty ty)
     ctx' <- maybe getCtx (aty `subtypeOf`) mty
     let c = (LamB, x) `HasType` aty
     (delta, _, _) <- splitCtx c =<< withCtx (const $ ctx' <+ c) (branch $ check e2 bty)
@@ -780,7 +785,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- TickAbsI
   check' (TickAbs af k e2) (Later k' t2) = do
     ctx <- getCtx
-    root $ "[TickAbsI]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    rule "TickAbsI" (pretty e <+> "<=" <+> pretty ty)
     let kty = A eann $ TVar k 
     delta <- branch $ k' `subtypeOf` kty
     kty' <- substCtx delta kty
@@ -817,7 +822,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   check' (Let p e1 e2) _ = do
     root $ "[Let<=]" <+> pretty e <+> "<=" <+> pretty ty
     (ty1, ctx') <- branch $ synthesize e1
-    root $ "[Info] Let synthesized" <+> pretty (ty1, ctx')
+    branch $ withCtx (const ctx') $ rule "Info" ("Let synthesized" <+> pretty ty1)
     ty1s <- substCtx ctx' ty1 `decorateErr` (Other "[Let<=]")
     case p of
       A _ (Bind nm) -> withCtx (const $ ctx' <+ ((LetB, nm) `HasType` ty1s)) $ branch $ check e2 ty
@@ -840,7 +845,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- Fixpoint<=
   check' (A _ (Prim Fix) `App` e2) _ = do
     ctx <- getCtx
-    root $ "[Fixpoint<=]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    rule "Fixpoint<=" (pretty e <+> "<=" <+> pretty ty)
     kappa <- freshName
     let kappat = A tann (TExists kappa)
     let fixty = A tann (A tann (Later kappat ty) :->: ty)
@@ -851,9 +856,9 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- Sub
   check' _ _ = do
     ctx <- getCtx
-    root $ "[Sub]" <+> pretty e <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+    rule "Sub" (pretty e <+> "<=" <+> pretty ty)
     (aty, theta) <- branch $ synthesize e
-    branch $ root $ "[Info] Synthesized" <+> pretty (aty, theta)
+    branch $ withCtx (const theta) $ rule "Info" ("Synthesized" <+> pretty aty)
     atysubst <- substCtx theta aty `decorateErr` (Other "Sub.1")
     btysubst <- substCtx theta ty `decorateErr` (Other "Sub.2")
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
@@ -886,7 +891,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     case clauses of
       (pat, expr) : clauses' -> do
         ctx <- getCtx
-        root $ "[CheckClause] |" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected <+> "in" <+> pretty ctx
+        rule "CheckClause" ("|" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected)
         (expected', ctx') <- checkClause pty (pat, expr) expected
         let nextCtx =  (dropTil (Marker markerName) ctx') <+ Marker markerName
         pty' <- substCtx ctx' pty -- more substCtx for (hopefully) better inference
@@ -965,7 +970,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- TODO: Move to applysynth
   synthesize' (e1 `App` A _ (Prim Tick)) = do
     ctx <- getCtx
-    root $ "[TickE=>]" <+> pretty expr <+> "in" <+> pretty ctx
+    rule "TickE=>" (pretty expr)
     (ty1, delta) <- branch $ synthesize e1
     ty1' <- substCtx delta ty1
     (kappat, cty, theta) <- withCtx (const delta) $ assertLater ty1'
@@ -994,7 +999,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- ->E
   synthesize' (e1 `App` e2) = do
     ctx <- getCtx
-    root $ "[->E]" <+> pretty expr <+> "in" <+> pretty ctx
+    rule "->E" (pretty expr)
     (ty1, theta) <- branch $ synthesize e1
     ty1subst <- substCtx theta ty1 `decorateErr` (Other "[->E]")
     withCtx (const theta) $ branch $ applysynth ty1subst e2 
@@ -1125,7 +1130,7 @@ inferPrim ann p = case p of
 checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)
 checkPat pat@(A ann p) ty = do
   ctx <- getCtx
-  root $ "[CheckPat]" <+> pretty pat <+> "<=" <+> pretty ty <+> "in" <+> pretty ctx
+  rule "CheckPat" (pretty pat <+> "<=" <+> pretty ty)
   dctx <- getDCtx
   case p of
     Bind nm -> pure $ ctx <+ (LetB, nm) `HasType` ty 
@@ -1188,7 +1193,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ∀App
   applysynth' (Forall alpha k aty) = do
     ctx <- getCtx
-    root $ "[∀App]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+    rule "∀App" (pretty ty <+> "•" <+> pretty e)
     -- fresh name to avoid clashes
     alpha' <- freshName
     let atysubst = subst (A tann $ TExists alpha') alpha aty
@@ -1200,7 +1205,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
       -- ^alpha TickApp
       (A _ (TickVar tv)) -> do
         ctx <- getCtx
-        root $ "[αTickApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+        rule "αTickApp" (pretty ty <+> "•" <+> pretty e)
         if ctx `containsEVar` alpha
           then do
             a1 <- freshName
@@ -1216,7 +1221,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     -- ^alpha App
       _  -> do 
         ctx <- getCtx
-        root $ "[αApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+        rule "αApp" (pretty ty <+> "•" <+> pretty e)
         if ctx `containsEVar` alpha
           then do
             a1 <- freshName
@@ -1232,7 +1237,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ->TickVarApp
   applysynth' (Later kappa cty) = do
     ctx <- getCtx
-    root $ "[TickVarApp]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+    rule "TickVarApp" (pretty ty <+> "•" <+> pretty e)
     delta <- branch $ check e kappa
     pure (cty, delta)
 
@@ -1246,7 +1251,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ->App
   applysynth' (aty :->: cty) = do
     ctx <- getCtx
-    root $ "[->App]" <+> pretty ty <+> "•" <+> pretty e <+> "in" <+> pretty ctx
+    rule "->App" (pretty ty <+> "•" <+> pretty e) 
     delta <- branch $ check e aty
     pure (cty, delta)
 

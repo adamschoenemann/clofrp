@@ -152,7 +152,11 @@ instance Show (TyCtx a) where
   show gamma = showW 80 (pretty gamma)
 
 instance Pretty (TyCtx a) where
-  pretty (Gamma xs) = encloseSep "[" "]" ", " $ map pretty $ reverse xs
+  pretty (Gamma xs) = 
+    brackets $ concatWith (\x y -> x <+> softline' <> comma <> space <> y) $ map pretty (reverse xs)
+    -- brackets $ column p where
+    -- p c = concatWith (\x y -> nesting $ \n -> x <> nest (c - n) (softline' <> comma <> space <> y)) $ map pretty (reverse xs)
+    -- list $ map pretty $ reverse xs
 
 instance Unann (TyCtx a) (TyCtx ()) where
   unann (Gamma xs) = Gamma $ map unann xs

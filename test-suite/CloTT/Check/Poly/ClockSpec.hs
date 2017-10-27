@@ -274,7 +274,7 @@ clockSpec = do
           cons (hd xs) dtl.
 
         -- needs to use annotated body (eof above) or directly use body in fix
-        eo : forall (k : Clock) a. (forall (k' : Clock). Stream k' a) -> Stream k a.
+        eo : forall a. (forall (k' : Clock). Stream k' a) -> forall (k : Clock). Stream k a.
         eo = fix (\f xs -> 
           let tl2 = tl (tl xs) in
           let dtl = (\\(af : k) -> (f [af]) tl2) in
