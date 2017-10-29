@@ -196,7 +196,7 @@ clockSpec = do
 
         cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with fmap :(
 
         uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
@@ -274,58 +274,43 @@ clockSpec = do
           let t = tlk (uncos (xs [af])) in
           cons h t.
 
-        delay : forall (k : Clock) a. a -> |>k a.
-        delay = \x -> \\(af : k) -> x.
-
         eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
         eof = \f xs -> 
           let tl2 = tl (tl xs) in
           let dtl = (\\(af : k) -> (f [af]) tl2) in
           cos (hd xs) dtl.
 
-        -- needs to use annotated body (eof above) or directly use body in fix
-        -- eok : forall a. CoStream a -> CoStream a.
-        -- eok = fix (\f (xs : CoStream a) -> 
-        --   let tl2 = tl (tl xs) : CoStream a in
-        --   let dtl = app f (delay tl2) in 
-        --   let xs' = cons (hd xs) (fmap uncos dtl) in 
-        --   let xs'' = xs' : forall (k : Clock). Fix (StreamF k a) in
-        --   xs
-        --   -- Cos (cons (hd xs) dtl)
-        --   -- Cos (cons (hd xs) (fmap uncos dtl))
-        -- ).
+        eo : forall a. CoStream a -> CoStream a.
+        eo = fix eof.
 
-        -- eo : forall a. (forall (k : Clock). Stream k a) -> forall (k : Clock). Stream k a.
-        -- eo = \xs -> eok xs.
+        data ListF a f = Nil | LCons a f.
+        type List a = Fix (ListF a).
 
-        -- data ListF a f = Nil | LCons a f.
-        -- type List a = Fix (ListF a).
+        nil : forall a. List a.
+        nil = fold Nil.
 
-        -- nil : forall a. List a.
-        -- nil = fold Nil.
+        lcons : forall a. a -> List a -> List a.
+        lcons = \x xs -> fold (LCons x xs).
 
-        -- lcons : forall a. a -> List a -> List a.
-        -- lcons = \x xs -> fold (LCons x xs).
+        force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
+        force = \x -> x {k} [<>].
 
-        -- force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
-        -- force = \x -> x {k} [<>].
+        uncons : forall a. CoStream a -> (a, CoStream a).
+        uncons = \xs ->
+          let h = hd xs in
+          let t = tl xs
+          in  (h, t).
 
-        -- uncons : forall a. CoStream a -> (a, CoStream a).
-        -- uncons = \xs ->
-        --   let h = hd xs in
-        --   let t = tl xs
-        --   in  (h, t).
+        takeBody : forall a. NatF (Nat, CoStream a -> List a) -> CoStream a -> List a.
+        takeBody = \m xs ->
+          case m of
+          | Z -> nil
+          | S (m', r) -> 
+            let (x, xs') = uncons xs
+            in lcons x (r xs').
 
-        -- takeBody : forall a. NatF (Nat, CoStream a -> List a) -> CoStream a -> List a.
-        -- takeBody = \m xs ->
-        --   case m of
-        --   | Z -> nil
-        --   | S (m', r) -> 
-        --     let (x, xs') = uncons xs
-        --     in  lcons x (r (xs' : forall (k : Clock). Fix (StreamF k a))).
-
-        -- take : forall a. Nat -> CoStream a -> List a.
-        -- take = \n -> primRec takeBody n.
+        take : forall a. Nat -> CoStream a -> List a.
+        take = \n -> primRec takeBody n.
 
       |]
       runCheckProg mempty prog `shouldYield` ()
