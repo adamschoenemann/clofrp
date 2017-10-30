@@ -187,18 +187,45 @@ clockSpec = do
           | Cons x xs' -> xs'.
       |]
       runCheckProg mempty prog `shouldYield` ()
-
-    it "implements some good old stream functions" $ do
+    
+    it "checks wrapped coinductive streams" $ do
       let Right prog = pprog [text|
         data StreamF (k : Clock) a f = Cons a (|>k f).
         type Stream (k : Clock) a = Fix (StreamF k a).
         data CoStream a = Cos (forall (k : Clock). Stream k a).
 
+        uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
+        uncos = \xs -> case xs of | Cos xs' -> xs'.
+
+        cosid : forall a. CoStream a -> CoStream a.
+        cosid = \x ->
+          let x' = uncos x : forall (k' : Clock). Fix (StreamF k' a) 
+          in Cos x'.
+        
+
+        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        cos = \x xs -> 
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
+
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> \\(af : k) -> f (la [af]).
+
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog
+
+    it "implements some good old stream functions" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+
         cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         cos = \x xs -> 
           Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with fmap :(
 
-        uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
+        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
 
         cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
@@ -312,6 +339,29 @@ clockSpec = do
         take : forall a. Nat -> CoStream a -> List a.
         take = \n -> primRec takeBody n.
 
+        -- maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
+        -- maapfix = \f r xs ->
+        --   let h = hd xs in
+        --   let t = tl xs in
+        --   cos (f h) (\\(af : k) -> 
+        --     let h' = hd t in
+        --     let t' = tl t in
+        --     cos (f h') (\\(beta : k) -> 
+        --       (r [af]) t'
+        --     )
+        --   ).
+
+        maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
+        maapfix = \f r xs ->
+          let h = hd xs in
+          let t = tl xs in
+          let h' = hd t in 
+          let t' = tl t in
+          let inner = \r' -> cos (f h') (pure (r' t'))
+          in  cos (f h) (fmap inner r).
+
+        maap : forall a b. (a -> b) -> CoStream a -> CoStream b.
+        maap = \f -> fix (maapfix f).
       |]
       runCheckProg mempty prog `shouldYield` ()
 

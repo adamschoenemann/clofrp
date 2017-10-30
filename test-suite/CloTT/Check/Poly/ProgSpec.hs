@@ -1074,17 +1074,41 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "Unit" `CannotSubtype` "Bool")
 
-    it "rejects explicit type applications correctly (4)" $ do
+    it "accepts explicit type applications correctly (impredicative)" $ do
       let Right prog = pprog [text|
         data Unit = Unit.
 
         id : forall a. a -> a.
         id = \x -> x.
 
-        foo : forall a. a -> a.
-        foo = id {forall a. a -> a} id.
+        pred : forall a. a -> a.
+        pred = id id.
+
+        imp : (forall a. a -> a) -> (forall a. a -> a).
+        imp = id {forall a. a -> a}.
+
+        imp2 : forall a. a -> a.
+        imp2 = imp id.
+
+        data Maybe a = Nothing | Just a.
+
+        imp3 : Maybe (forall a. a -> a).
+        imp3 = Just {forall a. a -> a} id.
+
+        default : forall a. a -> Maybe a -> a.
+        default = \def m ->
+          case m of
+          | Nothing -> def
+          | Just x -> x.
+        
+        imp4 : Maybe (forall a. a -> a) -> forall a. a -> a.
+        imp4 = \x -> default id x.
+
+        imp4eta : Maybe (forall a. a -> a) -> forall a. a -> a.
+        imp4eta = default {forall a. a -> a} id.
+
       |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ Other "∀a. a -> a is not a monotype")
+      runCheckProg mempty prog `shouldYield` ()
     
     -- it "accepts tricky higher-order stuff (not sure if we should)" $ do
     --   let Right prog = pprog [text|

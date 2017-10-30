@@ -289,3 +289,5 @@ containsTVar ctx alpha = isJust $ ctxFind varPred ctx where
     varPred = \case
       Uni alpha' _k -> alpha == alpha'
       _          -> False
+
+  

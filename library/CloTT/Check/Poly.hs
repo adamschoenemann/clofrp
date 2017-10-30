@@ -29,6 +29,7 @@ module CloTT.Check.Poly
 
 import Data.Foldable (foldlM, foldrM)
 import Control.Applicative ((<|>))
+import Control.Monad ((<=<))
 import Control.Monad.Except (catchError, throwError)
 import Data.Text.Prettyprint.Doc
 import Data.List (find, genericLength)
@@ -103,6 +104,16 @@ substCtx ctx (A a ty) =
       pure (A a $ Later t1' t2')
 
   `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
+
+selfapp :: TyCtx a -> TypingM a (TyCtx a)
+selfapp (Gamma []) = pure $ mempty
+selfapp ctx@(Gamma ((ahat := ty) : xs)) = do
+  tys <- asMonotypeTM =<< substCtx ctx (asPolytype ty)
+  Gamma xs' <- selfapp (Gamma xs)
+  pure (Gamma $ (ahat := tys) : xs')
+selfapp (Gamma (x : xs)) = do
+  Gamma xs' <- selfapp (Gamma xs)
+  pure $ Gamma (x : xs')
 
 mustBeStableUnder :: TyCtx a -> Name -> TypingM a ()
 mustBeStableUnder ctx@(Gamma xs) k = traverse traversal xs *> pure () where 
@@ -391,7 +402,7 @@ lookupTyTM nm c =
 
 rule :: Doc () -> Doc () -> TypingM a ()
 rule name info = do
-  ctx <- getCtx
+  ctx <- selfapp =<< getCtx
   root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
 -- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
@@ -822,8 +833,8 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   check' (Let p e1 e2) _ = do
     root $ "[Let<=]" <+> pretty e <+> "<=" <+> pretty ty
     (ty1, ctx') <- branch $ synthesize e1
-    branch $ withCtx (const ctx') $ rule "Info" ("Let synthesized" <+> pretty ty1)
     ty1s <- substCtx ctx' ty1 `decorateErr` (Other "[Let<=]")
+    branch $ withCtx (const ctx') $ rule "Info" ("Let synthesized" <+> pretty ty1s)
     case p of
       A _ (Bind nm) -> withCtx (const $ ctx' <+ ((LetB, nm) `HasType` ty1s)) $ branch $ check e2 ty
       _       -> snd <$> checkClause ty1s (p, e2) ty
@@ -856,8 +867,8 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     ctx <- getCtx
     rule "Sub" (pretty e <+> "<=" <+> pretty ty)
     (aty, theta) <- branch $ synthesize e
-    branch $ withCtx (const theta) $ rule "Info" ("Synthesized" <+> pretty aty)
     atysubst <- substCtx theta aty `decorateErr` (Other "Sub.1")
+    branch $ withCtx (const theta) $ rule "Info" ("Synthesized" <+> pretty atysubst)
     btysubst <- substCtx theta ty `decorateErr` (Other "Sub.2")
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
   
@@ -1041,7 +1052,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     (exty, theta) <- branch $ synthesize ex
     extys <- substCtx theta exty
     checkWfType arg
-    _ <- asMonotypeTM arg
+    -- _ <- asMonotypeTM arg
     k' <- kindOf arg
     case extys of 
       A _ (Forall af k faty)
