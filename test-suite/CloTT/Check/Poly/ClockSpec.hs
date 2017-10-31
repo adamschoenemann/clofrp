@@ -397,6 +397,12 @@ clockSpec = do
         data TreeF a f = Leaf a | Br f f.
         type Tree a = Fix (TreeF a).
 
+        leaf : forall a. a -> Tree a.
+        leaf = \x -> fold (Leaf x).
+
+        br : forall a. Tree a -> Tree a -> Tree a.
+        br = \x y -> fold (Br x y).
+
         min : Nat -> Nat -> Nat.
         min = primRec (\m n -> 
           case m of 
@@ -404,12 +410,22 @@ clockSpec = do
           | S (m', r) -> fold (S (r n))
         ).
 
-        replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (|>k (Tree Nat), Nat).
-        replaceMinBody = primRec (\t m ->
+        data Delay a (k : Clock) = Delay (|>k a).
+
+        replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (Delay (Tree Nat) k, Nat).
+        replaceMinBody = primRec (\t m -> 
           case t of
-          | Leaf x -> undefined -- (undefined, x) -- (fmap (\z -> fold (Leaf z)) m, x)
-          -- | Br (l, lrec) (r, rrec) -> undefined
+          | Leaf x -> (Delay (fmap leaf m), x) 
+          | Br (l, lrec) (r, rrec) -> -- annotations on let bindings required here unfortunately
+            let (Delay l', ml) = lrec m : (Delay (Fix (TreeF (Fix NatF))) k, Fix (NatF)) in
+            let (Delay r', mr) = rrec m : (Delay (Fix (TreeF (Fix NatF))) k, Fix (NatF)) in
+            let m' = min ml mr in
+            (Delay (app (fmap br l') r'), m')
+            -- (\\(af : k) -> fold (Br (l' [af]) (r' [af])), min ml mr)
         ).
+
+        replaceMin' : forall (k : Clock). Tree Nat -> Tree Nat.
+        replaceMin' = \t -> feedback {k} {Delay (Fix (TreeF (Fix NatF)))} (replaceMinBody {k} t).
       |]
       runCheckProg mempty prog `shouldYield` ()
 

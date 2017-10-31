@@ -1058,7 +1058,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
       A _ (Forall af k faty)
         | k' == k -> pure (subst arg af faty, theta)
 
-      _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg
+      _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg <+> "of kind" <+> pretty k'
 
 
   synthesize' _ = cannotSynthesize expr
@@ -1078,11 +1078,7 @@ inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
   Nat _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
-  Undefined -> do 
-    af <- freshName
-    Gamma xs <- getCtx
-    let ctx' = Gamma (xs ++ [Exists af Star])
-    pure (A ann $ TExists af, ctx') 
+  Undefined -> (A ann $ Forall "a" Star (A ann $ TVar "a"), ) <$> getCtx
 
   -- TODO: The tick constant unifies with any clock variable?
   Tick   -> do 
