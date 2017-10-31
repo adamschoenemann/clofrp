@@ -365,4 +365,52 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
+    it "implements replaceMin" $ do
+      let Right prog = pprog [text|
+
+        -- applicative structure        
+        pure : forall (k : Clock) a. a -> |>k a.
+        pure = \x -> \\(af : k) -> x.
+
+        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+        app = \lf la -> \\(af : k) -> 
+          let f = lf [af] in
+          let a = la [af] in
+          f a.
+
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> app (pure f) la.
+
+        fst : forall a b. (a, b) -> a.
+        fst = \x -> case x of | (y, z) -> y.
+
+        snd : forall a b. (a, b) -> b.
+        snd = \x -> case x of | (y, z) -> z.
+
+        feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
+        feedback = \f -> fst (fix (\x -> f (fmap snd x))).
+
+        data NatF f = Z | S f.
+        type Nat = Fix NatF.
+
+        data TreeF a f = Leaf a | Br f f.
+        type Tree a = Fix (TreeF a).
+
+        min : Nat -> Nat -> Nat.
+        min = primRec (\m n -> 
+          case m of 
+          | Z -> fold Z
+          | S (m', r) -> fold (S (r n))
+        ).
+
+        replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (|>k (Tree Nat), Nat).
+        replaceMinBody = primRec (\t m ->
+          case t of
+          | Leaf x -> undefined -- (undefined, x) -- (fmap (\z -> fold (Leaf z)) m, x)
+          -- | Br (l, lrec) (r, rrec) -> undefined
+        ).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
       
