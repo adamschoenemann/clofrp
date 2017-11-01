@@ -834,7 +834,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     root $ "[Let<=]" <+> pretty e <+> "<=" <+> pretty ty
     (ty1, ctx') <- branch $ synthesize e1
     ty1s <- substCtx ctx' ty1 `decorateErr` (Other "[Let<=]")
-    branch $ withCtx (const ctx') $ rule "Info" ("Let synthesized" <+> pretty ty1s)
+    branch $ withCtx (const ctx') $ rule "Info" ("Let synthesized" <+> pretty ty1s <+> "for" <+> pretty p)
     case p of
       A _ (Bind nm) -> withCtx (const $ ctx' <+ ((LetB, nm) `HasType` ty1s)) $ branch $ check e2 ty
       _       -> snd <$> checkClause ty1s (p, e2) ty
@@ -868,7 +868,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     rule "Sub" (pretty e <+> "<=" <+> pretty ty)
     (aty, theta) <- branch $ synthesize e
     atysubst <- substCtx theta aty `decorateErr` (Other "Sub.1")
-    branch $ withCtx (const theta) $ rule "Info" ("Synthesized" <+> pretty atysubst)
+    branch $ withCtx (const theta) $ rule "Info" ("Synthesized" <+> pretty atysubst <+> "for" <+> pretty e)
     btysubst <- substCtx theta ty `decorateErr` (Other "Sub.2")
     withCtx (const theta) $ branch $ atysubst `subtypeOf` btysubst
   

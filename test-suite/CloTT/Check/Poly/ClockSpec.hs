@@ -404,12 +404,32 @@ clockSpec = do
           | S (m', r) -> fold (S (r n))
         ).
 
-        replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (|>k (Tree Nat), Nat).
+        leaf : forall a. a -> Tree a.
+        leaf = \x -> fold (Leaf x).
+
+        br : forall a. Tree a -> Tree a -> Tree a.
+        br = \l r -> fold (Br l r).
+
+        data Delay a (k : Clock) = Delay (|>k a).
+
+        replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (Delay (Tree Nat) k, Nat).
         replaceMinBody = primRec (\t m ->
           case t of
-          | Leaf x -> undefined -- (undefined, x) -- (fmap (\z -> fold (Leaf z)) m, x)
-          -- | Br (l, lrec) (r, rrec) -> undefined
+          | Leaf x -> (Delay (fmap leaf m), x)
+          | Br (l, lrec) (r, rrec) -> 
+            let (Delay l', ml) = lrec m : (Delay (Fix (TreeF (Fix NatF))) k, Fix NatF) in
+            let (Delay r', mr) = rrec m : (Delay (Fix (TreeF (Fix NatF))) k, Fix NatF) in
+            let m'       = min ml mr in
+            (Delay (app (fmap br l') r'), m')
         ).
+
+        replaceMinK : forall (k : Clock). Tree Nat -> Delay (Tree Nat) k.
+        replaceMinK = \t -> feedback (replaceMinBody t).
+
+        replaceMin : Tree Nat -> Tree Nat.
+        replaceMin = \t -> 
+          let Delay t' = replaceMinK {K0} t
+          in t' [<>].
       |]
       runCheckProg mempty prog `shouldYield` ()
 
