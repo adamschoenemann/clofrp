@@ -1082,11 +1082,7 @@ inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
   Nat _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
-  Undefined -> do 
-    af <- freshName
-    Gamma xs <- getCtx
-    let ctx' = Gamma (xs ++ [Exists af Star])
-    pure (A ann $ TExists af, ctx') 
+  Undefined -> (A ann (Forall "a" Star $ A ann $ TFree $ UName "a"), ) <$> getCtx
 
   -- TODO: The tick constant unifies with any clock variable?
   Tick   -> do 
