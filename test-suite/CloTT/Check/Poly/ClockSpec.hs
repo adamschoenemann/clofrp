@@ -433,4 +433,18 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
+    it "implements stream processing" $ do
+      let Right prog = pprog [text|
+
+        data SPF i o (k : Clock) y x 
+          = ISPI (i -> y)
+          | ISFO (o -> |>k x).
+
+        data SP i o k = SP (Fix (Fix (SPF i o k))).
+
+        step : forall (k : Clock) i o. SP i o k -> 
+        
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
       

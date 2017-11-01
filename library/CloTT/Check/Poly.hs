@@ -230,8 +230,8 @@ kindOf ty = go ty `decorateErr` decorate where
       RecTy tau -> do 
         k <- go tau
         case k of
-          Star :->*: Star -> pure Star
-          _               -> otherErr $ show $ pretty tau <+> "must have kind * -> * to be an argument to Fix" 
+          Star :->*: k -> pure k
+          _            -> otherErr $ show $ pretty tau <+> "must have kind * -> k to be an argument to Fix" 
       
       TTuple ts -> (traverse fn ts) *> pure Star where
         fn tt = kindOf tt >>= \case
@@ -521,12 +521,15 @@ instL ahat ty@(A a ty') =
           rule "InstLRec" (pretty ahat <+> ":<=" <+> pretty ty)
           a1 <- freshName
           let rt = A a $ RecTy (A a $ TExists a1)
-          ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 (Star :->*: Star) <+ ahat := rt)
+          k <- kindOf t
+          ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 k <+ ahat := rt)
           withCtx (const ctx') $ branch (a1 `instL` t)
         
         _ -> do
           rule "InstLError" ("^" <> pretty ahat <+> "=" <+> pretty ty)
           throwError err
+        
+
 
 
 instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
@@ -596,7 +599,8 @@ instR ty@(A a ty') ahat =
             rule "InstRRec" (pretty ty <+> "=<:" <+> pretty ahat)
             a1 <- freshName
             let rt = A a $ RecTy (A a $ TExists a1)
-            ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 (Star :->*: Star) <+ ahat := rt)
+            k <- kindOf t
+            ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 k <+ ahat := rt)
             withCtx (const ctx') $ branch (t `instR` a1)
           
           -- InstRTuple
