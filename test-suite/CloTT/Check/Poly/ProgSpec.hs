@@ -111,7 +111,7 @@ progSpec = do
 
         laterMap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
         laterMap = \fn l -> \\(af : k) -> 
-          let x = l [af] : a
+          let x = (l [af]) 
           in  (fn : a -> b) x.
         
         id : forall a. a -> a.
@@ -821,25 +821,23 @@ progSpec = do
     it "succeeds for deep quantifiers" $ do
       let Right prog = pprog [text|
         data Unit = MkUnit.
-        f : Unit -> forall a. a. 
-        f = \x -> undefined x.
 
         -- imp : (forall a. a) -> forall b. b.
         -- imp = \x -> undefined.
 
-        -- id : forall a. a -> a.
-        -- id = \x -> x.
+        id : forall a. a -> a.
+        id = \x -> x.
 
-        -- ididid : (forall a. a) -> (forall a. a).
-        -- ididid = \x -> id x.
-        -- idid : forall b. (forall a. a) -> b.
-        -- idid = \x -> id (\x -> x) x.
+        ididid : (forall a. a) -> (forall a. a).
+        ididid = \x -> id x.
+        idid : forall b. (forall a. a) -> b.
+        idid = \x -> id (\x -> x) x.
 
 
         -- eta : Unit -> Unit.
         -- eta = \x -> f x.
-        -- app : forall b. (Unit -> b) -> Unit -> b.
-        -- app = \f x -> f x.
+        app : forall b. (Unit -> b) -> Unit -> b.
+        app = \f x -> f x.
 
         -- worksWithUnsafefoo : forall a. (forall b. a -> b) -> a -> forall b'. b'.
         -- worksWithUnsafefoo = \f -> app f.

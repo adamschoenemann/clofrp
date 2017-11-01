@@ -199,7 +199,7 @@ clockSpec = do
 
         cosid : forall a. CoStream a -> CoStream a.
         cosid = \x ->
-          let x' = uncos x : forall (k' : Clock). Fix (StreamF k' a) 
+          let x' = uncos x : forall (k' : Clock). Stream k' a 
           in Cos x'.
         
 
@@ -417,8 +417,8 @@ clockSpec = do
           case t of
           | Leaf x -> (Delay (fmap leaf m), x)
           | Br (l, lrec) (r, rrec) -> 
-            let (Delay l', ml) = lrec m : (Delay (Fix (TreeF (Fix NatF))) k, Fix NatF) in
-            let (Delay r', mr) = rrec m : (Delay (Fix (TreeF (Fix NatF))) k, Fix NatF) in
+            let (Delay l', ml) = lrec m : (Delay (Tree Nat) k, Nat) in
+            let (Delay r', mr) = rrec m : (Delay (Tree Nat) k, Nat) in
             let m'       = min ml mr in
             (Delay (app (fmap br l') r'), m')
         ).
