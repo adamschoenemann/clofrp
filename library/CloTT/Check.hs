@@ -958,15 +958,35 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- ->I=>
   synthesize' (Lam x Nothing e) = do
     root $ "[->I=>]" <+> pretty expr
+    markerName <- freshName
     alpha <- freshName
     beta <- freshName
     let alphac = Exists alpha Star
         betac  = Exists beta Star
         alphat = A ann $ TExists alpha 
         betat  = A ann $ TExists beta
-    ctx' <- withCtx (\g -> g <+ alphac <+ betac <+ (LamB, x) `HasType` alphat) $ branch (check e betat)
-    (delta, _, theta) <- splitCtx ((LamB, x) `HasType` alphat) ctx'
-    pure (A ann $ alphat :->: betat, delta)
+        mrker = Marker markerName
+    ctx' <- withCtx (\g -> g <+ mrker <+ alphac <+ betac <+ (LamB, x) `HasType` alphat) $ branch (check e betat)
+    (delta, _, delta') <- splitCtx mrker ctx'
+    let rty = A ann $ alphat :->: betat
+    tau <- substCtx ctx' rty `decorateErr` (Other "in [->I=>]")
+    let unsolved = getUnsolved delta'
+    let tausubst = foldr (\(x, _k) acc -> subst (A ann $ TVar x) x acc) tau unsolved
+    let quanted = foldr (\(x, k) acc -> A ann $ Forall x k acc) tausubst unsolved
+    root $ "[Info] generalized" <+> pretty tau <+> "to" <+> pretty quanted
+    pure (quanted, delta)
+
+  -- synthesize' (Lam x Nothing e) = do
+  --   root $ "[->I=>]" <+> pretty expr
+  --   alpha <- freshName
+  --   beta <- freshName
+  --   let alphac = Exists alpha Star
+  --       betac  = Exists beta Star
+  --       alphat = A ann $ TExists alpha 
+  --       betat  = A ann $ TExists beta
+  --   ctx' <- withCtx (\g -> g <+ alphac <+ betac <+ (LamB, x) `HasType` alphat) $ branch (check e betat)
+  --   (delta, _, theta) <- splitCtx ((LamB, x) `HasType` alphat) ctx'
+  --   pure (A ann $ alphat :->: betat, delta)
 
   -- ->(Anno)I=>
   synthesize' (Lam x (Just argty) e) = do

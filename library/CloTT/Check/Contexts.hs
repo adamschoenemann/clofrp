@@ -290,4 +290,10 @@ containsTVar ctx alpha = isJust $ ctxFind varPred ctx where
       Uni alpha' _k -> alpha == alpha'
       _          -> False
 
+getUnsolved :: TyCtx a -> [(Name, Kind)]
+getUnsolved (Gamma xs) = foldr fn [] xs where
+  fn (Exists nm k) acc = (nm, k) : acc
+  fn _ acc             = acc
+
+
   

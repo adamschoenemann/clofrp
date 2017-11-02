@@ -363,20 +363,21 @@ progSpec = do
       -- runCheckProg mempty prog `shouldYield` ()
       runCheckProg mempty prog `shouldFailWith` (errs $ Decorate (Other "TickVar") $  NameNotFound "af")
 
-    it "rejects generalized let bindings" $ do
+    it "accepts generalized let bindings" $ do
       let Right prog = pprog [text|
 
         data A = A.
         data B = B.
 
-        wrong : A -> B.
-        wrong = \a -> 
+        right : A -> B.
+        right = \a -> 
           let id = \x -> x in
           let a' = id a
           in  id B.
 
       |]
-      runCheckProg mempty prog `shouldFailWith` (errs $ CannotSubtype "B" "A")
+      -- runCheckProg mempty prog `shouldFailWith` (errs $ CannotSubtype "B" "A")
+      runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for rank2 crap" $ do
       let Right prog = pprog [text|

@@ -188,249 +188,249 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
     
-    -- it "checks wrapped coinductive streams" $ do
-    --   let Right prog = pprog [text|
-    --     data StreamF (k : Clock) a f = Cons a (|>k f).
-    --     type Stream (k : Clock) a = Fix (StreamF k a).
-    --     data CoStream a = Cos (forall (k : Clock). Stream k a).
+    it "checks wrapped coinductive streams" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data CoStream a = Cos (forall (k : Clock). Stream k a).
 
-    --     uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
-    --     uncos = \xs -> case xs of | Cos xs' -> xs'.
+        uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
+        uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-    --     cosid : forall a. CoStream a -> CoStream a.
-    --     cosid = \x ->
-    --       let x' = uncos x : forall (k' : Clock). Stream k' a 
-    --       in Cos x'.
+        cosid : forall a. CoStream a -> CoStream a.
+        cosid = \x ->
+          let x' = uncos x : forall (k' : Clock). Stream k' a 
+          in Cos x'.
         
 
-    --     cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-    --     cos = \x xs -> 
-    --       Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
+        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        cos = \x xs -> 
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
 
-    --     -- functor
-    --     fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-    --     fmap = \f la -> \\(af : k) -> f (la [af]).
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> \\(af : k) -> f (la [af]).
 
-    --   |]
-    --   runCheckProg mempty prog `shouldYield` ()
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
-    -- it "implements some good old stream functions" $ do
-    --   let Right prog = pprog [text|
-    --     data StreamF (k : Clock) a f = Cons a (|>k f).
-    --     type Stream (k : Clock) a = Fix (StreamF k a).
-    --     data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+    it "implements some good old stream functions" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
-    --     cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-    --     cos = \x xs -> 
-    --       Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with fmap :(
+        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        cos = \x xs -> 
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with fmap :(
 
-    --     uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-    --     uncos = \xs -> case xs of | Cos xs' -> xs'.
+        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+        uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-    --     cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-    --     cons = \x xs -> fold (Cons x xs).
+        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        cons = \x xs -> fold (Cons x xs).
 
-    --     -- demonstrate inference with stupid identity
-    --     id : forall (k : Clock) a. Stream k a -> Stream k a.
-    --     id = 
-    --       let fn = \g xs -> 
-    --             case unfold xs of
-    --             | Cons x xs' -> 
-    --               let ys = \\(af : k) -> g [af] (xs' [af])
-    --               in cons x xs'
-    --       in fix fn.
+        -- demonstrate inference with stupid identity
+        id : forall (k : Clock) a. Stream k a -> Stream k a.
+        id = 
+          let fn = \g xs -> 
+                case unfold xs of
+                | Cons x xs' -> 
+                  let ys = \\(af : k) -> g [af] (xs' [af])
+                  in cons x xs'
+          in fix fn.
 
-    --     map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
-    --     map = \f -> 
-    --       --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
-    --       let mapfix = \g xs ->
-    --             case unfold xs of
-    --             | Cons x xs' -> 
-    --               let ys = \\(af : k) -> g [af] (xs' [af])
-    --               in  cons (f x) ys
-    --       in fix mapfix.
+        map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+        map = \f -> 
+          --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
+          let mapfix = \g xs ->
+                case unfold xs of
+                | Cons x xs' -> 
+                  let ys = \\(af : k) -> g [af] (xs' [af])
+                  in  cons (f x) ys
+          in fix mapfix.
         
 
-    --     -- applicative structure        
-    --     pure : forall (k : Clock) a. a -> |>k a.
-    --     pure = \x -> \\(af : k) -> x.
+        -- applicative structure        
+        pure : forall (k : Clock) a. a -> |>k a.
+        pure = \x -> \\(af : k) -> x.
 
-    --     app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
-    --     app = \lf la -> \\(af : k) -> 
-    --       let f = lf [af] in
-    --       let a = la [af] in
-    --       f a.
+        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+        app = \lf la -> \\(af : k) -> 
+          let f = lf [af] in
+          let a = la [af] in
+          f a.
 
-    --     -- functor
-    --     fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-    --     fmap = \f la -> app (pure f) la.
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> app (pure f) la.
 
-    --     data NatF f = Z | S f.
-    --     type Nat = Fix NatF.
+        data NatF f = Z | S f.
+        type Nat = Fix NatF.
 
-    --     z : Nat.
-    --     z = fold Z.
+        z : Nat.
+        z = fold Z.
 
-    --     s : Nat -> Nat.
-    --     s = \x -> fold (S x).
+        s : Nat -> Nat.
+        s = \x -> fold (S x).
 
-    --     nats : forall (k : Clock). Stream k Nat.
-    --     nats = fix (\g -> cons z (fmap (map s) g)).
-    --     -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
+        nats : forall (k : Clock). Stream k Nat.
+        nats = fix (\g -> cons z (fmap (map s) g)).
+        -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
 
-    --     hdk : forall (k : Clock) a. Stream k a -> a.
-    --     hdk = \xs ->
-    --       case unfold xs of
-    --       | Cons x xs' -> x.
+        hdk : forall (k : Clock) a. Stream k a -> a.
+        hdk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> x.
 
-    --     tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
-    --     tlk = \xs ->
-    --       case unfold xs of
-    --       | Cons x xs' -> xs'.
+        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+        tlk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> xs'.
 
-    --     hd : forall a. CoStream a -> a.
-    --     hd = \xs -> hdk {K0} (uncos xs).
+        hd : forall a. CoStream a -> a.
+        hd = \xs -> hdk {K0} (uncos xs).
         
-    --     tl : forall a. CoStream a -> CoStream a.
-    --     tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+        tl : forall a. CoStream a -> CoStream a.
+        tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
         
-    --     test : forall (k' : Clock) a. |>k' (CoStream a) -> |>k' (Stream k' a).
-    --     test = \xs -> \\(af : k') -> 
-    --       let h = hdk (uncos (xs [af])) in
-    --       let t = tlk (uncos (xs [af])) in
-    --       cons h t.
+        test : forall (k' : Clock) a. |>k' (CoStream a) -> |>k' (Stream k' a).
+        test = \xs -> \\(af : k') -> 
+          let h = hdk (uncos (xs [af])) in
+          let t = tlk (uncos (xs [af])) in
+          cons h t.
 
-    --     eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
-    --     eof = \f xs -> 
-    --       let tl2 = tl (tl xs) in
-    --       let dtl = (\\(af : k) -> (f [af]) tl2) in
-    --       cos (hd xs) dtl.
+        eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
+        eof = \f xs -> 
+          let tl2 = tl (tl xs) in
+          let dtl = (\\(af : k) -> (f [af]) tl2) in
+          cos (hd xs) dtl.
 
-    --     eo : forall a. CoStream a -> CoStream a.
-    --     eo = fix eof.
+        eo : forall a. CoStream a -> CoStream a.
+        eo = fix eof.
 
-    --     data ListF a f = Nil | LCons a f.
-    --     type List a = Fix (ListF a).
+        data ListF a f = Nil | LCons a f.
+        type List a = Fix (ListF a).
 
-    --     nil : forall a. List a.
-    --     nil = fold Nil.
+        nil : forall a. List a.
+        nil = fold Nil.
 
-    --     lcons : forall a. a -> List a -> List a.
-    --     lcons = \x xs -> fold (LCons x xs).
+        lcons : forall a. a -> List a -> List a.
+        lcons = \x xs -> fold (LCons x xs).
 
-    --     force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
-    --     force = \x -> x {k} [<>].
+        force : forall a. (forall (k : Clock). |>k a) -> forall (k : Clock). a.
+        force = \x -> x {k} [<>].
 
-    --     uncons : forall a. CoStream a -> (a, CoStream a).
-    --     uncons = \xs ->
-    --       let h = hd xs in
-    --       let t = tl xs
-    --       in  (h, t).
+        uncons : forall a. CoStream a -> (a, CoStream a).
+        uncons = \xs ->
+          let h = hd xs in
+          let t = tl xs
+          in  (h, t).
 
-    --     takeBody : forall a. NatF (Nat, CoStream a -> List a) -> CoStream a -> List a.
-    --     takeBody = \m xs ->
-    --       case m of
-    --       | Z -> nil
-    --       | S (m', r) -> 
-    --         let (x, xs') = uncons xs
-    --         in lcons x (r xs').
+        takeBody : forall a. NatF (Nat, CoStream a -> List a) -> CoStream a -> List a.
+        takeBody = \m xs ->
+          case m of
+          | Z -> nil
+          | S (m', r) -> 
+            let (x, xs') = uncons xs
+            in lcons x (r xs').
 
-    --     take : forall a. Nat -> CoStream a -> List a.
-    --     take = \n -> primRec takeBody n.
+        take : forall a. Nat -> CoStream a -> List a.
+        take = \n -> primRec takeBody n.
 
-    --     -- maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
-    --     -- maapfix = \f r xs ->
-    --     --   let h = hd xs in
-    --     --   let t = tl xs in
-    --     --   cos (f h) (\\(af : k) -> 
-    --     --     let h' = hd t in
-    --     --     let t' = tl t in
-    --     --     cos (f h') (\\(beta : k) -> 
-    --     --       (r [af]) t'
-    --     --     )
-    --     --   ).
+        -- maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
+        -- maapfix = \f r xs ->
+        --   let h = hd xs in
+        --   let t = tl xs in
+        --   cos (f h) (\\(af : k) -> 
+        --     let h' = hd t in
+        --     let t' = tl t in
+        --     cos (f h') (\\(beta : k) -> 
+        --       (r [af]) t'
+        --     )
+        --   ).
 
-    --     maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
-    --     maapfix = \f r xs ->
-    --       let h = hd xs in
-    --       let t = tl xs in
-    --       let h' = hd t in 
-    --       let t' = tl t in
-    --       let inner = \r' -> cos (f h') (pure (r' t'))
-    --       in  cos (f h) (fmap inner r).
+        maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
+        maapfix = \f r xs ->
+          let h = hd xs in
+          let t = tl xs in
+          let h' = hd t in 
+          let t' = tl t in
+          let inner = \r' -> cos (f h') (pure (r' t'))
+          in  cos (f h) (fmap inner r).
 
-    --     maap : forall a b. (a -> b) -> CoStream a -> CoStream b.
-    --     maap = \f -> fix (maapfix f).
-    --   |]
-    --   runCheckProg mempty prog `shouldYield` ()
+        maap : forall a b. (a -> b) -> CoStream a -> CoStream b.
+        maap = \f -> fix (maapfix f).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
-    -- it "implements replaceMin" $ do
-    --   let Right prog = pprog [text|
+    it "implements replaceMin" $ do
+      let Right prog = pprog [text|
 
-    --     -- applicative structure        
-    --     pure : forall (k : Clock) a. a -> |>k a.
-    --     pure = \x -> \\(af : k) -> x.
+        -- applicative structure        
+        pure : forall (k : Clock) a. a -> |>k a.
+        pure = \x -> \\(af : k) -> x.
 
-    --     app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
-    --     app = \lf la -> \\(af : k) -> 
-    --       let f = lf [af] in
-    --       let a = la [af] in
-    --       f a.
+        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+        app = \lf la -> \\(af : k) -> 
+          let f = lf [af] in
+          let a = la [af] in
+          f a.
 
-    --     -- functor
-    --     fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-    --     fmap = \f la -> app (pure f) la.
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> app (pure f) la.
 
-    --     fst : forall a b. (a, b) -> a.
-    --     fst = \x -> case x of | (y, z) -> y.
+        fst : forall a b. (a, b) -> a.
+        fst = \x -> case x of | (y, z) -> y.
 
-    --     snd : forall a b. (a, b) -> b.
-    --     snd = \x -> case x of | (y, z) -> z.
+        snd : forall a b. (a, b) -> b.
+        snd = \x -> case x of | (y, z) -> z.
 
-    --     feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
-    --     feedback = \f -> fst (fix (\x -> f (fmap snd x))).
+        feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
+        feedback = \f -> fst (fix (\x -> f (fmap snd x))).
 
-    --     data NatF f = Z | S f.
-    --     type Nat = Fix NatF.
+        data NatF f = Z | S f.
+        type Nat = Fix NatF.
 
-    --     data TreeF a f = Leaf a | Br f f.
-    --     type Tree a = Fix (TreeF a).
+        data TreeF a f = Leaf a | Br f f.
+        type Tree a = Fix (TreeF a).
 
-    --     min : Nat -> Nat -> Nat.
-    --     min = primRec (\m n -> 
-    --       case m of 
-    --       | Z -> fold Z
-    --       | S (m', r) -> fold (S (r n))
-    --     ).
+        min : Nat -> Nat -> Nat.
+        min = primRec (\m n -> 
+          case m of 
+          | Z -> fold Z
+          | S (m', r) -> fold (S (r n))
+        ).
 
-    --     leaf : forall a. a -> Tree a.
-    --     leaf = \x -> fold (Leaf x).
+        leaf : forall a. a -> Tree a.
+        leaf = \x -> fold (Leaf x).
 
-    --     br : forall a. Tree a -> Tree a -> Tree a.
-    --     br = \l r -> fold (Br l r).
+        br : forall a. Tree a -> Tree a -> Tree a.
+        br = \l r -> fold (Br l r).
 
-    --     data Delay a (k : Clock) = Delay (|>k a).
+        data Delay a (k : Clock) = Delay (|>k a).
 
-    --     replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (Delay (Tree Nat) k, Nat).
-    --     replaceMinBody = primRec (\t m ->
-    --       case t of
-    --       | Leaf x -> (Delay (fmap leaf m), x)
-    --       | Br (l, lrec) (r, rrec) -> 
-    --         let (Delay l', ml) = lrec m : (Delay (Tree Nat) k, Nat) in
-    --         let (Delay r', mr) = rrec m : (Delay (Tree Nat) k, Nat) in
-    --         let m'       = min ml mr in
-    --         (Delay (app (fmap br l') r'), m')
-    --     ).
+        replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (Delay (Tree Nat) k, Nat).
+        replaceMinBody = primRec (\t m ->
+          case t of
+          | Leaf x -> (Delay (fmap leaf m), x)
+          | Br (l, lrec) (r, rrec) -> 
+            let (Delay l', ml) = lrec m {- : (Delay (Tree Nat) k, Nat) -} in
+            let (Delay r', mr) = rrec m {- : (Delay (Tree Nat) k, Nat) -} in
+            let m'       = min ml mr in
+            (Delay (app (fmap br l') r'), m')
+        ).
 
-    --     replaceMinK : forall (k : Clock). Tree Nat -> Delay (Tree Nat) k.
-    --     replaceMinK = \t -> feedback (replaceMinBody t).
+        replaceMinK : forall (k : Clock). Tree Nat -> Delay (Tree Nat) k.
+        replaceMinK = \t -> feedback (replaceMinBody t).
 
-    --     replaceMin : Tree Nat -> Tree Nat.
-    --     replaceMin = \t -> 
-    --       let Delay t' = replaceMinK {K0} t
-    --       in t' [<>].
-    --   |]
-    --   runCheckProg mempty prog `shouldYield` ()
+        replaceMin : Tree Nat -> Tree Nat.
+        replaceMin = \t -> 
+          let Delay t' = replaceMinK {K0} t
+          in t' [<>].
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
     it "implements stream processing" $ do
       let Right prog = pprog [text|
