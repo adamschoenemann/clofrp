@@ -511,11 +511,6 @@ clockSpec = do
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
-
-        -- cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-        -- cons = \x xs -> fold (Cons x xs).
-
-        
       |]
       runCheckProg mempty prog `shouldYield` ()
 
