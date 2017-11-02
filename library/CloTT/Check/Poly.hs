@@ -841,7 +841,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     branch $ withCtx (const ctx') $ rule "Info" ("Let synthesized" <+> pretty ty1s <+> "for" <+> pretty p)
     case p of
       A _ (Bind nm) -> withCtx (const $ ctx' <+ ((LetB, nm) `HasType` ty1s)) $ branch $ check e2 ty
-      _       -> snd <$> checkClause ty1s (p, e2) ty
+      _             -> snd <$> (withCtx (const ctx') $ branch $ checkClause ty1s (p, e2) ty)
   
   -- TypeApp<=
   -- check' (TypeApp ex arg) _ = do
