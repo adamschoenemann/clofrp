@@ -9,9 +9,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module CloTT.Check.Poly.Contexts
-  ( module CloTT.Check.Poly.Contexts
-  , module CloTT.Check.Poly.Destr
+module CloTT.Check.Contexts
+  ( module CloTT.Check.Contexts
+  , module CloTT.Check.Destr
   ) where
 
 import Data.Data
@@ -21,7 +21,7 @@ import qualified Data.Map.Strict as M
 import Data.List (break, find)
 import Data.Maybe (isJust)
 
-import CloTT.Check.Poly.Destr
+import CloTT.Check.Destr
 import CloTT.AST.Parsed hiding (exists)
 import CloTT.Context
 import CloTT.Annotated

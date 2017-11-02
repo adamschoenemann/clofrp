@@ -15,7 +15,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module CloTT.Check.Poly.TypingM where
+module CloTT.Check.TypingM where
 
 import Control.Monad.RWS.Strict hiding ((<>))
 import Control.Monad.Except
@@ -27,7 +27,7 @@ import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
 import CloTT.Pretty
 import CloTT.Context
-import CloTT.Check.Poly.Contexts
+import CloTT.Check.Contexts
 
 branch :: Pretty r => TypingM a r -> TypingM a r
 branch comp = do

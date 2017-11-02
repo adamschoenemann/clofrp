@@ -19,11 +19,11 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module CloTT.Check.Poly
-  ( module CloTT.Check.Poly
-  , module CloTT.Check.Poly.Destr
-  , module CloTT.Check.Poly.Contexts
-  , module CloTT.Check.Poly.TypingM
+module CloTT.Check
+  ( module CloTT.Check
+  , module CloTT.Check.Destr
+  , module CloTT.Check.Contexts
+  , module CloTT.Check.TypingM
   )
   where
 
@@ -40,9 +40,9 @@ import CloTT.Context
 import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
 import CloTT.Pretty
-import CloTT.Check.Poly.Destr
-import CloTT.Check.Poly.Contexts
-import CloTT.Check.Poly.TypingM
+import CloTT.Check.Destr
+import CloTT.Check.Contexts
+import CloTT.Check.TypingM
 
 
 runSubtypeOf0 :: Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)

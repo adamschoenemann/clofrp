@@ -3,14 +3,14 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
 
-module CloTT.Check.Poly.RecSpec where
+module CloTT.Check.RecSpec where
 
 import Test.Tasty.Hspec
 
-import           CloTT.Check.Poly.TestUtils
+import           CloTT.Check.TestUtils
 import           CloTT.QuasiQuoter
-import           CloTT.Check.Poly.Prog
-import           CloTT.Check.Poly.TypingM
+import           CloTT.Check.Prog
+import           CloTT.Check.TypingM
 import           CloTT.Pretty
 import           CloTT.AST.Name
 

@@ -3,14 +3,14 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
 
-module CloTT.Check.Poly.ClockSpec where
+module CloTT.Check.ClockSpec where
 
 import Test.Tasty.Hspec
 
-import CloTT.Check.Poly.TestUtils
+import CloTT.Check.TestUtils
 import CloTT.QuasiQuoter
-import CloTT.Check.Poly.Prog
-import CloTT.Check.Poly.TypingM
+import CloTT.Check.Prog
+import CloTT.Check.TypingM
 import CloTT.AST.Kind
 import CloTT.Context
 import CloTT.TestUtils

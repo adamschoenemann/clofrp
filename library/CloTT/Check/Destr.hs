@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DataKinds #-}
 
-module CloTT.Check.Poly.Destr where
+module CloTT.Check.Destr where
 
 import CloTT.AST.Parsed
 import Data.Data
