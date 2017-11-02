@@ -188,32 +188,31 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
     
-    it "checks wrapped coinductive streams" $ do
-      let Right prog = pprog [text|
-        data StreamF (k : Clock) a f = Cons a (|>k f).
-        type Stream (k : Clock) a = Fix (StreamF k a).
-        data CoStream a = Cos (forall (k : Clock). Stream k a).
+    -- it "checks wrapped coinductive streams" $ do
+    --   let Right prog = pprog [text|
+    --     data StreamF (k : Clock) a f = Cons a (|>k f).
+    --     type Stream (k : Clock) a = Fix (StreamF k a).
+    --     data CoStream a = Cos (forall (k : Clock). Stream k a).
 
-        uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+    --     uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
+    --     uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-        cosid : forall a. CoStream a -> CoStream a.
-        cosid = \x ->
-          let x' = uncos x : forall (k' : Clock). Stream k' a 
-          in Cos x'.
+    --     cosid : forall a. CoStream a -> CoStream a.
+    --     cosid = \x ->
+    --       let x' = uncos x : forall (k' : Clock). Stream k' a 
+    --       in Cos x'.
         
 
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-        cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
+    --     cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+    --     cos = \x xs -> 
+    --       Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
 
-        -- functor
-        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-        fmap = \f la -> \\(af : k) -> f (la [af]).
+    --     -- functor
+    --     fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+    --     fmap = \f la -> \\(af : k) -> f (la [af]).
 
-      |]
-      runCheckProg mempty prog `shouldYield` ()
-      -- shouldFail $ runCheckProg mempty prog
+    --   |]
+    --   runCheckProg mempty prog `shouldYield` ()
 
     -- it "implements some good old stream functions" $ do
     --   let Right prog = pprog [text|
@@ -435,40 +434,64 @@ clockSpec = do
 
     it "implements stream processing" $ do
       let Right prog = pprog [text|
+        
+        data SPF i o (k : Clock) f
+          = Get (i -> f)
+          | Put o (|>k f).
+        
+        type SP i o (k : Clock) = Fix (SPF i o k).
 
-        -- still not quite right...
-        data Inner i y = Inner (i -> y).
-        data Outer i o (k : Clock) x
-          = Input (Fix (Inner i))
-          | Output (o -> |>k x).
-
-        type SP i o (k : Clock) = Fix (Outer i o k).
-
-        step : forall (k : Clock) i o. SP i o k -> Outer i o k (Fix (Outer i o k)).
+        step : forall (k : Clock) i o. SP i o k -> SPF i o k (Fix (SPF i o k)).
         step = unfold.
 
         data StreamF (k : Clock) a f = Cons a (|>k f).
         type Stream (k : Clock) a = Fix (StreamF k a).
         data CoStream a = Cos (forall (k : Clock). Stream k a).
 
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-        cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). 
+        hd : forall a. CoStream a -> a.
+        hd = \xs -> 
+          let Cos s = xs
+          in case unfold s of
+             | Cons x xs' -> x.
 
-        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+        tlk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> xs'.
+        
+        tl : forall a. CoStream a -> CoStream a.
+        tl = \x ->
+          let Cos s = x
+          in Cos (((case unfold s of
+           | Cons x xs' -> xs'
+          ) : forall (k : Clock). |>k (Stream k a)) [<>]).
 
-        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-        cons = \x xs -> fold (Cons x xs).
+        -- applyfix : forall (k : Clock) i o. |>k (SP i o k -> CoStream i -> CoStream o) -> SP i o k -> CoStream i -> CoStream o.
+        -- applyfix = \rec -> 
+        --   primRec (\x s ->
+        --     case x of
+        --     | Get f -> f (hd s) (tl s)
+        --   ) 
+        -- .
 
-        apply : forall (k : Clock) i o. SP i o k -> CoStream i -> CoStream o.
-        apply = \sp s -> fix (\rec sp' s' -> 
-          primRec (\x s' -> undefined
-            -- case x of
-            -- | Input inner -> undefined
-            -- | Output (o, sp'') -> undefined
-          ) (step sp')
-        ) sp s.
+        -- cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        -- cos = \x xs -> 
+        --   Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). 
+
+        -- uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+        -- uncos = \xs -> case xs of | Cos xs' -> xs'.
+
+        -- cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        -- cons = \x xs -> fold (Cons x xs).
+
+        -- apply : forall (k : Clock) i o. SP i o k -> CoStream i -> CoStream o.
+        -- apply = \sp s -> fix (\rec sp' s' -> 
+        --   primRec (\x s' -> undefined
+        --     -- case x of
+        --     -- | Input inner -> undefined
+        --     -- | Output (o, sp'') -> undefined
+        --   ) (step sp')
+        -- ) sp s.
         
       |]
       runCheckProg mempty prog `shouldYield` ()

@@ -1082,11 +1082,7 @@ inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
   Nat _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
-<<<<<<< HEAD
   Undefined -> (A ann $ Forall "a" Star (A ann $ TVar "a"), ) <$> getCtx
-=======
-  Undefined -> (A ann (Forall "a" Star $ A ann $ TFree $ UName "a"), ) <$> getCtx
->>>>>>> bcf96e5b6bbe8d130b56406c221457fd484083e2
 
   -- TODO: The tick constant unifies with any clock variable?
   Tick   -> do 

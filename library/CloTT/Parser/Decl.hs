@@ -50,6 +50,6 @@ constr :: Parser (E.Constr SourcePos)
 constr = ann <*> (E.Constr <$> (UName <$> uidentifier) <*> args) where
   -- to achieve the "space-separation" of constructor args, we have to do this instead of
   -- just `many P.typep`
-  args = many ((P.tvar <|> P.free) <|> parens P.typep)
+  args = many ((P.tvar <|> P.free) <|> try P.ttuple <|> parens P.typep)
 
 
