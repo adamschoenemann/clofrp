@@ -33,6 +33,7 @@ import Data.String (IsString(..))
 import Data.Data (Data, Typeable)
 import qualified CloTT.AST.Prim as P
 import Data.Text.Prettyprint.Doc
+import Control.Monad.Identity
 
 import CloTT.Annotated 
 import CloTT.AST.Name
@@ -271,25 +272,33 @@ unannP (Prog ds) = Prog (map unannD ds)
 quantify :: [(Name, Kind)] -> Type a Poly -> Type a Poly
 quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\(nm,k) t' -> A ann $ Forall nm k t') (A ann t) bound) else id
 
+traverseAnnos :: Monad m => (Type a Poly -> m (Type a Poly)) -> Expr a -> m (Expr a)
+traverseAnnos fn = go where
+  go (A a expr') = go' expr' where
+    go' e' = case e' of
+      Var _ -> pure $ A a e'
+      TickVar _ -> pure $ A a e'
+      Ann e t -> A a <<< Ann <$> go e <*> fn t
+      App e1 e2 -> A a <<< App <$> go e1 <*> go e2
+      -- TODO: deal with name capture here
+      Lam v (Just ty) e -> do 
+        ty' <- fn ty
+        A a . Lam v (Just ty') <$> go e
+      Lam v Nothing   e -> A a . Lam v Nothing <$> go e
+
+      -- -- FIXME: Hack
+      TickAbs v kappa e -> 
+        fn (A a $ TVar kappa) >>= \case  
+          A _ (TVar kappa') -> A a . TickAbs v kappa' <$> go e
+          _                 -> error "Incorrect substitution of tick abstraction annotation"
+
+      Tuple es -> A a . Tuple <$> (sequence $ map go es)
+      Let p e1 e2 -> A a <<< Let p <$> go e1 <*> go e2
+      Case e clauses -> A a <<< Case <$> go e <*> sequence (map (\(p,c) -> (p,) <$> go c) clauses)
+      TypeApp e t -> A a <<< TypeApp <$> go e <*> fn t 
+      Prim p -> pure $ A a e'
+    (<<<) = (.) . (.)
+
 -- substitute type for name in expr (traverses and substitutes in annotations and type applications)
 substTVarInExpr :: Type a Poly -> Name -> Expr a -> Expr a 
-substTVarInExpr new nm = go where
-  go (A a e') = A a $ go' e'
-  go' e' = case e' of
-    Var _ -> e'
-    TickVar _ -> e'
-    Ann e t -> Ann (go e) (subst new nm t)
-    App e1 e2 -> App (go e1) (go e2)
-    -- TODO: deal with name capture here
-    Lam v mty e -> Lam v (subst new nm <$> mty) (go e)
-
-    -- FIXME: Hack
-    TickAbs v kappa e
-      | kappa == nm, A _ (TVar kappa') <- new -> TickAbs v kappa' (go e)
-      | otherwise -> TickAbs v kappa (go e)
-      
-    Tuple es -> Tuple (map go es)
-    Let p e1 e2 -> Let p (go e1) (go e2)
-    Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
-    TypeApp e t -> TypeApp (go e) (subst new nm t) 
-    Prim p -> e'
+substTVarInExpr new nm = runIdentity . traverseAnnos (Identity . subst new nm)

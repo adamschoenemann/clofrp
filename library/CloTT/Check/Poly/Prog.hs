@@ -240,9 +240,10 @@ elabProg (Prog decls) = do
             let FreeCtx types = sigds <> cnstrs
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
+            expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
             -- traceM $ show $ pretty $ M.toList expFree
             -- destrs <- DestrCtx <$> traverse ()
-            pure $ ElabProg kinds (FreeCtx expFree) funds (expDestrs) aliases
+            pure $ ElabProg kinds (FreeCtx expFree) expFunds (expDestrs) aliases
   where 
     expandDestr als d@(Destr {typ, args}) = do
       typ' <- expandAliases als typ
