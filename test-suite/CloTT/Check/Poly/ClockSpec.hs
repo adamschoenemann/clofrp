@@ -483,6 +483,7 @@ clockSpec = do
         fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
         fmap = \f la -> app (pure f) la.
 
+        -- fixpoint above with full types
         applyfix : forall (k : Clock) i o. |>k (SP i o k -> CoStream i -> CoStream o) -> SP i o k -> CoStream i -> CoStream o.
         applyfix = \rec -> 
           primRec (\x s ->
@@ -493,8 +494,16 @@ clockSpec = do
               cos b (app (app rec sp1) (pure s))
           ).
 
+        -- it even works without annotations!
         apply : forall (k : Clock) i o. SP i o k -> CoStream i -> CoStream o.
-        apply = fix applyfix.
+        apply = fix (\rec -> 
+          primRec (\x s ->
+            case x of
+            | Get f -> (snd (f (hd s))) (tl s) 
+            | Put b sp -> 
+              let sp1 = fmap fst sp in
+              cos b (app (app rec sp1) (pure s))
+          )).
 
         cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         cos = \x xs -> 
