@@ -12,7 +12,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module CloTT.Check.Poly.Prog where
+module CloTT.Check.Prog where
 
 import qualified Data.Map.Strict as M
 import Debug.Trace
@@ -26,7 +26,7 @@ import CloTT.Pretty hiding ((<>))
 
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Parsed
-import CloTT.Check.Poly
+import CloTT.Check
 import CloTT.Context
 
 -- Program "elaboration"

@@ -9,9 +9,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module CloTT.Check.Poly.Contexts
-  ( module CloTT.Check.Poly.Contexts
-  , module CloTT.Check.Poly.Destr
+module CloTT.Check.Contexts
+  ( module CloTT.Check.Contexts
+  , module CloTT.Check.Destr
   ) where
 
 import Data.Data
@@ -21,7 +21,7 @@ import qualified Data.Map.Strict as M
 import Data.List (break, find)
 import Data.Maybe (isJust)
 
-import CloTT.Check.Poly.Destr
+import CloTT.Check.Destr
 import CloTT.AST.Parsed hiding (exists)
 import CloTT.Context
 import CloTT.Annotated
@@ -289,5 +289,11 @@ containsTVar ctx alpha = isJust $ ctxFind varPred ctx where
     varPred = \case
       Uni alpha' _k -> alpha == alpha'
       _          -> False
+
+getUnsolved :: TyCtx a -> [(Name, Kind)]
+getUnsolved (Gamma xs) = foldr fn [] xs where
+  fn (Exists nm k) acc = (nm, k) : acc
+  fn _ acc             = acc
+
 
   

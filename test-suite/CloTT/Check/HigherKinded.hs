@@ -4,13 +4,13 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module CloTT.Check.Poly.HigherKinded where
+module CloTT.Check.HigherKinded where
 
 import Test.Tasty.Hspec
 
-import           CloTT.Check.Poly.TestUtils
+import           CloTT.Check.TestUtils
 import           CloTT.QuasiQuoter
-import           CloTT.Check.Poly.Prog
+import           CloTT.Check.Prog
 import           CloTT.AST.Name
 
 data State s a = State (s -> (a, s))

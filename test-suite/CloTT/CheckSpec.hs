@@ -6,20 +6,20 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module CloTT.Check.PolySpec where
+module CloTT.CheckSpec where
 
 import Test.Tasty.Hspec
 import Data.Either (isLeft)
 import Data.String (fromString)
 
 import qualified CloTT.AST.Parsed  as E
-import           CloTT.Check.Poly
-import           CloTT.Check.Poly.Prog
+import           CloTT.Check
+import           CloTT.Check.Prog
 import qualified Data.Map.Strict as M
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
 import           CloTT.QuasiQuoter
-import           CloTT.Check.Poly.TestUtils
+import           CloTT.Check.TestUtils
 import           CloTT.TestUtils
 import           CloTT.Pretty
 import           CloTT.Annotated 
@@ -45,8 +45,8 @@ bar xs =
 
 
 
-polySpec :: Spec
-polySpec = do
+typecheckSpec :: Spec
+typecheckSpec = do
   let nil = mempty :: TyCtx ()
   let stdlib = ["True" |-> A mempty (E.TFree "Bool"), "False" |-> A mempty (E.TFree "Bool")]
   let rd fctx kctx ctx = TR ctx (fctx `mappend` stdlib) kctx mempty mempty

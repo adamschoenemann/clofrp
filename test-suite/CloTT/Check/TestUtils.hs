@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module CloTT.Check.Poly.TestUtils
-  ( module CloTT.Check.Poly.TestUtils
+module CloTT.Check.TestUtils
+  ( module CloTT.Check.TestUtils
   , module NeatInterpolation
   ) where
 
@@ -12,7 +12,7 @@ import Text.Parsec.Pos (SourcePos)
 import Test.Tasty.Hspec
 import NeatInterpolation
 
-import CloTT.Check.Poly
+import CloTT.Check
 import CloTT.AST.Parsed
 import CloTT.Parser.Prog (parseProg)
 import CloTT.TestUtils
