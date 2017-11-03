@@ -8,6 +8,7 @@ module CloTT.Check.RecSpec where
 import Test.Tasty.Hspec
 
 import           CloTT.Check.TestUtils
+import           CloTT.TestUtils
 import           CloTT.QuasiQuoter
 import           CloTT.Check.Prog
 import           CloTT.Check.TypingM

@@ -43,6 +43,3 @@ shouldFailWith (res, st, tree) fn =
   case res of
     Left err -> fn err
     Right x  -> failure (show x ++ "\n" ++ (showW swidth . prettyTree $ tree))
-
-pprog :: Text -> Either ParseError (Prog SourcePos)
-pprog = parseProg . unpack

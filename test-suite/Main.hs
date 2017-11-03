@@ -21,6 +21,7 @@ import CloTT.Check.ClockSpec
 import CloTT.Check.RecSpec
 import CloTT.Check.HigherKinded
 import CloTT.AST.PrettySpec
+import CloTT.EvalSpec
 
 
 main :: IO ()
@@ -34,5 +35,6 @@ main = do
   clocks <- testSpec "clockSpec" clockSpec
   recursive <- testSpec "recursive types" recSpec
   higherKinded <- testSpec "higher kinded types" higherKindedSpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, typecheck, decl, pretty, checkProg, clocks, recursive, higherKinded]
+  eval <- testSpec "evaluation" evalSpec
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, typecheck, decl, pretty, checkProg, clocks, recursive, higherKinded, eval]
   Test.Tasty.defaultMain group
