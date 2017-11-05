@@ -23,6 +23,7 @@ data Value a
   = Prim (P.Prim)
   | Var Name
   | Closure (Env a) Name (E.Expr a)
+  | Tuple [Value a]
   deriving (Show, Eq)
 
 type Env a = Map Name (Value a)
@@ -52,6 +53,9 @@ runEvalM tm r = let (x, _, _) = runRWS (runExceptT (unEvalM tm)) r () in x
 getEnv :: EvalM a (Env a)
 getEnv = ask
 
+withEnv :: (EvalRead a -> EvalRead a) -> EvalM a r -> EvalM a r
+withEnv = local
+
 evalExpr :: Expr a -> EvalM a (Value a)
 evalExpr (A _ expr') = 
   case expr' of
@@ -64,3 +68,18 @@ evalExpr (A _ expr') =
     E.Lam x _mty e -> do
       env <- getEnv
       pure (Closure env x e)
+    
+    E.App e1 e2 -> do
+      v1 <- evalExpr e1
+      case v1 of 
+        Closure cenv nm e1' -> do
+          v2 <- evalExpr e2
+          env <- getEnv
+          let env' = M.insert nm v2 env
+          withEnv (const (cenv `M.union` env')) $ evalExpr e1'
+        _ -> throwError (Other $ "Expected" ++ show v1 ++ "to be a lambda")
+    
+    E.Ann e t -> evalExpr e
+
+    E.Tuple ts -> Tuple <$> sequence (map evalExpr ts) 
+
