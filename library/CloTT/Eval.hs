@@ -3,6 +3,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module CloTT.Eval where
 
@@ -13,6 +15,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Text.Prettyprint.Doc 
 import Control.Applicative
+import Data.Foldable (foldrM)
 
 import CloTT.AST.Name
 import CloTT.Annotated
@@ -26,11 +29,20 @@ import qualified CloTT.AST.Pat  as E
 data PrimVal
   = IntVal Integer
   | Tick
+  | Fold
+  | Unfold
+  | PrimRec
+  | Fix 
   deriving (Eq)
 
 instance Pretty PrimVal where
-  pretty (IntVal i) = pretty i
-  pretty Tick       = "[<>]"
+  pretty = \case
+    IntVal i -> pretty i
+    Tick     -> "[<>]"
+    Fold     -> "fold"
+    Unfold   -> "unfold"
+    PrimRec  -> "primRec"
+    Fix      -> "fix"
 
 instance Show PrimVal where show = show . pretty
 
@@ -60,6 +72,9 @@ instance Show (Value a) where
   show = show . pretty
 
 type Env a = Map Name (Value a)
+
+instance Pretty (Env a) where
+  pretty e = list $ M.elems $ M.mapWithKey (\k v -> pretty k <+> "↦" <+> pretty v) e
 
 type EvalRead a = Env a
 type EvalWrite = ()
@@ -110,7 +125,11 @@ evalPat (A _ p) v =
         _        -> otherErr $ "Tuple pattern failed"
     E.Match nm ps ->
       case v of 
-        Constr nm' vs | nm == nm' -> M.unions <$> sequence (map (uncurry evalPat) $ zip ps vs)
+        Constr nm' vs | nm == nm' -> do 
+          env <- getEnv
+          foldrM folder env (zip ps vs) 
+          where
+            folder (p', v') acc = withEnv (const acc) $ evalPat p' v'
         _        -> otherErr $ "Constructor pattern failed"
 
 evalClause :: Value a -> (Pat a, Expr a) -> EvalM a (Value a)
@@ -122,21 +141,23 @@ evalPrim :: P.Prim -> EvalM a (Value a)
 evalPrim = \case
   P.Unit             -> pure $ Constr "Unit" []
   P.Integer i        -> pure . Prim . IntVal $ i
-  P.Fold             -> otherErr $ "Fold            "
-  P.Unfold           -> otherErr $ "Unfold          "
-  P.PrimRec          -> otherErr $ "PrimRec         "
+  P.Fold             -> pure . Prim $ Fold
+  P.Unfold           -> pure . Prim $ Unfold
+  P.PrimRec          -> pure . Prim $ PrimRec
   P.Tick             -> pure . Prim $ Tick
-  P.Fix              -> otherErr $ "Fix             "
+  P.Fix              -> pure . Prim $ Fix
   P.Undefined        -> otherErr $ "Undefined!"
 
 evalExpr :: Expr a -> EvalM a (Value a)
-evalExpr (A _ expr') = 
+evalExpr (A ann expr') = 
   case expr' of
     E.Prim p -> evalPrim p
     E.Var nm ->
       M.lookup nm <$> getEnv >>= \case
         Just v -> pure v
-        Nothing -> otherErr ("Cannot lookup" ++ show nm)
+        Nothing -> do 
+          env <- getEnv
+          otherErr $ show $ "Cannot lookup" <+> pretty nm <+> "in env" <+> pretty env
     
     E.TickVar nm -> pure $ TickVar nm
 
@@ -165,6 +186,10 @@ evalExpr (A _ expr') =
           v2 <- evalExpr e2
           pure $ Constr nm (args ++ [v2])
         _ -> throwError (Other $ show $ "Expected" <+> pretty v1 <+> "to be a lambda")
+        -- fix f 
+        -- f (fix f)
+        -- f (f (fix f))
+        Prim Fix -> undefined
     
     E.Ann e t -> evalExpr e
 

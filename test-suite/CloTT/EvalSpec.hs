@@ -33,9 +33,11 @@ evalSpec = do
   let eval environ e = runEvalM (evalExpr e) environ
   let int = Prim . IntVal
   let constr nm vs = Constr nm vs
+  let c nm = (nm, Constr nm [])
   let env :: [(E.Name, Value ())]  -> M.Map E.Name (Value ())
       env xs = M.fromList xs
-  let (|->) = \x y -> (x,y)
+  let (|->) = \x y -> (x,y) 
+  let [s,z,cons,nil,just,nothing] = [c "S", c "Z", c "Cons", c "Nil", c "Just", c "Nothing"] :: [(E.Name, Value ())]
   describe "evalExpr" $ do
     it "evals lambdas" $ do
       eval0 ("x" @-> "x") `shouldBe` Right (Closure M.empty "x" (E.var "x"))
@@ -46,10 +48,10 @@ evalSpec = do
     it "evals tuples" $ do
       eval0 (("x" @-> E.tup ["x", E.int 10]) @@ E.int 9) `shouldBe` Right (Tuple [int 9, int 10])
     it "evals contructors (1)" $ do
-      let m = env ["S" |-> constr "S" [], "Z" |-> constr "Z" []]
+      let m = env [s, z]
       eval m ("S" @@ "Z") `shouldBe` Right (constr "S" [constr "Z" []])
     it "evals contructors (2)" $ do
-      let m = env ["S" |-> constr "S" [], "Z" |-> constr "Z" [], "Cons" |-> constr "Cons" [], "Nil" |-> constr "Nil" []]
+      let m = env [s,z,nil,cons]
       let explist = foldr (\x acc -> "Cons" @@ x @@ acc) "Nil"
       let vallist = foldr (\x acc -> constr "Cons" [x, acc]) (constr "Nil" [])
       eval m (explist $ map E.int [1..5]) `shouldBe` Right (vallist $ map int [1..5])
@@ -57,5 +59,43 @@ evalSpec = do
       eval0 (unann [unsafeExpr| let x = 10 in let id = \y -> y in id x |]) `shouldBe` Right (int 10)
     it "evals let bindings (2)" $ do
       eval0 (unann [unsafeExpr| let x = 9 in let id = \x -> x in (id x, id id 10, id id id 11) |]) `shouldBe` Right (Tuple [int 9, int 10, int 11])
+    it "evals let bindings (3)" $ do
+      let m = env [c "Wrap"]
+      eval m (unann [unsafeExpr| (\x -> let Wrap x' = x in x') (Wrap 10) |]) `shouldBe` Right (int 10)
+
+    describe "case expression evaluation" $ do
+      let p1 e = unann [unsafeExpr|
+        (\x -> case x of
+          | Nothing -> 0
+          | Just x -> x
+        )
+      |] @@ e
+      let m = env [s,z,just,nothing,cons,nil]
+      it "evals case expressions (1)" $ do
+        eval m (p1 ("Just" @@ E.int 10)) `shouldBe` Right (int 10)
+      it "evals case expressions (2)" $ do
+        eval m (p1 "Nothing") `shouldBe` Right (int 0)
+
+      let p2 e = unann [unsafeExpr|
+        (\x -> case x of
+          | Nothing -> 0
+          | Just Nil -> 1
+          | Just (Cons x' xs') -> x'
+        ) 
+      |] @@ e
+      it "evals case expressions (3)" $ do
+        eval m (p2 ("Just" @@ ("Cons" @@ E.int 10 @@ "Nil"))) `shouldBe` Right (int 10)
+      it "evals case expressions (4)" $ do
+        eval m (p2 ("Just" @@ "Nil")) `shouldBe` Right (int 1)
+
+      let p3 e = unann [unsafeExpr|
+        \x -> case x of
+          | z -> 10
+          | (x, y) -> x
+      |] @@ e
+
+      it "evals case expression (5)" $ do
+        eval m (p3 (E.tup [E.int 1, E.int 2])) `shouldBe` Right (int 10)
+
     
 
