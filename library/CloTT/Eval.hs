@@ -25,10 +25,12 @@ import qualified CloTT.AST.Pat  as E
 
 data PrimVal
   = IntVal Integer
+  | Tick
   deriving (Eq)
 
 instance Pretty PrimVal where
   pretty (IntVal i) = pretty i
+  pretty Tick       = "[<>]"
 
 instance Show PrimVal where show = show . pretty
 
@@ -118,12 +120,12 @@ evalClause val (p, e) = do
 
 evalPrim :: P.Prim -> EvalM a (Value a)
 evalPrim = \case
-  P.Unit             -> otherErr $ "Unit            "
+  P.Unit             -> pure $ Constr "Unit" []
   P.Integer i        -> pure . Prim . IntVal $ i
   P.Fold             -> otherErr $ "Fold            "
   P.Unfold           -> otherErr $ "Unfold          "
   P.PrimRec          -> otherErr $ "PrimRec         "
-  P.Tick             -> otherErr $ "Tick            "
+  P.Tick             -> pure . Prim $ Tick
   P.Fix              -> otherErr $ "Fix             "
   P.Undefined        -> otherErr $ "Undefined!"
 
@@ -153,11 +155,16 @@ evalExpr (A _ expr') =
           v2 <- evalExpr e2
           env <- getEnv
           let env' = extend nm v2 env
-          withEnv (const (cenv `M.union` env')) $ evalExpr e1'
+          withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
+        TickClosure cenv nm e1' -> do
+          v2 <- evalExpr e2
+          env <- getEnv
+          let env' = extend nm v2 env
+          withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
         Constr nm args -> do
           v2 <- evalExpr e2
           pure $ Constr nm (args ++ [v2])
-        _ -> throwError (Other $ "Expected" ++ show v1 ++ "to be a lambda")
+        _ -> throwError (Other $ show $ "Expected" <+> pretty v1 <+> "to be a lambda")
     
     E.Ann e t -> evalExpr e
 
