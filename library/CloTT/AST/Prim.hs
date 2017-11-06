@@ -10,7 +10,7 @@ import Data.String (fromString)
 
 data Prim
   = Unit
-  | Nat (Pr.Integer)
+  | Integer (Pr.Integer)
   | Fold 
   | Unfold
   | PrimRec
@@ -21,15 +21,13 @@ data Prim
 
 instance Show Prim where
   show Unit    = "()"
-  show (Nat x) = show x
+  show (Integer x) = show x
   show Fold    = "fold"
   show Unfold  = "unfold"
   show PrimRec = "primRec"
   show Tick    = "◇"
   show Fix     = "fix"
   show Undefined  = "⊥"
-
-
 
 instance Pretty Prim where
   pretty = fromString . show

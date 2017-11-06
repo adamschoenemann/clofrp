@@ -18,7 +18,7 @@ type Expr = E.Expr SourcePos
 type Pat  = E.Pat  SourcePos
 
 nat :: Parser Expr
-nat = ann <*> (E.Prim . P.Nat <$> natural)
+nat = ann <*> (E.Prim . P.Integer <$> natural)
 
 tuple :: Parser Expr
 tuple = ann <*> (E.Tuple <$> parens (expr `sepBy2` comma))

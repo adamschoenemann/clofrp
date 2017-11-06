@@ -1088,7 +1088,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
-  Nat _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
+  Integer _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
   Undefined -> (A ann $ Forall "a" Star (A ann $ TVar "a"), ) <$> getCtx
 
   -- TODO: The tick constant unifies with any clock variable?

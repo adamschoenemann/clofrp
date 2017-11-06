@@ -136,7 +136,7 @@ unit :: Expr ()
 unit = A () . Prim $ P.Unit
 
 nat :: Integer -> Expr ()
-nat = A () . Prim . P.Nat
+nat = A () . Prim . P.Integer
 
 true :: Expr ()
 true = A () . Var $ "True"

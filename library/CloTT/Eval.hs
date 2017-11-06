@@ -119,7 +119,7 @@ evalClause val (p, e) = do
 evalPrim :: P.Prim -> EvalM a (Value a)
 evalPrim = \case
   P.Unit             -> otherErr $ "Unit            "
-  P.Nat i            -> pure . Prim . IntVal $ i
+  P.Integer i        -> pure . Prim . IntVal $ i
   P.Fold             -> otherErr $ "Fold            "
   P.Unfold           -> otherErr $ "Unfold          "
   P.PrimRec          -> otherErr $ "PrimRec         "
