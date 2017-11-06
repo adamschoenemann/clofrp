@@ -87,10 +87,6 @@ substCtx ctx (A a ty) =
       t' <- substCtx ctx t
       pure $ A a $ Forall x k t'
 
-    Clock x t -> do
-      t' <- substCtx ctx t
-      pure $ A a $ Clock x t'
-
     RecTy t -> do
       t' <- substCtx ctx t
       pure $ A a $ RecTy t'
@@ -225,8 +221,6 @@ kindOf ty = go ty `decorateErr` decorate where
       
       Forall v k tau -> withCtx (\g -> g <+ Uni v k) $ go tau 
 
-      Clock  v tau -> withCCtx (\g -> extend v () g) $ go tau
-
       RecTy tau -> do 
         k <- go tau
         case k of
@@ -292,13 +286,6 @@ checkWfType ty@(A ann ty') = do
           | otherwise -> otherErr $ show $ pretty t2 <+> "must have kind" <+> pretty k1 <+> "at" <+> pretty ty
         _             -> do 
           otherErr $ show $ pretty t1 <+> "must be a type-constructor" <+> "in kctx" <+> pretty kctx
-
-    -- ClockWF
-    Clock kappa t -> do
-      clks <- getCCtx
-      if kappa `isMemberOf` clks
-        then otherErr $ show $ pretty kappa <+> "is already in clock-context"
-        else withCCtx (extend kappa ()) $ checkWfType t
 
     -- RecTyWF
     RecTy t -> kindOf t >>= \case
@@ -1289,9 +1276,5 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     delta <- branch $ check e aty
     pure (cty, delta)
 
-  
-  applysynth' (Clock _ _) = otherErr $ show $ "Expected" <+> pretty e <+> "to be a clock"
-    
-  
   applysynth' _ = root "[CannotAppSynthesize]" *> cannotAppSynthesize ty e
 

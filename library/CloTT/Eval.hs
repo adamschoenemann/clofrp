@@ -11,9 +11,11 @@ import Control.Monad.Except
 import Control.Monad.State ()
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import Data.Text.Prettyprint.Doc 
 
 import CloTT.AST.Name
 import CloTT.Annotated
+import CloTT.Pretty
 import qualified CloTT.AST.Prim as P
 import CloTT.AST.Expr (Expr)
 import qualified CloTT.AST.Expr as E
@@ -24,7 +26,17 @@ data Value a
   | Var Name
   | Closure (Env a) Name (E.Expr a)
   | Tuple [Value a]
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Pretty (Value a) where
+  pretty = \case
+    Prim p -> pretty p
+    Var nm  -> pretty nm
+    Closure _ n e -> "λ" <> pretty e <+> "->" <+> pretty e
+    Tuple vs -> tupled (map pretty vs)
+
+instance Show (Value a) where
+  show = show . pretty
 
 type Env a = Map Name (Value a)
 

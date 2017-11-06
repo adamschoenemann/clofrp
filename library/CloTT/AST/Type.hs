@@ -40,7 +40,6 @@ data Type' :: * -> TySort -> * where
   TApp    :: Type a s     -> Type a s    -> Type' a s
   (:->:)  :: Type a s     -> Type a s    -> Type' a s
   Forall  :: Name -> Kind -> Type a Poly -> Type' a Poly
-  Clock   :: Name         -> Type a Poly -> Type' a Poly
   RecTy   :: Type a s                    -> Type' a s
   TTuple  :: [Type a s]                  -> Type' a s
   Later   :: Type a s     -> Type a s    -> Type' a s
@@ -71,15 +70,6 @@ prettyT' pars = \case
           p (Forall n' k' t') = Just ((n', k'), t')
           p _              = Nothing
 
-  Clock n t -> 
-    let (ns, t') = collect p t
-        bound = hsep $ map pretty (n:ns)
-    in  parensIf $ "∇" <> bound <> dot <+> prettyT False t'
-        where
-          p :: Type' a s -> Maybe (Name, Type a s)
-          p (Clock n' t')  = Just (n',t')
-          p _            = Nothing
-  
   RecTy t -> parensIf $ "Fix" <+> prettyT True t
   TTuple ts -> tupled $ map (prettyT False) ts
   Later t1 t2 -> parensIf $ "⊳" <> prettyT True t1 <+> prettyT True t2
@@ -123,7 +113,6 @@ unannT' = \case
   t1 `TApp` t2  -> unannT t1 `TApp` unannT t2
   t1 :->: t2    -> unannT t1 :->: unannT t2
   Forall nm k tau -> Forall nm k (unannT tau)
-  Clock nm tau  -> Clock  nm (unannT tau)
   RecTy tau     -> RecTy  (unannT tau)
   TTuple ts     -> TTuple (map unannT ts)
   Later x t     -> Later (unannT x) (unannT t)
@@ -162,7 +151,6 @@ freeVars (A _ ty) =
     TApp x y -> freeVars x `S.union` freeVars y
     x :->: y  -> freeVars x `S.union` freeVars y
     Forall n k t -> freeVars t `S.difference` S.singleton n
-    Clock  n t -> freeVars t `S.difference` S.singleton n
     RecTy  t -> freeVars t 
     TTuple ts -> S.unions $ map freeVars ts
     Later t1 t2 -> freeVars t1 `S.union` freeVars t2
@@ -180,7 +168,6 @@ asPolytype (A a ty) = A a $
     t1 `TApp` t2 -> asPolytype t1 `TApp` asPolytype t2
     t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
     Forall x k t  -> Forall x k (asPolytype t) 
-    Clock  x t   -> Clock  x (asPolytype t) 
     RecTy  t     -> RecTy (asPolytype t) 
     TTuple ts    -> TTuple (map asPolytype ts)
     Later t1 t2  -> Later (asPolytype t1) (asPolytype t2)
@@ -198,9 +185,6 @@ asMonotype (A a ty) =
     t1 :->: t2 -> (\x y -> A a (x :->: y)) <$> asMonotype t1 <*> asMonotype t2
     
     Forall _ _ _ -> Nothing
-
-    -- TODO: Are clock quantifiers monotypes?
-    Clock  _ _ -> Nothing
 
     RecTy  t -> A a . RecTy <$> asMonotype t
 
@@ -222,9 +206,6 @@ subst x forY (A a inTy) =
 
     Forall y k t  | y == forY -> A a $ Forall y k t 
                   | otherwise -> A a $ Forall y k (subst x forY t)
-
-    Clock  y t  | y == forY -> A a $ Clock y t 
-                | otherwise -> A a $ Clock y (subst x forY t)
 
     -- TODO: OK, this is a nasty hack to substitute clock variables
     -- will only really work as long as clock variables and type variables do not

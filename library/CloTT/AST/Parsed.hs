@@ -183,8 +183,7 @@ forAll' nms t = foldr fn t $ nms where
   fn (nm,k) acc = A () $ Forall nm k acc
 
 clocks :: [String] -> Type () Poly -> Type () Poly
-clocks nms t = foldr fn t $ map UName nms where
-  fn nm acc = A () $ Clock nm acc
+clocks nms t = forAll' (map (\x -> (UName x, ClockK)) nms) t
 
 recTy :: Type () Poly -> Type () Poly
 recTy t = A () $ RecTy t
