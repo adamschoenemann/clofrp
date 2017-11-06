@@ -19,7 +19,7 @@ parserSpec :: Spec
 parserSpec = do
   it "parses natural numbers" $ do
     do let Right e = parse P.expr "" "10"
-       E.unannE e `shouldBe` E.nat 10
+       E.unannE e `shouldBe` E.int 10
     do let r = parse P.expr "" "-1"
        r `shouldSatisfy` isLeft
   
@@ -33,11 +33,11 @@ parserSpec = do
   
   it "parses tuples" $ do
     do let Right e = E.unannE <$> parse P.expr "" "(10, False)"
-       e `shouldBe` E.tup [E.nat 10, E.false]
+       e `shouldBe` E.tup [E.int 10, E.false]
     do let Right e = E.unannE <$> parse P.expr "" "(True, 5)"
-       e `shouldBe` E.tup [E.true, E.nat 5]
+       e `shouldBe` E.tup [E.true, E.int 5]
     do let Right e = E.unannE <$> parse P.expr "" "(True, 5, False, 4)"
-       e `shouldBe` E.tup [E.true, E.nat 5, E.false, E.nat 4]
+       e `shouldBe` E.tup [E.true, E.int 5, E.false, E.int 4]
   
   it "parses vars" $ do
     do let Right e = E.unannE <$> parse P.expr "" "x"
@@ -74,7 +74,7 @@ parserSpec = do
     do let Right e = E.unannE <$> parse P.expr "" "let x = y in z"
        e `shouldBe` E.lete "x" "y" "z"
     do let Right e = E.unannE <$> parse P.expr "" "let x = plus x 1 in x"
-       e `shouldBe` E.lete "x" ("plus" @@ "x" @@ E.nat 1) "x"
+       e `shouldBe` E.lete "x" ("plus" @@ "x" @@ E.int 1) "x"
     do let Right e = E.unannE <$> parse P.expr "" "let x = \\p -> y in let z = x in f x"
        e `shouldBe` E.lete "x" ("p" @-> "y") (E.lete "z" "x" ("f" @@ "x"))
     do let Right e = E.unannE <$> parse P.expr "" "let (x,y) = p in x"
@@ -128,13 +128,13 @@ parserSpec = do
   it "parses annotations" $ do
     case E.unannE <$> parse P.expr "" "the (Bool -> Int) (\\x -> 10)" of
       Left e -> failure $ show e
-      Right e -> e `shouldBe` ("x" @-> E.nat 10) @:: (E.free "Bool" @->: E.free "Int")
+      Right e -> e `shouldBe` ("x" @-> E.int 10) @:: (E.free "Bool" @->: E.free "Int")
     case E.unannE <$> parse P.expr "" "the (Bool -> Int -> Int) (\\x -> \\y -> 10)" of
       Left e -> failure $ show e
-      Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: (E.free "Bool" @->: E.free "Int" @->: E.free "Int")
+      Right e -> e `shouldBe` ("x" @-> "y" @-> E.int 10) @:: (E.free "Bool" @->: E.free "Int" @->: E.free "Int")
     case E.unannE <$> parse P.expr "" "(\\x -> \\y -> 10) : Bool -> Int -> Int" of
       Left e -> failure $ show e
-      Right e -> e `shouldBe` ("x" @-> "y" @-> E.nat 10) @:: (E.free "Bool" @->: E.free "Int" @->: E.free "Int")
+      Right e -> e `shouldBe` ("x" @-> "y" @-> E.int 10) @:: (E.free "Bool" @->: E.free "Int" @->: E.free "Int")
     case E.unannE <$> parse P.expr "" "(\\x -> x : Int) : Bool -> Int" of
       Left e -> failure $ show e
       Right e -> e `shouldBe` (("x" @-> ("x" @:: "Int")) @:: (E.free "Bool" @->: E.free "Int"))
@@ -144,10 +144,10 @@ parserSpec = do
       Right e -> e `shouldBe` E.caseof "x" [("y", "y")]
       Left e -> failure $ show e
     case E.unannE <$> parse P.expr "" "case x of | Tuple a b -> 10 | y -> y" of
-      Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" ["a", "b"], E.nat 10), ("y", "y")]
+      Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" ["a", "b"], E.int 10), ("y", "y")]
       Left e -> failure $ show e
     case E.unannE <$> parse P.expr "" "case x of | Tuple (Cons x y) b -> 10 | y -> y" of
-      Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" [E.match "Cons" ["x", "y"], "b"], E.nat 10), ("y", "y")]
+      Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" [E.match "Cons" ["x", "y"], "b"], E.int 10), ("y", "y")]
       Left e -> failure $ show e
     case E.unannE <$> parse P.expr "" "case n of | Z -> n | S n' -> n'" of
       Right e -> e `shouldBe` E.caseof "n" [(E.match "Z" [], "n"), (E.match "S" ["n'"], "n'")]

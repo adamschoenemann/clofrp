@@ -408,7 +408,7 @@ typecheckSpec = do
   describe "synthesize" $ do
     
     it "synthesizes primitives" $ do
-      runSynth (rd'' nil) (E.nat 10) `shouldYield` ("Nat",  nil)
+      runSynth (rd'' nil) (E.int 10) `shouldYield` ("Nat",  nil)
       runSynth (rd'' nil) (E.unit)   `shouldYield` ("Unit", nil)
     
     it "synthesizes variables" $ do
@@ -419,10 +419,10 @@ typecheckSpec = do
       let mk = rd' ["Nat" |-> Star, "Bool" |-> Star]
       do let tctx = nil <+ "x" .: "Nat"
          runSynth (mk tctx) (E.the "Nat" "x") `shouldYield` ("Nat", tctx)
-      runSynth (mk nil) (E.the "Nat" (E.nat 10)) `shouldYield` ("Nat", nil)
-      shouldFail $ runSynth (mk nil) (E.the "Bool" (E.nat 10))
+      runSynth (mk nil) (E.the "Nat" (E.int 10)) `shouldYield` ("Nat", nil)
+      shouldFail $ runSynth (mk nil) (E.the "Bool" (E.int 10))
       runSynth (mk nil) (E.the "Bool" (E.true)) `shouldYield` ("Bool", nil)
-      runSynth (mk nil) (E.the ("Bool" @->: "Nat") ("x" @-> E.nat 10)) `shouldYield` ("Bool" @->: "Nat", nil)
+      runSynth (mk nil) (E.the ("Bool" @->: "Nat") ("x" @-> E.int 10)) `shouldYield` ("Bool" @->: "Nat", nil)
       shouldFail $ runSynth (mk nil) (E.the ("Bool" @->: "Nat") ("x" @-> "x")) 
       runSynth (mk nil) (E.the ("Bool" @->: "Bool") ("x" @-> "x")) `shouldYield` ("Bool" @->: "Bool", nil)
       shouldFail $ runSynth (mk nil) (E.the (E.forAll ["a"] "Bool" @->: "a") ("x" @-> "x")) 
@@ -437,7 +437,7 @@ typecheckSpec = do
 
     it "checks primitives" $ do
       let ctx = rd' ["Nat" |-> Star, "Bool" |-> Star, "Unit" |-> Star] nil
-      runCheck ctx (E.nat 10) "Nat" `shouldYield` nil
+      runCheck ctx (E.int 10) "Nat" `shouldYield` nil
       runCheck ctx E.unit "Unit" `shouldYield` nil
       runCheck ctx E.true "Bool" `shouldYield` nil
       runCheck ctx E.true (E.forAll ["a"] "Bool") `shouldYield` nil
@@ -478,11 +478,11 @@ typecheckSpec = do
     it "checks applications (mono)" $ do
       let mk = rd' ["Nat" |-> Star, "Bool" |-> Star]
       do let ctx = nil <+ "x" .: ("Nat" @->: "Nat")
-         runCheck (mk ctx) ("x" @@ E.nat 10) "Nat" `shouldYield` ctx
+         runCheck (mk ctx) ("x" @@ E.int 10) "Nat" `shouldYield` ctx
       do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
-         runCheck (mk ctx) ("x" @@ E.nat 10) ("Bool" @->: "Nat") `shouldYield` ctx
+         runCheck (mk ctx) ("x" @@ E.int 10) ("Bool" @->: "Nat") `shouldYield` ctx
       do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
-         runCheck (mk ctx) ("x" @@ E.nat 10 @@ E.true) ("Nat") `shouldYield` ctx
+         runCheck (mk ctx) ("x" @@ E.int 10 @@ E.true) ("Nat") `shouldYield` ctx
       do let ctx = nil <+ "x" .: (("Nat" @->: "Bool") @->: "Bool")
          runCheck (mk ctx) ("x" @@ ("y" @-> E.true)) ("Bool") `shouldYield` ctx
       do let ctx = nil <+ "x" .: (("Nat" @->: "Bool") @->: "Bool")
@@ -496,25 +496,25 @@ typecheckSpec = do
       -- Seems kinda wrong
       let mk = rd' ["Nat" |-> Star, "Bool" |-> Star]
       do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a")
-         runCheck (mk ctx) ("id" @@ E.nat 10) "Nat" `shouldYield` (ctx <+ E.mname 0 := "Nat")
+         runCheck (mk ctx) ("id" @@ E.int 10) "Nat" `shouldYield` (ctx <+ E.mname 0 := "Nat")
       do let ctx = nil <+ "foo" .: (E.forAll ["a"] $ "a" @->: "a" @->: "a")
-         runCheck (mk ctx) ("foo" @@ E.nat 10) ("Nat" @->: "Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
+         runCheck (mk ctx) ("foo" @@ E.int 10) ("Nat" @->: "Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
       do let ctx = nil <+ "foo" .: (E.forAll ["a"] $ "a" @->: "a" @->: "a")
-         runCheck (mk ctx) ("foo" @@ E.nat 10 @@ E.nat 9) ("Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
+         runCheck (mk ctx) ("foo" @@ E.int 10 @@ E.int 9) ("Nat") `shouldYield` (ctx <+ E.mname 0 := "Nat")
       do let ctx = nil <+ "foo" .: (E.forAll ["a"] $ "a" @->: "a" @->: "a")
-         shouldFail $ runCheck (mk ctx) ("foo" @@ E.nat 10 @@ E.true) ("Bool") 
+         shouldFail $ runCheck (mk ctx) ("foo" @@ E.int 10 @@ E.true) ("Bool") 
     
     it "succeeds when applying same function twice to same type param" $ do
       do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a") 
                 <+ "foo" .: ("Nat" @->: "Nat" @->: "Unit")
-         runCheck (rd' ["Nat" |-> Star, "Unit" |-> Star] ctx) ("foo" @@ ("id" @@ E.nat 10) @@ ("id" @@ E.nat 10)) ("Unit")
+         runCheck (rd' ["Nat" |-> Star, "Unit" |-> Star] ctx) ("foo" @@ ("id" @@ E.int 10) @@ ("id" @@ E.int 10)) ("Unit")
            `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Nat")
 
     it "succeeds when applying same function twice to different type params" $ do
       do let ctx = nil <+ "id" .: (E.forAll ["a"] $ "a" @->: "a") 
                 <+ "foo" .: ("Nat" @->: "Bool" @->: "Unit")
          runCheck (rd' ["Nat" |-> Star, "Bool" |-> Star, "Unit" |-> Star] ctx)
-                  ("foo" @@ ("id" @@ E.nat 10) @@ ("id" @@ E.true))
+                  ("foo" @@ ("id" @@ E.int 10) @@ ("id" @@ E.true))
                   ("Unit")
            `shouldYield` (ctx <+ E.mname 0 := "Nat" <+ E.mname 1 := "Bool")
     
@@ -523,21 +523,21 @@ typecheckSpec = do
       let kctx = ["Maybe" |-> Star :->*: Star, "Nat" |-> Star]
       let fctx = ["Just" |-> E.forAll ["a"] ("a" @->: "Maybe" @@: "a")]
       let ctx = rd fctx kctx lctx
-      runCheck ctx ("Just" @@ E.nat 10) ("Maybe" @@: "Nat") `shouldYield` (lctx <+ E.mname 0 := "Nat")
+      runCheck ctx ("Just" @@ E.int 10) ("Maybe" @@: "Nat") `shouldYield` (lctx <+ E.mname 0 := "Nat")
 
     it "works with type-constructors (2)" $ do
       let lctx = nil 
       let kctx = ["Maybe" |-> Star :->*: Star, "Nat" |-> Star]
       let fctx = ["Just" |-> E.forAll ["a"] ("a" @->: "Maybe" @@: "a")]
       let ctx = rd fctx kctx lctx
-      runCheck ctx ("Just" @@ E.nat 10) ("Maybe" @@: "Nat") `shouldYield` (lctx <+ E.mname 0 := "Nat")
+      runCheck ctx ("Just" @@ E.int 10) ("Maybe" @@: "Nat") `shouldYield` (lctx <+ E.mname 0 := "Nat")
 
     it "fails Just 10 <= forall a. Maybe a" $ do
       let lctx = nil 
       let kctx = ["Maybe" |-> Star :->*: Star, "Nat" |-> Star]
       let fctx = ["Just" |-> E.forAll ["a"] ("a" @->: "Maybe" @@: "a")]
       let ctx = rd fctx kctx lctx
-      shouldFail $ runCheck ctx ("Just" @@ E.nat 10) (E.forAll ["a"] $ "Maybe" @@: "a")
+      shouldFail $ runCheck ctx ("Just" @@ E.int 10) (E.forAll ["a"] $ "Maybe" @@: "a")
     
     it "works with rank-2 types" $ do
       let mk = rd' ["Unit" |-> Star, "Nat" |-> Star]
@@ -623,9 +623,9 @@ typecheckSpec = do
       do let ctx = nil <+ "x" .: (E.forAll ["a"] $ "a" @->: "a")
          runCheck (mk ctx) ("x" @@ E.true) "Bool" `shouldYield` (ctx <+ E.mname 0 := "Bool")
       do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
-         runCheck (mk ctx) ("x" @@ E.nat 10) ("Bool" @->: "Nat") `shouldYield` ctx
+         runCheck (mk ctx) ("x" @@ E.int 10) ("Bool" @->: "Nat") `shouldYield` ctx
       do let ctx = nil <+ "x" .: ("Nat" @->: "Bool" @->: "Nat")
-         runCheck (mk ctx) ("x" @@ E.nat 10 @@ E.true) ("Nat") `shouldYield` ctx
+         runCheck (mk ctx) ("x" @@ E.int 10 @@ E.true) ("Nat") `shouldYield` ctx
       do let ctx = nil <+ "x" .: (("Nat" @->: "Bool") @->: "Bool")
          runCheck (mk ctx) ("x" @@ ("y" @-> E.true)) ("Bool") `shouldYield` ctx
     

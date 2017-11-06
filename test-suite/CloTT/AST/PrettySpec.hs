@@ -54,7 +54,7 @@ prettySpec = do
     it "works lol" $ do
       let [a,b,c] = ["a" :: E.Expr(), "b", "c"]
       pps a `shouldBe` "a"
-      pps (E.nat 10) `shouldBe` "10"
+      pps (E.int 10) `shouldBe` "10"
       pps E.true `shouldBe` "True"
       pps E.unit `shouldBe` "()"
       pps ("a" @-> b)`shouldBe` "\\a -> b"
@@ -63,8 +63,8 @@ prettySpec = do
       pps ("Tuple" @@ a @@ b) `shouldBe` "Tuple a b"
       pps ("Tuple" @@ ("Just" @@ a) @@ b) `shouldBe` "Tuple (Just a) b"
       pps ("Tuple" @@ ("a" @-> c) @@ b) `shouldBe` "Tuple (\\a -> c) b"
-      pps (E.the "Nat" (E.nat 10)) `shouldBe` "(10 : Nat)"
-      pps (E.the ("Nat" @->: "Bool") (E.nat 10)) `shouldBe` "(10 : Nat -> Bool)"
+      pps (E.the "Nat" (E.int 10)) `shouldBe` "(10 : Nat)"
+      pps (E.the ("Nat" @->: "Bool") (E.int 10)) `shouldBe` "(10 : Nat -> Bool)"
       pps [unsafeExpr|case 10 of | x -> 0|] `shouldBe` "case 10 of | x -> 0"
       ppsw 100 [unsafeExpr|case b of | True -> 0 | False -> 1|] `shouldBe` "case b of | True -> 0 | False -> 1"
   

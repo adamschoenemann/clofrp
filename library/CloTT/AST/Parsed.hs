@@ -135,8 +135,8 @@ free nm = A () $ TFree nm
 unit :: Expr ()
 unit = A () . Prim $ P.Unit
 
-nat :: Integer -> Expr ()
-nat = A () . Prim . P.Integer
+int :: Integer -> Expr ()
+int = A () . Prim . P.Integer
 
 true :: Expr ()
 true = A () . Var $ "True"
