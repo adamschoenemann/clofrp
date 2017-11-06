@@ -6,6 +6,7 @@ import Data.Data
 import Data.String (IsString(..))
 import Data.List (genericLength)
 import Data.Text.Prettyprint.Doc
+import Data.Char (isUpper, isLower)
 
 data Name 
   = UName String
@@ -35,3 +36,10 @@ instance IsString Name where
 
 mname :: Integer -> Name
 mname = MName
+
+isVarNm, isConstrNm :: Name -> Bool
+isVarNm (UName (x:xs)) = isLower x
+isVarNm _              = False
+
+isConstrNm (UName (x:xs)) = isUpper x
+isConstrNm _              = False

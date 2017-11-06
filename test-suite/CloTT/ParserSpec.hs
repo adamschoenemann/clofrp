@@ -234,7 +234,7 @@ parserSpec = do
        e `shouldBe` E.forAll' [("k", E.ClockK), ("a", E.Star)] (E.later "k" "a" @->: "a")
   
   it "parses laters" $ do
-    do let Right e = E.unannT <$> parse P.typep "" "clocks k. forall a. |>k a -> a"
+    do let Right e = E.unannT <$> parse P.typep "" "forall (k : Clock). forall a. |>k a -> a"
        e `shouldBe` (E.clocks ["k"] $ E.forAll ["a"] $ E.later "k" "a" @->: "a")
     do let Right e = E.unannT <$> parse P.typep "" "|>k (a -> a)"
        e `shouldBe` (E.later "k" ("a" @->: "a"))
@@ -244,15 +244,15 @@ parserSpec = do
        e `shouldBe` (E.later "k" ("f" @@: "a"))
 
   it "parses clock quantifiers" $ do
-    do let Right e = E.unannT <$> parse P.typep "" "clocks a. a"
+    do let Right e = E.unannT <$> parse P.typep "" "forall (a : Clock). a"
        e `shouldBe` E.clocks ["a"] "a"
-    do let Right e = E.unannT <$> parse P.typep "" "clocks a. a -> Int"
+    do let Right e = E.unannT <$> parse P.typep "" "forall (a : Clock). a -> Int"
        e `shouldBe` E.clocks ["a"] ("a" @->: "Int")
-    do let Right e = E.unannT <$> parse P.typep "" "clocks a b. (a -> b) -> (b -> a) -> Iso a b"
+    do let Right e = E.unannT <$> parse P.typep "" "forall (a : Clock) (b : Clock). (a -> b) -> (b -> a) -> Iso a b"
        e `shouldBe` E.clocks ["a", "b"] (("a" @->: "b") @->: ("b" @->: "a") @->: "Iso" @@: "a" @@: "b")
-    do let Right e = E.unannT <$> parse P.typep "" "clocks a. (clocks b. a -> b) -> b"
+    do let Right e = E.unannT <$> parse P.typep "" "forall (a : Clock). (forall (b : Clock). a -> b) -> b"
        e `shouldBe` E.clocks ["a"] ((E.clocks ["b"] $ "a" @->: "b") @->: "b")
-    do let Right e = E.unannT <$> parse P.typep "" "clocks a. clocks b. a -> b -> b"
+    do let Right e = E.unannT <$> parse P.typep "" "forall (a : Clock) (b : Clock). a -> b -> b"
        e `shouldBe` E.clocks ["a"] (E.clocks ["b"] $ "a" @->: "b" @->: "b")
 
   it "parses recursive types (1)" $ do

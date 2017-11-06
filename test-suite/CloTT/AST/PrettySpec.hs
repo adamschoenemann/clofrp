@@ -44,7 +44,7 @@ prettySpec = do
       pps (E.forAll ["a"] $ "a" @->: (E.forAll ["b"] $"Tuple" @@: "a" @@: "b") @->: "a") `shouldBe` "∀a. a -> (∀b. Tuple a b) -> a" 
       pps (E.forAll ["a", "b"] $ "a" @->: "b") `shouldBe` "∀a b. a -> b"
       pps (E.forAll ["a", "b", "c"] $ ("a" @->: "b") @->: "c") `shouldBe` "∀a b c. (a -> b) -> c"
-      pps (E.clocks ["k"] $ E.forAll ["a", "b", "c"] $ ("a" @->: "b") @->: "c") `shouldBe` "∇k. ∀a b c. (a -> b) -> c"
+      ppsw 80 (E.clocks ["k"] $ E.forAll ["a", "b", "c"] $ ("a" @->: "b") @->: "c") `shouldBe` "∀(k : Clock) a b c. (a -> b) -> c"
       pps (E.later "k" "a") `shouldBe` "⊳k a"
       pps (E.later "k" ("f" @@: "a")) `shouldBe` "⊳k (f a)"
       pps (E.later "k" (E.later "k0" $ "f" @@: "a")) `shouldBe` "⊳k (⊳k0 (f a))"
