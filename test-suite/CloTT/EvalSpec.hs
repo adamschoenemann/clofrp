@@ -47,6 +47,7 @@ evalSpec = do
       eval0 (("x" @-> "y" @-> "x") @@ E.int 10) `shouldBe` Right (Closure m "y" (E.var "x"))
     it "evals tuples" $ do
       eval0 (("x" @-> E.tup ["x", E.int 10]) @@ E.int 9) `shouldBe` Right (Tuple [int 9, int 10])
+
     it "evals contructors (1)" $ do
       let m = env [s, z]
       eval m ("S" @@ "Z") `shouldBe` Right (constr "S" [constr "Z" []])
@@ -55,6 +56,29 @@ evalSpec = do
       let explist = foldr (\x acc -> "Cons" @@ x @@ acc) "Nil"
       let vallist = foldr (\x acc -> constr "Cons" [x, acc]) (constr "Nil" [])
       eval m (explist $ map E.int [1..5]) `shouldBe` Right (vallist $ map int [1..5])
+    it "evals contructors (3)" $ do
+      let m = env [s,z,just,nothing]
+      let p = unann [unsafeExpr|
+        S (S (S Z))
+      |]
+      let s' arg = Constr "S" [arg]
+      eval m p `shouldBe` Right (s' $ s' $ s' (Constr "Z" []))
+    it "evals contructors (4)" $ do
+      let m = env [s,z,just,nothing]
+      let p = unann [unsafeExpr|
+        let s = S in
+        let z = Z in
+        s (s (s z))
+      |]
+      let s' arg = Constr "S" [arg]
+      eval m p `shouldBe` Right (s' $ s' $ s' (Constr "Z" []))
+    -- it "evals contructors (3)" $ do
+    --   let m = env [s,z,just,nothing]
+    --   let p = unann [unsafeExpr
+    --     let map = \f x -> case x of | Nothing -> Nothing | Just x' -> Just (f x') in
+    --   |]
+    --   eval m () `shouldBe` Right (vallist $ map int [1..5])
+
     it "evals let bindings (1)" $ do
       eval0 (unann [unsafeExpr| let x = 10 in let id = \y -> y in id x |]) `shouldBe` Right (int 10)
     it "evals let bindings (2)" $ do
@@ -100,11 +124,13 @@ evalSpec = do
     describe "fixpoints" $ do
       it "evals first iter of const stream correctly" $ do
         {-
-          fix body =>
+          -- fix body => body (\\af -> fix body)
+
+          fix body => 
           body (dfix body) =>
           (\xs -> fold (Cons x xs)) (dfix body) =>
           fold (Cons x (dfix body)) =>
-          Cons x (dfix body) =>
+          Cons x (\\af -> fix body) =>
         -}
         let p = unann [unsafeExpr|
           (\x -> let body = \xs -> Cons x xs
@@ -112,24 +138,30 @@ evalSpec = do
           ) 1
         |]
         let m = [cons]
-        eval m p `shouldBe` Right (constr "Cons" [int 1, Dfix "body"])
+        case eval m p of 
+          Right (Constr "Cons" [Prim (IntVal 1), TickClosure _ (E.DeBruijn 0) b]) -> 
+            b `shouldBe` (E.fixp @@ "body")
+          Right e  -> failure ("did not expect " ++ show (pretty e))
+          Left err -> failure (show err)
 
-      it "evals first iter of map  correctly" $ do
+      it "evals first iter of map correctly" $ do
         {-
           map S (const Z) =>
           fix mapfix (const Z) =>
-          mapfix (dfix mapfix) (const Z) =>
+          mapfix (\\af -> fix mapfix) (const Z) =>
           cons (S Z) (\\af -> mapfix [af] (xs' [af])) =>
           fold (Cons (S Z) (\\af -> mapfix [af] (xs' [af]))) =>
+          Cons (S Z) (\\af -> mapfix [af] (xs' [af])) =>
         -}
         let p = unann [unsafeExpr|
-          let cons = \x xs -> fold (Cons x xs) in
+          let cons = \x xs -> fold (Cons x xs) in -- this breaks it
           let map = \f -> 
             let mapfix = \g xs ->
                 case unfold xs of
                 | Cons x xs' -> 
                   let ys = \\(af : k) -> g [af] (xs' [af])
-                  in  cons (f x) ys
+                  in  fold (Cons (f x) ys)
+                  in  cons (f x) ys -- this breaks it (probly name capture)
             in fix mapfix in
           let const = \x ->
              let body = \xs -> Cons x xs
@@ -137,6 +169,10 @@ evalSpec = do
           in map S (const Z)
         |]
         let m = [s,z,cons]
-        eval m p `shouldBe` Right (constr "Cons" [constr "Z" [],  Dfix "body"])
+        case eval m p of -- eval to Cons (S Z) (dfix (\\(af : k) -> g [af] (xs' [af]))
+          Right (Constr "Cons" [Constr "S" [Constr "Z" []], TickClosure _ _ e]) ->
+            e `shouldBe` "g" @@ "[af]" @@ ("xs'" @@ "[af]")
+          Right e  -> failure ("did not expect " ++ show (pretty e))
+          Left err -> failure (show err)
     
 

@@ -221,6 +221,9 @@ typeapp e t = A () $ TypeApp e t
 tick :: Expr () 
 tick = A () $ Prim P.Tick
 
+fixp :: Expr ()
+fixp = A () $ Prim P.Fix
+
 
 infixr 2 @->
 infixr 2 @:->

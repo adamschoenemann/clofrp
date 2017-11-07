@@ -63,8 +63,8 @@ instance Pretty (Value a) where
     Prim p -> pretty p
     Var nm  -> pretty nm
     TickVar nm  -> pretty nm
-    Closure env n e -> parens $ group $ "\\" <> pretty e <+> "->" <+> pretty e <> line <> indent 4 ("closed over" <+> pretty env)
-    TickClosure env n e -> parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> line <> indent 4 ("closed over" <+> pretty env)
+    Closure env n e -> parens $ group $ "\\" <> pretty e <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pretty env)
+    TickClosure env n e -> parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pretty env)
     Tuple vs -> tupled (map pretty vs)
     Constr nm [] -> pretty nm
     Constr nm vs -> parens $ pretty nm <+> sep (map pretty vs)
@@ -191,10 +191,18 @@ evalExpr (A ann expr') =
         (Prim Unfold, _) -> pure v2
         (Prim Fold, _)   -> pure v2
 
-        (Prim Fix, Closure cenv nm e1') -> do
+        -- fix f ~> f (dfix f)
+        -- fix f ~> f (\\(af). fix f)
+
+        --    f =>σ (\x. e1', σ')       e1' =>(σ, x ↦ \\af. fix f, σ') v
+        --  ----------------------------------------------------------------
+        --                      fix f =>σ v
+        (Prim Fix, Closure cenv nm e2') -> do
+          let app x y = A ann $ x `E.App` y
+          let fixe = A ann $ E.Prim P.Fix
           env <- getEnv
-          let env' = extend nm (Dfix e2) env
-          withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
+          let env' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) env
+          withEnv (const (env' `M.union` cenv)) $ evalExpr e2'
 
         (Dfix e2, Prim Tick) -> do
           evalExpr (A ann $ A ann (E.Prim P.Fix) `E.App` e2)

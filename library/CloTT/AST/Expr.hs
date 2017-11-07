@@ -68,7 +68,7 @@ prettyE' pars = \case
   TickAbs  nm kappa e -> parens $ "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
 
   Tuple es -> tupled (map (prettyE False) es)
-  Let p e1 e2 -> align $ "let" <+> pretty p <+> "=" <+> pretty e1 <+> "in" <> softline <> pretty e2
+  Let p e1 e2 -> align $ "let" <+> pretty p <+> "=" <+> group (pretty e1) <+> "in" <> softline <> pretty e2
 
   Case e clauses ->
     "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
