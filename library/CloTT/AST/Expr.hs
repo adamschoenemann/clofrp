@@ -26,6 +26,7 @@ import CloTT.Annotated
 import CloTT.AST.Name
 import CloTT.AST.Type
 import CloTT.AST.Pat
+import CloTT.AST.Utils
 
 type Expr a = Annotated a (Expr' a)
 
@@ -55,13 +56,19 @@ prettyE' pars = \case
   App e1 e2 -> parensIf $ prettyE False e1 <+> prettyE True e2
 
   Lam nm mty e -> 
-    let tyann = maybe "" (\t -> space <> ":" <+> pretty t) mty
-    in  parensIf $ "\\" <> pretty nm <> tyann <+> "->" <+> prettyE False e
+    let (ps', e') = collect pred e
+        ps = (nm, mty) : ps'
+        params = sep $ map rndrp ps
+    in  parensIf $ "\\" <> params <+> "->" <> nest 2 (softline <> prettyE False e') where
+      rndrp (nm, Nothing) = pretty nm
+      rndrp (nm, Just ty) = parens (pretty nm <+> ":" <+> pretty ty)
+      pred (Lam nm' mty' e'') = Just ((nm', mty'), e'')
+      pred _                  = Nothing
   
   TickAbs  nm kappa e -> parens $ "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
 
   Tuple es -> tupled (map (prettyE False) es)
-  Let p e1 e2 -> "let" <+> pretty p <+> "=" <+> pretty e1 <+> "in" <> softline <> pretty e2
+  Let p e1 e2 -> align $ "let" <+> pretty p <+> "=" <+> pretty e1 <+> "in" <> softline <> pretty e2
 
   Case e clauses ->
     "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
@@ -70,7 +77,7 @@ prettyE' pars = \case
 
   Prim p -> fromString . show $ p
   where
-    prettyC (p, e) = "|" <+> pretty p <+> "->" <+> pretty e
+    prettyC (p, e) = "|" <+> pretty p <+> "->" <> nest 4 (softline <> (pretty e))
     parensIf = if pars then parens else id
 
 prettyE :: Bool -> Expr a -> Doc ann

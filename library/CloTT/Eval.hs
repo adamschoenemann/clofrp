@@ -55,6 +55,7 @@ data Value a
   | TickClosure (Env a) Name (E.Expr a)
   | Tuple [Value a]
   | Constr Name [Value a]
+  | Dfix (E.Expr a)
   deriving (Eq)
 
 instance Pretty (Value a) where
@@ -62,11 +63,12 @@ instance Pretty (Value a) where
     Prim p -> pretty p
     Var nm  -> pretty nm
     TickVar nm  -> pretty nm
-    Closure _ n e -> "\\" <> pretty e <+> "->" <+> pretty e
-    TickClosure _ n e -> "\\\\" <> pretty e <+> "->" <+> pretty e
+    Closure env n e -> parens $ group $ "\\" <> pretty e <+> "->" <+> pretty e <> line <> indent 4 ("closed over" <+> pretty env)
+    TickClosure env n e -> parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> line <> indent 4 ("closed over" <+> pretty env)
     Tuple vs -> tupled (map pretty vs)
     Constr nm [] -> pretty nm
     Constr nm vs -> parens $ pretty nm <+> sep (map pretty vs)
+    Dfix e -> "dfix" <+> parens (pretty e)
 
 instance Show (Value a) where
   show = show . pretty
@@ -74,7 +76,7 @@ instance Show (Value a) where
 type Env a = Map Name (Value a)
 
 instance Pretty (Env a) where
-  pretty e = list $ M.elems $ M.mapWithKey (\k v -> pretty k <+> "↦" <+> pretty v) e
+  pretty e = list $ M.elems $ M.mapWithKey (\k v -> pretty k <+> "↦" <+> align (pretty v)) e
 
 type EvalRead a = Env a
 type EvalWrite = ()
@@ -171,25 +173,34 @@ evalExpr (A ann expr') =
     
     E.App e1 e2 -> do
       v1 <- evalExpr e1
-      case v1 of 
-        Closure cenv nm e1' -> do
-          v2 <- evalExpr e2
+      v2 <- evalExpr e2
+      case (v1, v2) of 
+        (Closure cenv nm e1', _) -> do
           env <- getEnv
           let env' = extend nm v2 env
           withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
-        TickClosure cenv nm e1' -> do
-          v2 <- evalExpr e2
+
+        (TickClosure cenv nm e1', _) -> do
           env <- getEnv
           let env' = extend nm v2 env
           withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
-        Constr nm args -> do
-          v2 <- evalExpr e2
+
+        (Constr nm args, _) -> do
           pure $ Constr nm (args ++ [v2])
-        _ -> throwError (Other $ show $ "Expected" <+> pretty v1 <+> "to be a lambda")
-        -- fix f 
-        -- f (fix f)
-        -- f (f (fix f))
-        Prim Fix -> undefined
+        
+        (Prim Unfold, _) -> pure v2
+        (Prim Fold, _)   -> pure v2
+
+        (Prim Fix, Closure cenv nm e1') -> do
+          env <- getEnv
+          let env' = extend nm (Dfix e2) env
+          withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
+
+        (Dfix e2, Prim Tick) -> do
+          evalExpr (A ann $ A ann (E.Prim P.Fix) `E.App` e2)
+
+
+        _ -> throwError (Other $ show $ "Expected" <+> pretty v1 <+> "to be a lambda or something")
     
     E.Ann e t -> evalExpr e
 

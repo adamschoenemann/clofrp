@@ -22,6 +22,7 @@ module CloTT.AST.Type where
 import CloTT.Annotated 
 import CloTT.AST.Name
 import CloTT.AST.Kind
+import CloTT.AST.Utils
 
 import Data.String (IsString(..))
 import qualified Data.Set as S
@@ -74,14 +75,8 @@ prettyT' pars = \case
   TTuple ts -> tupled $ map (prettyT False) ts
   Later t1 t2 -> parensIf $ "⊳" <> prettyT True t1 <+> prettyT True t2
   where
-    collect :: Pretty n => (Type' a s -> Maybe (n, Type a s)) -> Type a s -> ([n], Type a s)
-    collect p (A ann ty')
-      | Just (n, t) <- p ty' = 
-          let (ns, t') = collect p t
-          in  (n:ns, t')
-      | otherwise            = ([], A ann ty')
-
     parensIf = if pars then parens else id
+
 
 
 prettyT :: Bool -> Type a s -> Doc ann

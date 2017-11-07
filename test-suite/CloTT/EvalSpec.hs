@@ -94,8 +94,49 @@ evalSpec = do
           | (x, y) -> x
       |] @@ e
 
-      it "evals case expression (5)" $ do
+      it "evals case expressions (5)" $ do
         eval m (p3 (E.tup [E.int 1, E.int 2])) `shouldBe` Right (int 10)
+    
+    describe "fixpoints" $ do
+      it "evals first iter of const stream correctly" $ do
+        {-
+          fix body =>
+          body (dfix body) =>
+          (\xs -> fold (Cons x xs)) (dfix body) =>
+          fold (Cons x (dfix body)) =>
+          Cons x (dfix body) =>
+        -}
+        let p = unann [unsafeExpr|
+          (\x -> let body = \xs -> Cons x xs
+                 in  fix body
+          ) 1
+        |]
+        let m = [cons]
+        eval m p `shouldBe` Right (constr "Cons" [int 1, Dfix "body"])
 
+      it "evals first iter of map  correctly" $ do
+        {-
+          map S (const Z) =>
+          fix mapfix (const Z) =>
+          mapfix (dfix mapfix) (const Z) =>
+          cons (S Z) (\\af -> mapfix [af] (xs' [af])) =>
+          fold (Cons (S Z) (\\af -> mapfix [af] (xs' [af]))) =>
+        -}
+        let p = unann [unsafeExpr|
+          let cons = \x xs -> fold (Cons x xs) in
+          let map = \f -> 
+            let mapfix = \g xs ->
+                case unfold xs of
+                | Cons x xs' -> 
+                  let ys = \\(af : k) -> g [af] (xs' [af])
+                  in  cons (f x) ys
+            in fix mapfix in
+          let const = \x ->
+             let body = \xs -> Cons x xs
+             in  fix body
+          in map S (const Z)
+        |]
+        let m = [s,z,cons]
+        eval m p `shouldBe` Right (constr "Cons" [constr "Z" [],  Dfix "body"])
     
 
