@@ -122,53 +122,23 @@ evalExprStep (A ann expr') =
     E.TypeApp e t -> evalExprStep e
 
 evalExprUntil :: Expr a -> s -> (s -> (Bool, s)) -> EvalM a (Value a)
-evalExprUntil expr init p = check init =<< evalExprStep expr where 
-  check s v =
-    let (b, s') = p s
-    in if b 
-        then pure v
-        else case v of
-          Prim p -> pure v
-          Var nm  -> lookupVar nm 
-          TickVar nm  -> pure v
-          Closure env nm e -> pure v
-          TickClosure cenv nm e -> do -- force it!
-            let cenv' = extend nm (Prim Tick) cenv
-            check s' <=< withEnv (combine cenv') $ evalExprUntil e s' p
+evalExprUntil expr init p = check 1000000 init expr where 
+  check n _ e | n <= 0 = evalExprStep e
+  check n s e = do
+    v <- evalExprStep e
+    case v of
+      Prim p -> pure v
+      Var nm  -> lookupVar nm
+      TickVar nm  -> pure v
+      Closure env nm e -> pure v
+      TickClosure cenv nm e -> pure v
+      Tuple vs -> pure v -- Tuple <$> sequence (map (check s') vs)
+      Constr nm vs -> do
+        Constr nm <$> evalMany (n-1) s vs
 
-          Tuple vs -> Tuple <$> sequence (map (check s') vs)
-          Constr nm vs -> do
-            vs' <- evalMany s' vs
-            pure (Constr nm vs')
-
-  evalMany s [] = pure []
-  evalMany s (v:vs) = do 
-    v' <- check s v
-    vs' <- evalMany s vs
+  evalMany _ s [] = pure []
+  evalMany n s (TickClosure env nm e : vs) = do 
+    v' <- withEnv (\e -> combine e (extend nm (Prim Tick) env)) $ check n s e
+    vs' <- evalMany n s vs
     pure (v' : vs')
-
-    
-
--- evalExprUntil expr init p = check init =<< evalExprStep expr where 
---   check s v =
---     let (b, s') = p (v, s)
---     in if b 
---         then pure v
---         else evalDelayed (check s') v
-
---   evalDelayed go v = case v of
-      -- Prim p -> pure v
-      -- Var nm  -> lookupVar nm 
-      -- TickVar nm  -> pure v
-      -- Closure env nm e -> pure v
-      -- TickClosure cenv nm e -> do -- force it!
-      --   let cenv' = extend nm (Prim Tick) cenv
-      --   go <=< withEnv (combine cenv') $ evalExprStep e
-
-      -- Tuple vs -> Tuple <$> sequence (map go vs)
-      -- Constr nm [] -> pure v
-      -- Constr nm vs -> do 
-      --   vs' <- foldrM folder [] vs
-      --   pure (Constr nm vs')
-      --   where 
-      --     folder x acc = (: acc) <$> go x
+  evalMany n s (v:vs) = (v :) <$> evalMany n s vs

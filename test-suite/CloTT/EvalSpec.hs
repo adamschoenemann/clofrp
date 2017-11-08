@@ -179,7 +179,7 @@ evalSpec = do
     
   describe "evalExprUntil" $ do
     let evforever environ x = 
-          let term i = {- traceShow (v,i) $ -} if i < 1000 then (False, succ i) else (True, i) 
+          let term i = traceShow i $ if i < 100 then (False, succ i) else (True, i) 
           in  runEvalM (evalExprUntil x (0 :: Int) term) environ
 
     let evforever0 x = evforever mempty x
@@ -202,7 +202,7 @@ evalSpec = do
       let Right cs = evforever m p
       -- let cs = foldr (\x acc -> Constr "Cons" [acc]) (Constr @() "Nil" []) $ repeat 0
       putStrLn "--------------------------------------"
-      putStrLn . show $ takeConstr 5 $ cs
+      putStrLn . show $ takeConstr 10 $ cs
       -- _ <- deepseq cs (pure ())
       putStrLn "--------------------------------------"
       True `shouldBe` True
