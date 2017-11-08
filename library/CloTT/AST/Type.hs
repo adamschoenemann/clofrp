@@ -16,19 +16,23 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module CloTT.AST.Type where
-
-import CloTT.Annotated 
-import CloTT.AST.Name
-import CloTT.AST.Kind
-import CloTT.AST.Utils
 
 import Data.String (IsString(..))
 import qualified Data.Set as S
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
 import Data.Text.Prettyprint.Doc
+import Control.DeepSeq
+import GHC.Generics
+
+import CloTT.Annotated 
+import CloTT.AST.Name
+import CloTT.AST.Kind
+import CloTT.AST.Utils
 
 type Type a s = Annotated a (Type' a s)
 
@@ -49,6 +53,9 @@ data Type' :: * -> TySort -> * where
 deriving instance Eq a       => Eq (Type' a s)
 deriving instance Data a     => Data (Type' a Poly)
 deriving instance Typeable a => Typeable (Type' a Poly)
+
+instance NFData a => NFData (Type' a Poly) where
+  rnf a = seq a ()
 
 prettyBound :: Bool -> Name -> Kind -> Doc ann
 prettyBound _ nm Star = pretty nm 

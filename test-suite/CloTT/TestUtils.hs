@@ -5,6 +5,7 @@ import Test.Tasty.Hspec
 import Data.Text
 import Text.Parsec
 import CloTT.Parser.Prog (parseProg)
+import CloTT.Parser.Expr (parseExpr)
 import CloTT.AST.Parsed
 
 success :: Expectation
@@ -15,3 +16,11 @@ failure = expectationFailure
 
 pprog :: Text -> Either ParseError (Prog SourcePos)
 pprog = parseProg . unpack
+
+pexpr :: Text -> Either ParseError (Expr SourcePos)
+pexpr = parseExpr . unpack
+
+pexprua :: Text -> Either ParseError (Expr ())
+pexprua txt = case parseExpr . unpack $ txt of
+  Right e  -> Right (unann e)
+  Left err -> Left err

@@ -11,6 +11,9 @@ module CloTT.EvalSpec where
 import Test.Tasty.Hspec
 import Data.Either (isLeft)
 import Data.String (fromString)
+import NeatInterpolation
+import Debug.Trace
+import Control.DeepSeq
 
 import qualified CloTT.AST.Parsed  as E
 import qualified CloTT.AST.Prim    as P
@@ -29,42 +32,40 @@ import           CloTT.Annotated (unann)
 
 evalSpec :: Spec
 evalSpec = do
-  let eval0 e = runEvalM (evalExpr e) M.empty
-  let eval environ e = runEvalM (evalExpr e) environ
+  let eval0 e = runEvalM (evalExprStep e) mempty
+  let eval environ e = runEvalM (evalExprStep e) environ
   let int = Prim . IntVal
   let constr nm vs = Constr nm vs
   let c nm = (nm, Constr nm [])
-  let env :: [(E.Name, Value ())]  -> M.Map E.Name (Value ())
-      env xs = M.fromList xs
   let (|->) = \x y -> (x,y) 
   let [s,z,cons,nil,just,nothing] = [c "S", c "Z", c "Cons", c "Nil", c "Just", c "Nothing"] :: [(E.Name, Value ())]
-  describe "evalExpr" $ do
+  describe "evalExprStep" $ do
     it "evals lambdas" $ do
-      eval0 ("x" @-> "x") `shouldBe` Right (Closure M.empty "x" (E.var "x"))
+      eval0 ("x" @-> "x") `shouldBe` Right (Closure [] "x" (E.var "x"))
     it "evals applications" $ do
       eval0 (("x" @-> "x") @@ E.int 10) `shouldBe` Right (int 10)
-      let m = env ["x" |-> int 10]
+      let m = ["x" |-> int 10]
       eval0 (("x" @-> "y" @-> "x") @@ E.int 10) `shouldBe` Right (Closure m "y" (E.var "x"))
     it "evals tuples" $ do
       eval0 (("x" @-> E.tup ["x", E.int 10]) @@ E.int 9) `shouldBe` Right (Tuple [int 9, int 10])
 
     it "evals contructors (1)" $ do
-      let m = env [s, z]
+      let m = [s, z]
       eval m ("S" @@ "Z") `shouldBe` Right (constr "S" [constr "Z" []])
     it "evals contructors (2)" $ do
-      let m = env [s,z,nil,cons]
+      let m = [s,z,nil,cons]
       let explist = foldr (\x acc -> "Cons" @@ x @@ acc) "Nil"
       let vallist = foldr (\x acc -> constr "Cons" [x, acc]) (constr "Nil" [])
       eval m (explist $ map E.int [1..5]) `shouldBe` Right (vallist $ map int [1..5])
     it "evals contructors (3)" $ do
-      let m = env [s,z,just,nothing]
+      let m = [s,z,just,nothing]
       let p = unann [unsafeExpr|
         S (S (S Z))
       |]
       let s' arg = Constr "S" [arg]
       eval m p `shouldBe` Right (s' $ s' $ s' (Constr "Z" []))
     it "evals contructors (4)" $ do
-      let m = env [s,z,just,nothing]
+      let m = [s,z,just,nothing]
       let p = unann [unsafeExpr|
         let s = S in
         let z = Z in
@@ -84,7 +85,7 @@ evalSpec = do
     it "evals let bindings (2)" $ do
       eval0 (unann [unsafeExpr| let x = 9 in let id = \x -> x in (id x, id id 10, id id id 11) |]) `shouldBe` Right (Tuple [int 9, int 10, int 11])
     it "evals let bindings (3)" $ do
-      let m = env [c "Wrap"]
+      let m = [c "Wrap"]
       eval m (unann [unsafeExpr| (\x -> let Wrap x' = x in x') (Wrap 10) |]) `shouldBe` Right (int 10)
 
     describe "case expression evaluation" $ do
@@ -94,7 +95,7 @@ evalSpec = do
           | Just x -> x
         )
       |] @@ e
-      let m = env [s,z,just,nothing,cons,nil]
+      let m = [s,z,just,nothing,cons,nil]
       it "evals case expressions (1)" $ do
         eval m (p1 ("Just" @@ E.int 10)) `shouldBe` Right (int 10)
       it "evals case expressions (2)" $ do
@@ -168,10 +169,49 @@ evalSpec = do
           in map S (const Z)
         |]
         let m = [s,z,cons]
-        case eval m p of -- eval to Cons (S Z) (dfix (\\(af : k) -> g [af] (xs' [af]))
+        case eval m p of 
           Right (Constr "Cons" [Constr "S" [Constr "Z" []], TickClosure _ _ e]) ->
             e `shouldBe` "g" @@ "[af]" @@ ("xs'" @@ "[af]")
           Right e  -> failure ("did not expect " ++ show (pretty e))
           Left err -> failure (show err)
     
+  describe "evalExprUntil" $ do
+    let evforever environ x = 
+          let term (v, i) = {- traceShow (v,i) $ -} if i < 100000 then (False, succ i) else (True, i) 
+          in  runEvalM (evalExprUntil x (0 :: Int) term) environ
 
+    let evforever0 x = evforever mempty x
+    -- it "forever terminates with primitives" $ do
+    --   evforever0 (E.int 10) `shouldBe` Right (int 10)
+    --   evforever [just] ("Just" @@ E.int 10) `shouldBe` Right (Constr "Just" [int 10])
+
+    -- it "forever terminates with 2-step comp" $ do
+    --   let e = "Cons" @@ E.int 1 @@ (("af", "k") `E.tAbs` ("Cons" @@ E.int 2 @@ "Nil"))
+    --   evforever [cons, nil] e `shouldBe` Right (Constr "Cons" [int 1, Constr "Cons" [int 2, Constr "Nil" []]])
+    
+    it "forever evals the constant stream" $ do
+      let Right p = pexprua [text|
+        let const = \x ->
+            let body = \xs -> Cons x xs
+            in  fix body
+        in const Z
+      |]
+      let m = [s,z,cons]
+      let Right cs = evforever m p
+      -- let cs = foldr (\x acc -> Constr "Cons" [acc]) (Constr @() "Nil" []) $ repeat 0
+      putStrLn "--------------------------------------"
+      putStrLn . show $ takeConstr 3 $ cs
+      -- _ <- deepseq cs (pure ())
+      putStrLn "--------------------------------------"
+      True `shouldBe` True
+      
+
+-- takes n levels down in a tree of constructors
+takeConstr :: Int -> Value a -> Value a
+takeConstr n v 
+  | n <= 0    = Constr "__STOPPED__" []
+  | otherwise = 
+      case v of
+        Constr nm [] -> v
+        Constr nm vs -> Constr nm (map (takeConstr (n-1)) vs)
+        _            -> v

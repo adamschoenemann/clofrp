@@ -14,6 +14,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module CloTT.AST.Pat where
 
@@ -21,6 +23,8 @@ import Data.String (IsString(..))
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
 import Data.Text.Prettyprint.Doc
+import Control.DeepSeq
+import GHC.Generics
 
 import CloTT.Annotated 
 import CloTT.AST.Name
@@ -30,7 +34,7 @@ data Pat' a
   = Bind Name 
   | Match Name [Pat a]
   | PTuple [Pat a]
-  deriving (Eq, Data, Typeable)
+  deriving (Eq, Data, Typeable, Generic, Typeable, NFData)
 
 prettyP :: Bool -> Pat a -> Doc ann
 prettyP n (A _ t) = prettyP' n t

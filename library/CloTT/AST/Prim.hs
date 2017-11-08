@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module CloTT.AST.Prim where
 
@@ -7,6 +9,8 @@ import Prelude hiding (Bool, Int, Integer)
 import qualified Prelude as Pr
 import Data.Text.Prettyprint.Doc
 import Data.String (fromString)
+import Control.DeepSeq
+import GHC.Generics
 
 data Prim
   = Unit
@@ -17,7 +21,7 @@ data Prim
   | Tick
   | Fix
   | Undefined
-  deriving (Eq, Data, Typeable)
+  deriving (Eq, Data, Typeable, Generic, NFData)
 
 instance Show Prim where
   show Unit    = "()"

@@ -126,4 +126,4 @@ expr = try tickabs <|> lam <|> buildExpressionParser table atom where
     fn p e1 e2 = A.A p $ E.App e1 e2
 
 parseExpr :: String -> Either ParseError Expr
-parseExpr = parse expr "parseExpr"
+parseExpr = parse (ws *> expr <* eof) "parseExpr"

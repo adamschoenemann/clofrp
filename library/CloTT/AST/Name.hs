@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module CloTT.AST.Name where
 
@@ -7,12 +9,14 @@ import Data.String (IsString(..))
 import Data.List (genericLength)
 import Data.Text.Prettyprint.Doc
 import Data.Char (isUpper, isLower)
+import Control.DeepSeq
+import GHC.Generics
 
 data Name 
   = UName String
   | MName Integer
   | DeBruijn Integer
-  deriving (Ord, Eq, Data, Typeable)
+  deriving (Ord, Eq, Data, Typeable, Generic, NFData)
 
 instance Show Name where
   show x = 

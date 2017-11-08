@@ -14,6 +14,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module CloTT.AST.Expr where
 
@@ -21,6 +23,8 @@ import Data.String (IsString(..))
 import Data.Data (Data, Typeable)
 import qualified CloTT.AST.Prim as P
 import Data.Text.Prettyprint.Doc
+import Control.DeepSeq
+import GHC.Generics
 
 import CloTT.Annotated 
 import CloTT.AST.Name
@@ -42,11 +46,7 @@ data Expr' a
   | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
   | TypeApp (Expr a) (Type a Poly) -- e {τ}
   | Prim P.Prim -- primitive (will probably just include ints in the end)
- 
-deriving instance Eq a       => Eq (Expr' a)
-deriving instance Data a     => Data (Expr' a)
-deriving instance Typeable a => Typeable (Expr' a)
--- deriving instance Show a     => Show (Expr' a)
+  deriving (Eq, Data, Typeable, Generic, NFData)
 
 prettyE' :: Bool -> Expr' a -> Doc ann
 prettyE' pars = \case 

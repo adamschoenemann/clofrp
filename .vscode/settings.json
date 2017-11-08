@@ -11,6 +11,9 @@
     "**/*.hi": true,
     "**/*.dump-hi": true,
     "**/*.mix": true,
-    "**/*.tix": true
+    "**/*.tix*": true,
+    "**/*.html": true,
+    ".stack-work": true,
+    "**/*.aux": true
   }
 }

@@ -67,3 +67,4 @@ dependencies:
   - mtl
   - prettyprinter
   - text
+  - deepseq
