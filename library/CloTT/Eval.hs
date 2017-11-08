@@ -175,15 +175,14 @@ evalExpr (A ann expr') =
       v1 <- evalExpr e1
       v2 <- evalExpr e2
       case (v1, v2) of 
+        -- order of union of envs is very important to avoid incorrect name capture
         (Closure cenv nm e1', _) -> do
-          env <- getEnv
-          let env' = extend nm v2 env
-          withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
+          let cenv' = extend nm v2 cenv
+          withEnv (M.union cenv') $ evalExpr e1'
 
         (TickClosure cenv nm e1', _) -> do
-          env <- getEnv
-          let env' = extend nm v2 env
-          withEnv (const (env' `M.union` cenv)) $ evalExpr e1'
+          let cenv' = extend nm v2 cenv
+          withEnv (M.union cenv') $ evalExpr e1'
 
         (Constr nm args, _) -> do
           pure $ Constr nm (args ++ [v2])

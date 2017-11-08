@@ -154,14 +154,13 @@ evalSpec = do
           Cons (S Z) (\\af -> mapfix [af] (xs' [af])) =>
         -}
         let p = unann [unsafeExpr|
-          let cons = \x xs -> fold (Cons x xs) in -- this breaks it
+          let cons = \x xs -> fold (Cons x xs) in 
           let map = \f -> 
             let mapfix = \g xs ->
                 case unfold xs of
                 | Cons x xs' -> 
                   let ys = \\(af : k) -> g [af] (xs' [af])
-                  in  fold (Cons (f x) ys)
-                  in  cons (f x) ys -- this breaks it (probly name capture)
+                  in  cons (f x) ys 
             in fix mapfix in
           let const = \x ->
              let body = \xs -> Cons x xs
