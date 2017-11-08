@@ -55,7 +55,6 @@ data Value a
   | TickClosure (Env a) Name (E.Expr a)
   | Tuple [Value a]
   | Constr Name [Value a]
-  | Dfix (E.Expr a)
   deriving (Eq)
 
 instance Pretty (Value a) where
@@ -68,7 +67,6 @@ instance Pretty (Value a) where
     Tuple vs -> tupled (map pretty vs)
     Constr nm [] -> pretty nm
     Constr nm vs -> parens $ pretty nm <+> sep (map pretty vs)
-    Dfix e -> "dfix" <+> parens (pretty e)
 
 instance Show (Value a) where
   show = show . pretty
@@ -202,10 +200,6 @@ evalExpr (A ann expr') =
           env <- getEnv
           let env' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) env
           withEnv (const (env' `M.union` cenv)) $ evalExpr e2'
-
-        (Dfix e2, Prim Tick) -> do
-          evalExpr (A ann $ A ann (E.Prim P.Fix) `E.App` e2)
-
 
         _ -> throwError (Other $ show $ "Expected" <+> pretty v1 <+> "to be a lambda or something")
     
