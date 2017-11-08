@@ -14,7 +14,7 @@
 module CloTT.Eval.Value where
 
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
+import qualified Data.Map as M
 import Data.Text.Prettyprint.Doc 
 import Control.DeepSeq
 import GHC.Generics

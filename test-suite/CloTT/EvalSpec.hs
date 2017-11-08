@@ -128,13 +128,15 @@ evalSpec = do
           -- fix body => body (\\af -> fix body)
 
           fix body => 
-          body (dfix body) =>
-          (\xs -> fold (Cons x xs)) (dfix body) =>
-          fold (Cons x (dfix body)) =>
+          body (\\af -> body) =>
+          (\xs -> fold (Cons x xs)) (\\af -> fix body) =>
+          fold (Cons x (\\af -> fix body)) =>
           Cons x (\\af -> fix body) =>
+          Cons x (body (\\af -> fix body)) =>
+          Cons x (Cons x (\\af -> fix body))
         -}
         let p = unann [unsafeExpr|
-          (\x -> let body = \xs -> Cons x xs
+          (\x -> let body = \xs -> fold (Cons x xs)
                  in  fix body
           ) 1
         |]
@@ -177,7 +179,7 @@ evalSpec = do
     
   describe "evalExprUntil" $ do
     let evforever environ x = 
-          let term (v, i) = {- traceShow (v,i) $ -} if i < 100000 then (False, succ i) else (True, i) 
+          let term i = {- traceShow (v,i) $ -} if i < 1000 then (False, succ i) else (True, i) 
           in  runEvalM (evalExprUntil x (0 :: Int) term) environ
 
     let evforever0 x = evforever mempty x
@@ -200,7 +202,7 @@ evalSpec = do
       let Right cs = evforever m p
       -- let cs = foldr (\x acc -> Constr "Cons" [acc]) (Constr @() "Nil" []) $ repeat 0
       putStrLn "--------------------------------------"
-      putStrLn . show $ takeConstr 3 $ cs
+      putStrLn . show $ takeConstr 5 $ cs
       -- _ <- deepseq cs (pure ())
       putStrLn "--------------------------------------"
       True `shouldBe` True

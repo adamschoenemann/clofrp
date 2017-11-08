@@ -121,10 +121,10 @@ evalExprStep (A ann expr') =
 
     E.TypeApp e t -> evalExprStep e
 
-evalExprUntil :: Expr a -> s -> ((Value a, s) -> (Bool, s)) -> EvalM a (Value a)
+evalExprUntil :: Expr a -> s -> (s -> (Bool, s)) -> EvalM a (Value a)
 evalExprUntil expr init p = check init =<< evalExprStep expr where 
   check s v =
-    let (b, s') = p (v, s)
+    let (b, s') = p s
     in if b 
         then pure v
         else case v of
@@ -134,7 +134,7 @@ evalExprUntil expr init p = check init =<< evalExprStep expr where
           Closure env nm e -> pure v
           TickClosure cenv nm e -> do -- force it!
             let cenv' = extend nm (Prim Tick) cenv
-            check s' <=< withEnv (combine cenv') $ evalExprStep e
+            check s' <=< withEnv (combine cenv') $ evalExprUntil e s' p
 
           Tuple vs -> Tuple <$> sequence (map (check s') vs)
           Constr nm vs -> do

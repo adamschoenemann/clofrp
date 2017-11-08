@@ -8,7 +8,8 @@
 
 module CloTT.Eval.EvalM where
 
-import Control.Monad.RWS.Strict hiding ((<>))
+-- import Control.Monad.RWS.Lazy hiding ((<>))
+import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.State ()
 import Data.Text.Prettyprint.Doc 
@@ -24,13 +25,14 @@ type EvalState = ()
 data EvalErr = Other String
   deriving (Show, Eq)
 
-newtype EvalM a r = Eval { unEvalM :: ExceptT EvalErr (RWS (EvalRead a) EvalWrite EvalState) r }
+-- newtype EvalM a r = Eval { unEvalM :: ExceptT EvalErr (RWS (EvalRead a) EvalWrite EvalState) r }
+newtype EvalM a r = Eval { unEvalM :: ExceptT EvalErr (Reader (EvalRead a)) r }
   deriving ( Functor
            , Applicative
            , Monad
            , MonadError  EvalErr 
-           , MonadState  EvalState
-           , MonadWriter EvalWrite 
+          --  , MonadState  EvalState
+          --  , MonadWriter EvalWrite 
            , MonadReader (EvalRead a)
            )
 
@@ -42,7 +44,8 @@ instance Alternative (EvalM a) where
 
 
 runEvalM :: EvalM a r -> (EvalRead a) -> EvalMRes r
-runEvalM tm r = let (x, _, _) = runRWS (runExceptT (unEvalM tm)) r () in x
+runEvalM tm r = let x = runReader (runExceptT (unEvalM tm)) r in x
+-- runEvalM tm r = let (x, _, _) = runRWS (runExceptT (unEvalM tm)) r () in x
 
 getEnv :: EvalM a (Env a)
 getEnv = ask
