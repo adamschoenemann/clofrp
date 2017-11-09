@@ -13,7 +13,6 @@ import Data.Either (isLeft)
 import Data.String (fromString)
 import NeatInterpolation
 import Debug.Trace
-import Control.DeepSeq
 
 import qualified CloTT.AST.Parsed  as E
 import qualified CloTT.AST.Prim    as P
@@ -175,10 +174,11 @@ evalSpec = do
             e `shouldBe` "g" @@ "[af]" @@ ("xs'" @@ "[af]")
           e  -> failure ("did not expect " ++ show (pretty e))
     
-  describe "evalExprUntil" $ do
+  describe "evalExprCorec" $ do
     let evforever environ x = 
-          runEvalM (evalExprUntil x) environ
+          runEvalM (evalExprCorec x) environ
     let step m e = runEvalM (evalExprStep e) m
+    let forceit m e = runEvalM (force e) m
 
     let evforever0 x = evforever mempty x
     it "forever terminates with primitives" $ do
@@ -217,10 +217,141 @@ evalSpec = do
         nats
       |]
       let m = [s,z,cons]
-
       let cs = evforever m p
-      takeValueList pps 10 cs `shouldBe` (replicate 10 "foo")
-      -- takeConstr 10 cs `shouldBe` (replicate 10 "Z")
+      takeValueList vnatToInt 10 cs `shouldBe` ([0..9])
+    
+  describe "evalProg" $ do
+    it "works for stream of naturals" $ do
+      let Right p = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data NatF f = Z | S f.
+        type Nat = Fix NatF.
+
+        pure : forall (k : Clock) a. a -> |>k a.
+        pure = \x -> \\(af : k) -> x.
+
+        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+        app = \lf la -> \\(af : k) -> 
+          let f = lf [af] in
+          let a = la [af] in
+          f a.
+
+        -- functor
+        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        fmap = \f la -> app (pure f) la.
+
+        map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+        map = \f -> 
+          --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
+          let mapfix = \g xs ->
+                case unfold xs of
+                | Cons x xs' -> 
+                  let ys = \\(af : k) -> g [af] (xs' [af])
+                  in  cons (f x) ys
+          in fix mapfix.
+
+        z : Nat.
+        z = fold Z.
+
+        s : Nat -> Nat.
+        s = \x -> fold (S x).
+
+        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        cons = \x xs -> fold (Cons x xs).
+
+        nats : forall (k : Clock). Stream k Nat.
+        nats = fix (\g -> cons z (fmap (map s) g)).
+
+      |]
+
+      takeValueList vnatToInt 10 (evalProg "nats" p) `shouldBe` [0..9]
+
+    it "evals the constant stream" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+
+        data NatF f = Z | S f.
+        type Nat = Fix NatF.
+        
+        repeat : forall (k : Clock) a. a -> Stream k a.
+        repeat = \x ->
+          let body = (\xs -> fold (Cons x xs)) 
+          in  fix body.
+        
+        main : forall (k : Clock). Stream k Nat.
+        main = repeat Z.
+      |]
+      takeValueList vnatToInt 10 (evalProg "main" prog) `shouldBe` (replicate 10 0)
+
+    it "evals the true-false function" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data Bool = True | False.
+
+        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        cons = \x xs -> fold (Cons x xs).
+
+        truefalse : forall (k : Clock). Stream k Bool.
+        truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
+      |]
+
+      let truefalse = True : False : truefalse
+      takeValueList vboolToBool 10 (evalProg "truefalse" prog) `shouldBe` (take 10 $ truefalse)
+
+    it "evals the every-other function" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f).
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+
+        data Bool = True | False.
+
+        truefalse : forall (k : Clock). Stream k Bool.
+        truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
+
+        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        cos = \x xs -> 
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with fmap :(
+
+        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+        uncos = \xs -> case xs of | Cos xs' -> xs'.
+
+        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        cons = \x xs -> fold (Cons x xs).
+
+        hd : forall a. CoStream a -> a.
+        hd = \xs -> 
+          let Cos s = xs
+          in case unfold s of
+             | Cons x xs' -> x.
+
+        -- see if you can do this better with let generalization
+        tl : forall a. CoStream a -> CoStream a.
+        tl = \x ->
+          let Cos s = x in
+          let r = (case unfold s of
+                  | Cons x xs' -> xs' 
+                  ) : forall (k : Clock). |>k (Stream k a)
+          in Cos (r [<>]).
+
+        eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
+        eof = \f xs -> 
+          let tl2 = tl (tl xs) in
+          let dtl = (\\(af : k) -> (f [af]) tl2) in
+          cos (hd xs) dtl.
+
+        eo : forall a. CoStream a -> CoStream a.
+        eo = fix eof.
+
+        trues : Stream K0 Bool.
+        trues = 
+          let Cos xs = eo (Cos truefalse) in
+          xs.
+      |]
+      takeValueList vboolToBool 1000 (evalProg "trues" prog) `shouldBe` (replicate 1000 True)
           
 
 -- takes n levels down in a tree of constructors
@@ -237,7 +368,14 @@ takeConstr n v
 vnatToInt :: Value a -> Int
 vnatToInt (Constr "Z" _) = 0
 vnatToInt (Constr "S" [v]) = succ (vnatToInt v)
-vnatToInt v = error $ "vnatToInt: " ++ pps v
+vnatToInt v = error $ "vnatToInt: " ++ pps (takeConstr 10 v)
+
+vboolToBool :: Value a -> Bool
+vboolToBool v = 
+  case v of
+    Constr "True" _ -> True
+    Constr "False" _ -> False
+    _                -> error $ "vboolToBool error: " ++ pps (takeConstr 10 v)
 
 takeValueList :: (Value a -> b) -> Int -> Value a -> [b]
 takeValueList f n v 

@@ -361,6 +361,15 @@ clockSpec = do
 
         maap : forall a b. (a -> b) -> CoStream a -> CoStream b.
         maap = \f -> fix (maapfix f).
+
+        data Bool = True | False.        
+        truefalse : forall (k : Clock). Stream k Bool.
+        truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
+
+        trues : Stream K0 Bool.
+        trues = 
+          let Cos xs = eo (Cos truefalse) in
+          xs.
       |]
       runCheckProg mempty prog `shouldYield` ()
 

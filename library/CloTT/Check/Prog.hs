@@ -38,14 +38,26 @@ import CloTT.Context
 type Defs a = M.Map Name (Expr a)
 type Aliases a = M.Map Name (Alias a)
 
-type ElabRes a = 
-  ( KindCtx a    -- kinds
-  , Defs    a    -- function definitions
-  , FreeCtx a    -- signatures
-  , FreeCtx a    -- constructors
-  , DestrCtx  a  -- destructors
-  , Aliases a    -- type aliases
-  )
+data ElabRes a = ElabRes
+  { erKinds   :: KindCtx a    -- kinds
+  , erDefs    :: Defs    a    -- function definitions
+  , erSigs    :: FreeCtx a    -- signatures
+  , erConstrs :: FreeCtx a    -- constructors
+  , erDestrs  :: DestrCtx  a  -- destructors
+  , erAliases :: Aliases a    -- type aliases
+  } deriving (Show, Eq, Data, Typeable)
+
+instance Monoid (ElabRes a) where
+  mempty = ElabRes mempty mempty mempty mempty mempty mempty
+  er1 `mappend` er2 =
+    ElabRes { erKinds   = erKinds er1 `mappend` erKinds er2
+            , erDefs    = erDefs er1 `mappend` erDefs er2
+            , erSigs    = erSigs er1 `mappend` erSigs er2
+            , erConstrs = erConstrs er1 `mappend` erConstrs er2
+            , erDestrs  = erDestrs er1 `mappend` erDestrs er2
+            , erAliases = erAliases er1 `mappend` erAliases er2
+            }
+
 
 data ElabProg a = ElabProg
   { kinds  :: KindCtx a
@@ -219,9 +231,24 @@ expandAliases als t =
       | Just al <- M.lookup nm als = partialAliasApp al
       | otherwise                  = otherErr $ "alias " ++ show nm ++ " not in context. Should never happen"
 
+collectDecls :: Prog a -> ElabRes a
+collectDecls (Prog decls) = foldr folder mempty decls where
+    -- TODO: Check for duplicate defs/signatures/datadecls
+    folder :: Decl a -> ElabRes a -> ElabRes a
+    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erAliases = als}) = case x of
+      DataD dt@(Datatype nm b cs') ->
+        let (tys, dstrs) = elabCs nm b cs' 
+        in  er {erKinds = extend nm (dtKind dt) ks, erConstrs = tys <> cs, erDestrs = dstrs <> ds}
+
+      FunD nm e        -> er {erDefs = M.insert nm e fs}
+      SigD nm t        -> er {erSigs = extend nm t ss}
+      AliasD alias     -> er {erAliases = M.insert (alName alias) alias als}
+
+
+-- TODO: modularize this
 elabProg :: Prog a -> TypingM a (ElabProg a)
-elabProg (Prog decls) = do
-  (kinds, funds, sigds, cnstrs, destrs, aliases) <- foldrM folder (mempty, mempty, mempty, mempty, mempty, mempty) decls 
+elabProg program = do
+  let ElabRes kinds funds sigds cnstrs destrs aliases = collectDecls program 
   let defsNoSig = funds `M.difference` (unFreeCtx sigds)
       sigsNoDef = (unFreeCtx sigds) `M.difference` funds
       defsHaveSigs = M.null defsNoSig -- all tlds have signatures
@@ -235,8 +262,6 @@ elabProg (Prog decls) = do
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
-            -- traceM $ show $ pretty $ M.toList expFree
-            -- destrs <- DestrCtx <$> traverse ()
             pure $ ElabProg kinds (FreeCtx expFree) expFunds (expDestrs) aliases
   where 
     expandDestr als d@(Destr {typ, args}) = do
@@ -244,16 +269,6 @@ elabProg (Prog decls) = do
       args' <- traverse (expandAliases als) args
       pure (d {typ = typ', args = args'})
 
-    -- TODO: Check for duplicate defs/signatures/datadecls
-    folder :: Decl a -> ElabRes a -> TypingM a (ElabRes a)
-    folder (A _ x) (ks, fs, ss, cs, ds, als) = case x of
-      DataD dt@(Datatype nm b cs') ->
-        let (tys, dstrs) = elabCs nm b cs' 
-        in  pure (extend nm (dtKind dt) ks, fs, ss, tys <> cs, dstrs <> ds, als)
-
-      FunD nm e        -> pure (ks, M.insert nm e fs, ss, cs, ds, als)
-      SigD nm t        -> pure (ks, fs, extend nm t ss, cs, ds, als)
-      AliasD alias     -> pure (ks, fs, ss, cs, ds, M.insert (alName alias) alias als)
 
 
 

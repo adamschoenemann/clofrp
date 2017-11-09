@@ -63,7 +63,7 @@ instance Pretty (Value a) where
     Var nm  -> pretty nm
     TickVar nm  -> pretty nm
     Closure env n e -> parens $ group $ "\\" <> pretty e <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pretty env)
-    TickClosure env n e -> parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pretty env)
+    TickClosure env n e -> parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> line <> indent 4 ("closed over" <+> pretty env)
     Tuple vs -> tupled (map pretty vs)
     Constr nm [] -> pretty nm
     Constr nm vs -> parens $ pretty nm <+> fillSep (map pretty vs)

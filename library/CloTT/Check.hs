@@ -195,6 +195,7 @@ kindOf ty = go ty `decorateErr` decorate where
     kctx <- getKCtx
     ctx <- getCtx
     case t of
+      TFree "K0" -> pure ClockK -- TODO: HACK ALERT!
       TFree v -> maybe (freeNotFound v) pure $ query v kctx
 
       TVar v -> queryKind v
