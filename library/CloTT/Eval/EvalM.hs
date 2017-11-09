@@ -5,6 +5,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 module CloTT.Eval.EvalM where
 
@@ -26,25 +28,25 @@ data EvalErr = Other String
   deriving (Show, Eq)
 
 -- newtype EvalM a r = Eval { unEvalM :: ExceptT EvalErr (RWS (EvalRead a) EvalWrite EvalState) r }
-newtype EvalM a r = Eval { unEvalM :: ExceptT EvalErr (Reader (EvalRead a)) r }
-  deriving ( Functor
+newtype EvalM a r = Eval { unEvalM :: Reader (EvalRead a) r }
+  deriving newtype ( Functor
            , Applicative
            , Monad
-           , MonadError  EvalErr 
+          --  , MonadError  EvalErr 
           --  , MonadState  EvalState
           --  , MonadWriter EvalWrite 
-           , MonadReader (EvalRead a)
+          , MonadReader (EvalRead a)
            )
 
-type EvalMRes r = Either EvalErr r
+type EvalMRes r = r
 
-instance Alternative (EvalM a) where 
-  empty = otherErr "Alternative.empty for EvalM"
-  x <|> y = x `catchError` \e -> y
+-- instance Alternative (EvalM a) where 
+--   empty = otherErr "Alternative.empty for EvalM"
+--   x <|> y = x `catchError` \e -> y
 
 
 runEvalM :: EvalM a r -> (EvalRead a) -> EvalMRes r
-runEvalM tm r = let x = runReader (runExceptT (unEvalM tm)) r in x
+runEvalM tm r = let x = runReader (unEvalM tm) r in x
 -- runEvalM tm r = let (x, _, _) = runRWS (runExceptT (unEvalM tm)) r () in x
 
 getEnv :: EvalM a (Env a)
@@ -62,5 +64,5 @@ lookupVar nm =
       env <- getEnv
       otherErr $ show $ "Cannot lookup" <+> pretty nm <+> "in env" <+> pretty env
 
-otherErr :: String -> EvalM a r
-otherErr = throwError . Other
+otherErr :: String -> EvalM a (Value a)
+otherErr = pure . Prim . RuntimeErr 

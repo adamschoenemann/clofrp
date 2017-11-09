@@ -31,6 +31,7 @@ data PrimVal
   | Unfold
   | PrimRec
   | Fix 
+  | RuntimeErr String
   deriving (Eq, Generic, NFData, Show)
 
 instance Pretty PrimVal where
@@ -41,6 +42,7 @@ instance Pretty PrimVal where
     Unfold   -> "unfold"
     PrimRec  -> "primRec"
     Fix      -> "fix"
+    RuntimeErr s -> fromString s
 
 -- instance Show PrimVal where show = show . pretty
 

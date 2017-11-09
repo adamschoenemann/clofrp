@@ -11,11 +11,16 @@ import Data.Text.Prettyprint.Doc
 import Control.Applicative ((<|>))
 import Data.Foldable (foldrM, foldlM)
 import Control.Monad ((<=<))
+import Debug.Trace
+import Control.Monad.Reader
+import Control.Monad.Except
+import Data.Either
 
 import CloTT.AST.Name
 import CloTT.Annotated
 import CloTT.Eval.EvalM
 import CloTT.Eval.Value
+import CloTT.Pretty
 
 import qualified CloTT.AST.Prim as P
 import           CloTT.AST.Expr (Expr)
@@ -23,27 +28,44 @@ import qualified CloTT.AST.Expr as E
 import           CloTT.AST.Pat (Pat)
 import qualified CloTT.AST.Pat  as E
 
-evalPat :: Pat a -> Value a -> EvalM a (Env a)
+evalPat :: Pat a -> Value a -> EvalM a (Either String (Env a))
 evalPat (A _ p) v =
   case p of
-    E.Bind nm -> extend nm v <$> getEnv
+    E.Bind nm -> Right <$> extend nm v <$> getEnv
     E.PTuple ps -> 
       case v of
-        Tuple vs -> combineMany <$> sequence (map (uncurry evalPat) $ zip ps vs)
-        _        -> otherErr $ "Tuple pattern failed"
+        Tuple vs -> do 
+          env <- getEnv
+          foldr folder (pure $ Right env) $ zip ps vs
+          where
+            folder (p', v') m = m >>= \case
+              Left err -> pure $ Left err
+              Right env -> withEnv (const env) $ evalPat p' v'
+          
+        _        -> pure $ Left $ "Tuple pattern failed"
     E.Match nm ps ->
       case v of 
         Constr nm' vs | nm == nm' -> do 
           env <- getEnv
-          foldrM folder env (zip ps vs) 
+          foldrM folder (Right env) (zip ps vs) 
           where
-            folder (p', v') acc = withEnv (const acc) $ evalPat p' v'
-        _        -> otherErr $ "Constructor pattern failed"
+            folder (p', v') (Right acc) = withEnv (const acc) $ evalPat p' v'
+            folder _  (Left err)  = pure (Left err)
+        _        -> pure $ Left $ "Constructor pattern failed"
 
-evalClause :: Value a -> (Pat a, Expr a) -> EvalM a (Value a)
+evalClauses :: Value a -> [(Pat a, Expr a)] -> EvalM a (Value a)
+evalClauses val [] = pure . Prim . RuntimeErr $ "No clause matched"
+evalClauses val (c : cs) = 
+  evalClause val c >>= \case 
+    Right v -> pure v
+    Left  e -> evalClauses val cs
+
+evalClause :: Value a -> (Pat a, Expr a) -> EvalM a (Either String (Value a))
 evalClause val (p, e) = do
-  env' <- evalPat p val
-  withEnv (const env') $ evalExprStep e
+  envE <- evalPat p val
+  case envE of
+    Right env' -> Right <$> (withEnv (const env') $ evalExprStep e)
+    Left err -> pure $ Left err
 
 evalPrim :: P.Prim -> EvalM a (Value a)
 evalPrim = \case
@@ -101,8 +123,8 @@ evalExprStep (A ann expr') =
           let app x y = A ann $ x `E.App` y
           let fixe = A ann $ E.Prim P.Fix
           env <- getEnv
-          let env' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) env
-          withEnv (const (env' `combine` cenv)) $ evalExprStep e2'
+          let cenv' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) cenv
+          withEnv (combine cenv') $ evalExprStep e2'
 
         _ -> otherErr $ show $ "Expected" <+> pretty v1 <+> "to be a lambda or something"
     
@@ -112,33 +134,43 @@ evalExprStep (A ann expr') =
 
     E.Let p e1 e2 -> do
       v1 <- evalExprStep e1
-      env' <- evalPat p v1
-      withEnv (const env') $ evalExprStep e2
+      envE' <- evalPat p v1
+      case envE' of
+        Right env' -> withEnv (const env') $ evalExprStep e2
+        Left err -> pure . Prim . RuntimeErr $ "Let match failed"
     
     E.Case e1 cs -> do
       v1 <- evalExprStep e1
-      foldr1 (<|>) $ map (evalClause v1) cs
+      evalClauses v1 cs
 
     E.TypeApp e t -> evalExprStep e
 
-evalExprUntil :: Expr a -> s -> (s -> (Bool, s)) -> EvalM a (Value a)
-evalExprUntil expr init p = check 1000000 init expr where 
-  check n _ e | n <= 0 = evalExprStep e
-  check n s e = do
+
+-- proof that the except monad is not lazy
+type TestM a = ReaderT () (Except ()) a
+
+coindplz :: [()]
+coindplz = let Right x = runTestM loop in x where
+  loop :: TestM [()]
+  loop = do
+    l <- loop
+    pure (() : l)
+  
+  runTestM :: TestM r -> Either () r
+  runTestM x = runExcept (runReaderT x ())
+
+evalExprUntil :: Expr a -> EvalM a (Value a)
+evalExprUntil expr = check (100 :: Int) expr where 
+  check n e | n <= 0 = evalExprStep e
+  check n e = do
     v <- evalExprStep e
     case v of
-      Prim p -> pure v
-      Var nm  -> lookupVar nm
-      TickVar nm  -> pure v
-      Closure env nm e -> pure v
-      TickClosure cenv nm e -> pure v
-      Tuple vs -> pure v -- Tuple <$> sequence (map (check s') vs)
-      Constr nm vs -> do
-        Constr nm <$> evalMany (n-1) s vs
+      Constr nm vs -> Constr nm <$> evalMany n vs
+      _ -> pure v
 
-  evalMany _ s [] = pure []
-  evalMany n s (TickClosure env nm e : vs) = do 
-    v' <- withEnv (\e -> combine e (extend nm (Prim Tick) env)) $ check n s e
-    vs' <- evalMany n s vs
+  evalMany _ [] = pure []
+  evalMany n (TickClosure env nm e : vs) = do 
+    v' <- withEnv (\e -> combine e (extend nm (Prim Tick) env)) $ check n e
+    vs' <- evalMany (n-1) vs
     pure (v' : vs')
-  evalMany n s (v:vs) = (v :) <$> evalMany n s vs
+  evalMany n (v:vs) = (v :) <$> evalMany (n-1) vs
