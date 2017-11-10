@@ -38,8 +38,6 @@ globalLookup nm = do
     Just (Right v) -> pure . Just $ v
     Just (Left e) -> Just <$> evalExprStep e
     
-
-
 lookupVar :: Name -> EvalM a (Value a)
 lookupVar nm = do
   inEnv <- envLookup nm <$> getEnv 
@@ -49,6 +47,32 @@ lookupVar nm = do
     Nothing -> do 
       env <- getEnv
       otherErr $ show $ "Cannot lookup" <+> pretty nm <+> "in env" <+> pretty env
+
+
+fmapNat :: a -> Expr a
+fmapNat ann = 
+  let lam nm e = A ann $ E.Lam nm Nothing e
+      fn = DeBruijn 0
+      ftornm = DeBruijn 1
+      ftor = A ann (E.Var ftornm)
+      f = A ann (E.Var fn)
+      casee e = A ann . E.Case e
+      app e1 e2 = A ann (e1 `E.App` e2)
+  in lam fn (casee ftor 
+      [ (A ann $ E.Match "Z" [], A ann (E.Var "Z"))
+      , (A ann $ E.Match "S" [A ann $ E.Bind (UName "_n")], f `app` (A ann (E.Var "_n")))
+      ]
+     ) 
+
+lookupFmap :: a -> Value a -> EvalM a (Expr a)
+lookupFmap ann (Constr "Z" _) = pure $ fmapNat ann
+lookupFmap ann (Constr "S" _) = pure $ fmapNat ann
+lookupFmap _ _             = error "lookupFmap"
+
+-- getFmap :: Value a -> Value a -> EvalM (Value a)
+-- getFmap f = \case
+--   Constr nm cstrs -> do
+--     fm <- lookupFmap nm
 
 evalPat :: Pat a -> Value a -> EvalM a (Either String (Env a))
 evalPat (A _ p) v =
@@ -78,7 +102,8 @@ evalPat (A _ p) v =
         folder _  (Left err)  = pure (Left err)
 
 evalClauses :: Value a -> [(Pat a, Expr a)] -> EvalM a (Value a)
-evalClauses val [] = pure . Prim . RuntimeErr $ "No clause matched"
+evalClauses (Prim (RuntimeErr e)) _ = pure (Prim $ RuntimeErr e)
+evalClauses val [] = pure . Prim . RuntimeErr $ show $ "No clause matched for" <+> pretty val
 evalClauses val (c : cs) = 
   evalClause val c >>= \case 
     Right v -> pure v
@@ -100,6 +125,7 @@ evalPrim = \case
   P.PrimRec          -> pure . Prim $ PrimRec
   P.Tick             -> pure . Prim $ Tick
   P.Fix              -> pure . Prim $ Fix
+  P.Fmap             -> pure . Prim $ Fmap
   P.Undefined        -> otherErr $ "Undefined!"
 
 evalExprStep :: Expr a -> EvalM a (Value a)
@@ -149,8 +175,37 @@ evalExprStep (A ann expr') =
           env <- getEnv
           let cenv' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) cenv
           withEnv (combine cenv') $ evalExprStep e2'
+        
+        (Prim Fmap, _) -> do
+          pure $ GetFmap e2
+        
+        (GetFmap f, v) -> do
+          fm <- lookupFmap ann v
+          evalExprStep (A ann $ fm `E.App` f)
+        
+        {-
+        primRec body x
+        => body (fmap (\x -> (x, primRec body x)) x) 
+
+        primRec body
+        => \x -> body (fmap (\x -> (x, primRec body x)) x)
+        -}
+        (Prim PrimRec, _) -> do
+          let conte = A ann $ (A ann $ (A ann $ E.Prim P.PrimRec) `E.App` e2)
+                              `E.App` (A ann $ E.Var (DeBruijn 0))
+          let etup = A ann $ E.Tuple [A ann $ E.Var (DeBruijn 0), conte]
+          let fmaplam = A ann $ E.Lam (DeBruijn 0) Nothing etup
+          let fmape = A ann $ (A ann $ (E.Prim E.Fmap)) `E.App` fmaplam
+          let bdeapp = A ann $ e2 `E.App` fmape 
+          env <- getEnv
+          pure $ Closure env (DeBruijn 0) bdeapp
+        
+        (Prim (RuntimeErr _), _) -> pure v1
+        (_, Prim( RuntimeErr _)) -> pure v2
 
         _ -> otherErr $ show $ "Expected" <+> pretty v1 <+> "to be a lambda or something"
+
+          
     
     E.Ann e t -> evalExprStep e
 

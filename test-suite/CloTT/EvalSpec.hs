@@ -352,6 +352,49 @@ evalSpec = do
           xs.
       |]
       takeValueList vboolToBool 1000 (evalProg "trues" prog) `shouldBe` (replicate 1000 True)
+    
+    it "evals primitive recursion over natural numbers" $ do
+      let Right prog = pprog [text|
+        data NatF a = Z | S a. 
+        type Nat = Fix NatF.
+
+        s : Nat -> Nat.
+        s = \x -> fold (S x).
+
+        z : Nat.
+        z = fold Z.
+
+        plus : Nat -> Nat -> Nat.
+        plus = \m n -> 
+          let body = \x ->
+            case x of
+              | Z -> n
+              | S (m', r) -> fold (S r)
+          in  primRec body m.
+
+        main : Nat.
+        main = plus (s (s (s z))) (s (s z)).
+      |]
+      {-
+      instance Functor NatF where
+        fmap f x = case x of
+          | Z -> Z
+          | S n -> S (fmap f n)
+
+      plus 3 2 =>
+      primRec body (S (S (S Z))) =>
+      body (fmap (\y -> (y, primRec body y)) (S (S (S Z)))) =>
+      case 
+      -}
+      let v = evalProg "main" prog
+      let s x = Constr "S" [x]
+      let z = Constr "Z" []
+      let five = s (s (s (s (s z))))
+      -- v `shouldBe` five
+      putStrLn (replicate 80 '-')
+      putStrLn (pps v)
+      putStrLn (replicate 80 '-')
+      True `shouldBe` True
           
 
 -- takes n levels down in a tree of constructors

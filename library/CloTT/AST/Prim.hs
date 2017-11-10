@@ -21,6 +21,7 @@ data Prim
   | Tick
   | Fix
   | Undefined
+  | Fmap
   deriving (Eq, Data, Typeable, Generic, NFData)
 
 instance Show Prim where
@@ -32,6 +33,7 @@ instance Show Prim where
   show Tick    = "◇"
   show Fix     = "fix"
   show Undefined  = "⊥"
+  show Fmap  = "__fmap__"
 
 instance Pretty Prim where
   pretty = fromString . show

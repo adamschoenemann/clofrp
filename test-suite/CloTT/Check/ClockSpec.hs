@@ -202,7 +202,6 @@ clockSpec = do
           let x' = uncos x : forall (k' : Clock). Stream k' a 
           in Cos x'.
         
-
         cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         cos = \x xs -> 
           Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
