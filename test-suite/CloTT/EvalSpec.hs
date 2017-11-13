@@ -27,7 +27,7 @@ import           CloTT.QuasiQuoter
 import           CloTT.TestUtils
 import           CloTT.Pretty
 import           CloTT.Eval
-import           CloTT.Annotated (unann)
+import           CloTT.Annotated (unann, Annotated(..))
 
 evalSpec :: Spec
 evalSpec = do
@@ -38,6 +38,27 @@ evalSpec = do
   let c nm = (nm, Constr nm [])
   let (|->) = \x y -> (x,y) 
   let [s,z,cons,nil,just,nothing] = [c "S", c "Z", c "Cons", c "Nil", c "Just", c "Nothing"] :: [(E.Name, Value ())]
+
+  describe "deriveFunctor" $ do
+    it "derives peano numerals functor" $ do
+      let peano = E.Datatype
+            { E.dtName = "NatF"
+            , E.dtBound = [("f", E.Star)]
+            , E.dtConstrs =
+              [ A () $ E.Constr "Z" []
+              , A () $ E.Constr "S" ["f"]
+              ]
+            }
+      let Right ftor = deriveFunctor peano
+      ftor `shouldBe` 
+        ("#f" @-> "#val" @-> 
+          E.caseof "#val" 
+            [ (E.match "Z" [], "Z")
+            , (E.match "S" [E.bind $ E.mname 0], "S" @@ ("#f" @@ (E.var $ E.mname 0)))
+            ]
+        )
+      
+
   describe "evalExprStep" $ do
     it "evals lambdas" $ do
       eval0 ("x" @-> "x") `shouldBe` (Closure [] "x" (E.var "x"))
@@ -353,6 +374,18 @@ evalSpec = do
       |]
       takeValueList vboolToBool 1000 (evalProg "trues" prog) `shouldBe` (replicate 1000 True)
     
+    it "evals fmap" $ do
+      let Right prog = pprog [text|
+        data NatF a = Z | S a. 
+        data Bool = True | False.
+
+        main : Bool.
+        main = __fmap__ (\x -> True) (S False).
+      |]
+      let v = evalProg "main" prog
+      v `shouldBe` (Constr "S" [Constr "True" []])
+
+    
     it "evals primitive recursion over natural numbers" $ do
       let Right prog = pprog [text|
         data NatF a = Z | S a. 
@@ -372,29 +405,52 @@ evalSpec = do
               | S (m', r) -> fold (S r)
           in  primRec body m.
 
+        multRec : Nat -> NatF (Nat, Nat) -> Nat.
+        multRec = \n x ->
+          case x of
+            | Z -> fold Z
+            | S (m', r) -> plus n r.
+        
+        mult : Nat -> Nat -> Nat.
+        mult = \m n ->
+          primRec (multRec n) m.
+        
+        one : Nat.
+        one = s z.
+        two : Nat.
+        two = s one.
+        three : Nat.
+        three = s two.
+
         main : Nat.
-        main = plus (s (s (s z))) (s (s z)).
+        main = mult (plus two three) two.
+        -- main = plus (s (s (s z))) (s (s z)).
       |]
       {-
       instance Functor NatF where
         fmap f x = case x of
           | Z -> Z
-          | S n -> S (fmap f n)
+          | S n -> S (f n)
 
-      plus 3 2 =>
-      primRec body (S (S (S Z))) =>
-      body (fmap (\y -> (y, primRec body y)) (S (S (S Z)))) =>
-      case 
-      -}
+      plus (S Z) (S Z)
+      => primRec body (S Z)
+      => body (fmap (\x -> (x, primRec body x) (S Z))
+      => body (S (S Z, primRec body Z))
+      => body (S (S Z, body (fmap (\x -> (x, primRec body x) Z))))
+      => body (S (S Z, body Z))
+      => body (S (S Z, S Z))
+      => body (S (S Z))
+      -} 
       let v = evalProg "main" prog
       let s x = Constr "S" [x]
       let z = Constr "Z" []
-      let five = s (s (s (s (s z))))
-      -- v `shouldBe` five
-      putStrLn (replicate 80 '-')
-      putStrLn (pps v)
-      putStrLn (replicate 80 '-')
-      True `shouldBe` True
+      let n 0 = Constr "Z" []
+          n k = Constr "S" [n (k-1)]
+      v `shouldBe` n (10 :: Int)
+      -- putStrLn (replicate 80 '-')
+      -- putStrLn (pps v)
+      -- putStrLn (replicate 80 '-')
+      -- True `shouldBe` True
           
 
 -- takes n levels down in a tree of constructors

@@ -249,8 +249,8 @@ collectDecls (Prog decls) = foldr folder mempty decls where
 elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg program = do
   let ElabRes kinds funds sigds cnstrs destrs aliases = collectDecls program 
-  let defsNoSig = funds `M.difference` (unFreeCtx sigds)
-      sigsNoDef = (unFreeCtx sigds) `M.difference` funds
+  let defsNoSig = funds `M.difference` unFreeCtx sigds
+      sigsNoDef = unFreeCtx sigds `M.difference` funds
       defsHaveSigs = M.null defsNoSig -- all tlds have signatures
       sigsHaveDefs = M.null sigsNoDef -- all signatures have definitions
   case () of
@@ -262,7 +262,7 @@ elabProg program = do
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
-            pure $ ElabProg kinds (FreeCtx expFree) expFunds (expDestrs) aliases
+            pure $ ElabProg kinds (FreeCtx expFree) expFunds expDestrs aliases
   where 
     expandDestr als d@(Destr {typ, args}) = do
       typ' <- expandAliases als typ

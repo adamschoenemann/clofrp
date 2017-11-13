@@ -89,6 +89,7 @@ atom =   nat
      <|> reserved "[<>]" *> (ann <*> pure (E.Prim E.Tick))
      <|> reserved "fix" *> (ann <*> pure (E.Prim E.Fix))
      <|> reserved "undefined" *> (ann <*> pure (E.Prim E.Undefined))
+     <|> reserved "__fmap__" *> (ann <*> pure (E.Prim E.Fmap))
      <|> letp
      <|> var
      <|> tickvar

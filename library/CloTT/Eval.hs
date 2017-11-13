@@ -1,6 +1,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module CloTT.Eval 
   ( module CloTT.Eval.EvalM
@@ -27,8 +35,39 @@ import CloTT.Pretty
 import CloTT.Check.Prog
 
 import qualified CloTT.AST.Prim as P
-import           CloTT.AST.Parsed (Expr, Prog, Pat)
+import           CloTT.AST.Parsed (Expr, Prog, Pat, Type, TySort(..), Datatype(..))
 import qualified CloTT.AST.Parsed as E
+
+-- helper functions here
+app :: (?annotation :: a) => Expr a -> Expr a -> Expr a
+app x y = A ?annotation $ x `E.App` y
+
+prim :: (?annotation :: a) => E.Prim -> Expr a
+prim = A ?annotation . E.Prim
+
+var :: (?annotation :: a) => Name -> Expr a
+var = A ?annotation . E.Var
+
+lam :: (?annotation :: a) => Name -> Maybe (Type a Poly) -> Expr a -> Expr a
+lam n t e = A ?annotation $ E.Lam n t e
+
+tuple :: (?annotation :: a) => [Expr a] -> Expr a
+tuple = A ?annotation . E.Tuple
+
+casee :: (?annotation :: a) => Expr a -> [(Pat a, Expr a)] -> Expr a
+casee e = A ?annotation . E.Case e
+
+bind :: (?annotation :: a) => Name -> Pat a
+bind = A ?annotation . E.Bind
+
+match :: (?annotation :: a) => Name -> [Pat a] -> Pat a
+match ps = A ?annotation . E.Match ps
+
+tickvar :: (?annotation :: a) => Name -> Expr a
+tickvar = A ?annotation . E.TickVar
+
+tAbs :: (?annotation :: a) => Name -> Name -> Expr a -> Expr a
+tAbs af k = A ?annotation . E.TickAbs af k
 
 globalLookup :: Name -> EvalM a (Maybe (Value a))
 globalLookup nm = do
@@ -51,16 +90,15 @@ lookupVar nm = do
 
 fmapNat :: a -> Expr a
 fmapNat ann = 
-  let lam nm e = A ann $ E.Lam nm Nothing e
-      fn = DeBruijn 0
-      ftornm = DeBruijn 1
-      ftor = A ann (E.Var ftornm)
-      f = A ann (E.Var fn)
-      casee e = A ann . E.Case e
-      app e1 e2 = A ann (e1 `E.App` e2)
-  in lam fn (casee ftor 
-      [ (A ann $ E.Match "Z" [], A ann (E.Var "Z"))
-      , (A ann $ E.Match "S" [A ann $ E.Bind (UName "_n")], f `app` (A ann (E.Var "_n")))
+  let ?annotation = ann in
+  let fn = UName "__fn__"
+      ftornm = UName "__ftor__"
+      ftor = var ftornm
+      f = var fn
+      s = var "S"
+  in lam fn Nothing (lam ftornm Nothing $ casee ftor 
+      [ (match "Z" [], var "Z")
+      , (match "S" [bind (UName "_n")], s `app` (f `app` var "_n"))
       ]
      ) 
 
@@ -103,11 +141,14 @@ evalPat (A _ p) v =
 
 evalClauses :: Value a -> [(Pat a, Expr a)] -> EvalM a (Value a)
 evalClauses (Prim (RuntimeErr e)) _ = pure (Prim $ RuntimeErr e)
-evalClauses val [] = pure . Prim . RuntimeErr $ show $ "No clause matched for" <+> pretty val
-evalClauses val (c : cs) = 
-  evalClause val c >>= \case 
-    Right v -> pure v
-    Left  e -> evalClauses val cs
+evalClauses value clauses = helper value clauses where
+  helper val [] = 
+    let pcls = indent 4 $ vsep $ map (\(a,b) -> group (pretty a) <+> "->" <+> pretty b) clauses
+    in  pure . Prim . RuntimeErr $ show $ "None of the clauses" <> line <> pcls <+> "matched" <+> pretty val
+  helper val (c : cs) = 
+    evalClause val c >>= \case 
+      Right v -> pure v
+      Left  e -> helper val cs
 
 evalClause :: Value a -> (Pat a, Expr a) -> EvalM a (Either String (Value a))
 evalClause val (p, e) = do
@@ -130,7 +171,8 @@ evalPrim = \case
 
 evalExprStep :: Expr a -> EvalM a (Value a)
 evalExprStep (A ann expr') = 
-  case expr' of
+  let ?annotation = ann
+  in  case expr' of
     E.Prim p -> evalPrim p
     E.Var nm -> lookupVar nm
     
@@ -170,8 +212,7 @@ evalExprStep (A ann expr') =
         --  ----------------------------------------------------------------
         --                      fix f =>σ v
         (Prim Fix, Closure cenv nm e2') -> do
-          let app x y = A ann $ x `E.App` y
-          let fixe = A ann $ E.Prim P.Fix
+          let fixe = prim P.Fix
           env <- getEnv
           let cenv' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) cenv
           withEnv (combine cenv') $ evalExprStep e2'
@@ -181,7 +222,7 @@ evalExprStep (A ann expr') =
         
         (GetFmap f, v) -> do
           fm <- lookupFmap ann v
-          evalExprStep (A ann $ fm `E.App` f)
+          evalExprStep ((fm `app` f `app`) e2)
         
         {-
         primRec body x
@@ -191,14 +232,19 @@ evalExprStep (A ann expr') =
         => \x -> body (fmap (\x -> (x, primRec body x)) x)
         -}
         (Prim PrimRec, _) -> do
-          let conte = A ann $ (A ann $ (A ann $ E.Prim P.PrimRec) `E.App` e2)
-                              `E.App` (A ann $ E.Var (DeBruijn 0))
-          let etup = A ann $ E.Tuple [A ann $ E.Var (DeBruijn 0), conte]
-          let fmaplam = A ann $ E.Lam (DeBruijn 0) Nothing etup
-          let fmape = A ann $ (A ann $ (E.Prim E.Fmap)) `E.App` fmaplam
-          let bdeapp = A ann $ e2 `E.App` fmape 
+          let oname = UName "__outer__"
+          let ovar = var oname
+          let iname = UName "__inner__"
+          let ivar = var iname
+
+          let conte = (prim P.PrimRec `app` e2) `app` ivar
+          let etup = tuple [ivar, conte]
+          let fmaplam = lam iname Nothing etup
+          let fmape = (prim E.Fmap `app` fmaplam) `app` ovar
+          let bdeapp = e2 `app` fmape 
           env <- getEnv
-          pure $ Closure env (DeBruijn 0) bdeapp
+          let r = Closure env oname bdeapp
+          pure $ r
         
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim( RuntimeErr _)) -> pure v2
@@ -257,6 +303,153 @@ evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where
     vs' <- evalMany (n-1) vs
     pure (v' : vs')
 
+{-
+data NatF f = Z | S f.
+Z : forall a. NatF a.
+S : forall a. a -> NatF a.
+
+instance Functor NatF where
+  fmap f Z = Z
+  fmap f (S n) = S (f n)
+-}
+
+data Ftor0 f = Ftor0 (forall a. (a, f))
+
+instance Functor Ftor0 where
+  fmap f (Ftor0 x) = Ftor0 (fst x, f (snd x))
+
+data Ftor1 f = Ftor1 (forall a. a -> f) 
+data Ftor2 f = Ftor2 (Int -> f)
+
+instance Functor Ftor1 where
+  fmap f (Ftor1 g) = Ftor1 (\x -> f (g x))
+
+instance Functor Ftor2 where
+  fmap f (Ftor2 g) = Ftor2 (\x -> f (g x))
+
+data Ftor3 f = forall a. Ftor3 (a -> f) -- deriving (Functor)
+
+instance Functor Ftor3 where
+  fmap f (Ftor3 g) = Ftor3 (\x -> f (g x))
+
+data Ftor4 f = Ftor4 f (Maybe f)
+
+instance Functor Ftor4 where
+  fmap f (Ftor4 x my) = Ftor4 (f x) (fmap f my)
+
+data Ftor5 f = Ftor5 ((f -> Int) -> Int) deriving Functor
+
+
+type TVarName = Name
+deriveFunctor :: Datatype a -> Either String (Expr a)
+deriveFunctor (E.Datatype {dtName, dtBound, dtConstrs}) =
+  let vn = UName "#val"
+      fn = UName "#f"
+      tnm = fst . last $ dtBound -- TODO: make total
+      A ann _ = head dtConstrs -- TODO: make total
+  in  let ?annotation = ann
+  in  lam fn Nothing . lam vn Nothing .
+        casee (var vn) <$> traverse (deriveFunctorConstr (var fn) tnm) dtConstrs
+
+deriveFunctorConstr :: forall a. Expr a -> TVarName -> E.Constr a -> Either String (Pat a, Expr a)
+deriveFunctorConstr f tnm constr@(A ann (E.Constr nm args)) = do
+  let (pat, assocs) = matchConstr constr
+  let ?annotation = ann
+  cargs <- traverse traversal assocs
+  pure $ (pat, foldl folder (var nm) cargs)
+  where
+    folder acc darg = acc `app` darg
+
+    traversal :: (?annotation :: a) => (Name, Type a Poly) -> Either String (Expr a)
+    traversal (nm, ty) = do 
+      fn <- deriveFmapArg f tnm ty
+      pure $ fn `app` var nm
+
+matchConstr :: E.Constr a -> (Pat a, [(Name, Type a Poly)])
+matchConstr (A ann (E.Constr nm args)) = 
+  let ?annotation = ann in
+  let assocs = map (\(i, t) -> (MName i, t)) $ zip [0..] args
+  in  (match nm $ map (bind . fst) assocs, assocs)
+
+-- derive `fmap f` for functorial type variable `tnm` over type `typ`
+-- https://ghc.haskell.org/trac/ghc/wiki/Commentary/Compiler/DeriveFunctor
+deriveFmapArg :: Expr a -> TVarName -> Type a Poly -> Either String (Expr a)
+deriveFmapArg f tnm typ = go typ where
+  go (A ann typ') = 
+    let ?annotation = ann in
+    let id = lam "x" Nothing $ var "x"
+    in case typ' of
+      E.TFree _   -> pure id
+      E.TExists _ -> pure id
+      E.TVar nm | nm == tnm -> pure $ f
+                | otherwise -> pure id
+      E.Forall v k t -> go t -- TODO: !?!?!?
+      E.Later t1 t2 -> 
+        let af = UName "0af"
+            k  = UName "0k"
+        in  pure $ lam "x" Nothing $ tAbs af k (f `app` (var "x" `app` tickvar af))
+      E.TTuple ts -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x" -- TODO: fmap for tuples
+      t1 `E.TApp` t2 -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x"
+      t1 E.:->: t2     -> do
+        e1 <- go t1
+        e2 <- cogo t2
+        let x = UName "x"
+            b = UName "b"
+        pure $ lam x Nothing $ lam b Nothing $ e2 `app` (var x `app` (e1 `app` var b))
+
+  cogo (A ann typ') = 
+    let ?annotation = ann in
+    let id = lam "x" Nothing $ var "x"
+    in case typ' of
+      E.TFree _   -> pure id
+      E.TExists _ -> pure id
+      E.TVar nm | nm == tnm -> Left $ "type variable" ++ pps tnm ++ "is in a contravariant position"
+                | otherwise -> pure id
+      E.Forall v k t -> go t -- TODO: !?!?!?
+      E.Later t1 t2 -> 
+        let af = UName "0af"
+            k  = UName "0k"
+        in  pure $ lam "x" Nothing $ tAbs af k (f `app` (var "x" `app` tickvar af))
+      E.TTuple ts -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x" -- TODO: fmap for tuples
+      t1 `E.TApp` t2 -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x"
+      t1 E.:->: t2     -> do
+        e1 <- cogo t1
+        e2 <- go t2
+        let x = UName "x"
+            b = UName "b"
+        pure $ lam x Nothing $ lam b Nothing $ e2 `app` (var x `app` (e1 `app` var b))
+  
+
+        
+        
+
+
+-- deriveFunctor pname typ@(A ann typ') = 
+--   case typ' of
+--     TFree y     | y == forY  -> x
+--                 | otherwise -> A a $ TFree y
+
+--     TVar y      | y == forY  -> x
+--                 | otherwise -> A a $ TVar y
+
+--     TExists y   | y == forY  -> x
+--                 | otherwise -> A a $ TExists y
+
+--     Forall y k t  | y == forY -> A a $ Forall y k t 
+--                   | otherwise -> A a $ Forall y k (subst x forY t)
+
+--     Later  t1 t2  -> A a (Later (subst x forY t1) (subst x forY t2))
+
+
+--     RecTy  t  -> A a $ RecTy (subst x forY t)
+--     TTuple ts -> A a $ TTuple (map (subst x forY) ts)
+
+--     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
+    
+--     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
+
+
+
 evalProg :: Name -> Prog a -> Value a
 evalProg mainnm pr =
   let er@(ElabRes {erDefs, erConstrs}) = collectDecls pr
@@ -266,3 +459,4 @@ evalProg mainnm pr =
         Just maindef -> 
           runEvalM (updGlobals (const initState) >> evalExprCorec maindef) mempty
         Nothing -> Prim . RuntimeErr $ "No main definition of name " ++ pps mainnm ++ " found"
+

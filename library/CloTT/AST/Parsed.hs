@@ -126,8 +126,8 @@ sum = \xs ->
 
 -- Here are some combinators for creating un-annotated expressions easily
 
-var :: String -> Expr ()
-var = A () . Var . UName
+var :: Name -> Expr ()
+var = A () . Var 
 
 free :: Name -> Type () Poly
 free nm = A () $ TFree nm
@@ -199,6 +199,9 @@ caseof expr clauses = A () $ Case expr clauses
 
 match :: Name -> [Pat ()] -> Pat ()
 match nm ps = A () $ Match nm ps
+
+bind :: Name -> Pat ()
+bind nm = A () $ Bind nm 
 
 pTup :: [Pat ()] -> Pat ()
 pTup ps = A () $ PTuple ps

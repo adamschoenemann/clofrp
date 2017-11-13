@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 
 module CloTT.Experiments where
@@ -14,7 +15,16 @@ data Fix f = Into (f (Fix f))
 out :: Fix f -> f (Fix f)
 out (Into f) = f
 
-data NatF a = Z | S a deriving Functor
+data NatF a = Z | S a deriving (Functor, Eq)
+
+instance Show (Fix NatF) where
+  show = show . toInt
+
+-- instance Functor NatF where
+--   fmap f x = 
+--     case x of
+--       Z -> Z
+--       S x' -> S (f x')
 
 type Nat = Fix NatF
 
