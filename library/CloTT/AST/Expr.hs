@@ -48,46 +48,53 @@ data Expr' a
   | Prim P.Prim -- primitive (will probably just include ints in the end)
   deriving (Eq, Data, Typeable, Generic, NFData)
 
-prettyE' :: Bool -> Expr' a -> Doc ann
-prettyE' pars = \case 
+
+data PrettyEP ann = PrettyEP
+  { lamParens   :: Doc ann -> Doc ann
+  , otherParens :: Doc ann -> Doc ann
+  }
+prettyE' :: PrettyEP ann -> Expr' a -> Doc ann
+prettyE' (PrettyEP {lamParens, otherParens}) = \case 
   Var nm -> pretty nm
   TickVar  nm -> brackets $ pretty nm
-  Ann e t -> parens $ prettyE False e <+> ":" <+> pretty t
-  App e1 e2 -> parensIf $ prettyE False e1 <+> prettyE True e2
+  Ann e t -> parens $ prettyE parlam e <+> ":" <+> pretty t
+  App e1 e2 -> otherParens $ prettyE parlam e1 <+> prettyE (ep parens parens) e2
 
   Lam nm mty e -> 
     let (ps', e') = collect pred e
         ps = (nm, mty) : ps'
         params = sep $ map rndrp ps
-    in  parensIf $ "\\" <> params <+> "->" <> nest 2 (softline <> prettyE False e') where
+    in  lamParens $ "\\" <> params <+> "->" <> nest 2 (softline <> prettyE nopars e') where
       rndrp (nm, Nothing) = pretty nm
       rndrp (nm, Just ty) = parens (pretty nm <+> ":" <+> pretty ty)
       pred (Lam nm' mty' e'') = Just ((nm', mty'), e'')
       pred _                  = Nothing
   
-  TickAbs  nm kappa e -> parens $ "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
+  TickAbs  nm kappa e -> lamParens $ "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
 
-  Tuple es -> tupled (map (prettyE False) es)
+  Tuple es -> tupled (map (prettyE nopars) es)
   Let p e1 e2 -> align $ "let" <+> pretty p <+> "=" <+> group (pretty e1) <+> "in" <> softline <> pretty e2
 
   Case e clauses ->
-    "case" <+> prettyE False e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
+    "case" <+> prettyE parlam e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
   
-  TypeApp e t -> parensIf (pretty e <+> braces (prettyT False t))
+  TypeApp e t -> otherParens (pretty e <+> braces (prettyT False t))
 
   Prim p -> fromString . show $ p
   where
     prettyC (p, e) = "|" <+> pretty p <+> "->" <> nest 4 (softline <> (pretty e))
-    parensIf = if pars then parens else id
+    nopars = PrettyEP id id
+    parlam = PrettyEP parens otherParens
+    ep x y = PrettyEP x y
 
-prettyE :: Bool -> Expr a -> Doc ann
+prettyE :: PrettyEP ann -> Expr a -> Doc ann
 prettyE n (A _ t) = prettyE' n t
 
 instance Pretty (Expr' a) where
-  pretty = prettyE' False
+  pretty = prettyE' (PrettyEP id id)
 
 instance Pretty (Expr a) where
-  pretty (A _ t) = prettyE' False t
+  pretty (A _ t) = prettyE' (PrettyEP id id) t
 
 instance Show (Expr' a) where
   show = show . pretty

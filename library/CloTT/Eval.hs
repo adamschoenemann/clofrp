@@ -375,6 +375,7 @@ matchConstr (A ann (E.Constr nm args)) =
 -- https://ghc.haskell.org/trac/ghc/wiki/Commentary/Compiler/DeriveFunctor
 deriveFmapArg :: Expr a -> TVarName -> Type a Poly -> Either String (Expr a)
 deriveFmapArg f tnm typ = go typ where
+  go (A ann _) | not (E.inFreeVars tnm typ) = pure $ A ann $ E.Lam "x" Nothing $ (A ann $ E.Var "x")
   go (A ann typ') = 
     let ?annotation = ann in
     let id = lam "x" Nothing $ var "x"
@@ -391,19 +392,20 @@ deriveFmapArg f tnm typ = go typ where
       E.TTuple ts -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x" -- TODO: fmap for tuples
       t1 `E.TApp` t2 -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x"
       t1 E.:->: t2     -> do
-        e1 <- go t1
-        e2 <- cogo t2
+        e1 <- cogo t1
+        e2 <- go t2
         let x = UName "x"
             b = UName "b"
         pure $ lam x Nothing $ lam b Nothing $ e2 `app` (var x `app` (e1 `app` var b))
 
+  cogo (A ann _) | not (E.inFreeVars tnm typ) = pure $ A ann $ E.Lam "x" Nothing $ (A ann $ E.Var "x")
   cogo (A ann typ') = 
     let ?annotation = ann in
     let id = lam "x" Nothing $ var "x"
     in case typ' of
       E.TFree _   -> pure id
       E.TExists _ -> pure id
-      E.TVar nm | nm == tnm -> Left $ "type variable" ++ pps tnm ++ "is in a contravariant position"
+      E.TVar nm | nm == tnm -> Left $ "type variable" ++ pps tnm ++ " is in a negative position"
                 | otherwise -> pure id
       E.Forall v k t -> go t -- TODO: !?!?!?
       E.Later t1 t2 -> 
@@ -413,8 +415,8 @@ deriveFmapArg f tnm typ = go typ where
       E.TTuple ts -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x" -- TODO: fmap for tuples
       t1 `E.TApp` t2 -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x"
       t1 E.:->: t2     -> do
-        e1 <- cogo t1
-        e2 <- go t2
+        e1 <- go t1
+        e2 <- cogo t2
         let x = UName "x"
             b = UName "b"
         pure $ lam x Nothing $ lam b Nothing $ e2 `app` (var x `app` (e1 `app` var b))

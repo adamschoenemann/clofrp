@@ -40,6 +40,8 @@ evalSpec = do
   let [s,z,cons,nil,just,nothing] = [c "S", c "Z", c "Cons", c "Nil", c "Just", c "Nothing"] :: [(E.Name, Value ())]
 
   describe "deriveFunctor" $ do
+    let bindp = E.bind . E.mname
+    let varm  = E.var . E.mname
     it "derives peano numerals functor" $ do
       let peano = E.Datatype
             { E.dtName = "NatF"
@@ -54,9 +56,51 @@ evalSpec = do
         ("#f" @-> "#val" @-> 
           E.caseof "#val" 
             [ (E.match "Z" [], "Z")
-            , (E.match "S" [E.bind $ E.mname 0], "S" @@ ("#f" @@ (E.var $ E.mname 0)))
+            , (E.match "S" [bindp 0], "S" @@ ("#f" @@ varm 0))
             ]
         )
+    it "derives list functor" $ do
+      let peano = E.Datatype
+            { E.dtName = "ListF"
+            , E.dtBound = [("a", E.Star), ("f", E.Star)]
+            , E.dtConstrs =
+              [ A () $ E.Constr "Nil" []
+              , A () $ E.Constr "Cons" ["a", "f"]
+              ]
+            }
+      let Right ftor = deriveFunctor peano
+      ftor `shouldBe` 
+        ("#f" @-> "#val" @-> 
+          E.caseof "#val" 
+            [ (E.match "Nil" [], "Nil")
+            , (E.match "Cons" [bindp 0, bindp 1], "Cons" @@ (("x" @-> "x") @@ varm 0) @@ ("#f" @@ varm 1))
+            ]
+        )
+
+    it "derives functor for strictly positive type-var" $ do
+      let peano = E.Datatype
+            { E.dtName = "Pos"
+            , E.dtBound = [("f", E.Star)]
+            , E.dtConstrs =
+              [ A () $ E.Constr "Pos" ["Int" @->: "f"]
+              ]
+            }
+      {-
+      it derives to
+      Pos ((\x b -> #f (x (id b))) `a)
+      => Pos ((\x b -> #f (x b)) `a)
+      => Pos (\b -> #f (`a b))
+      Pos (\b -> #f (`a b))
+      -}
+      case deriveFunctor peano of
+        Left err -> failure err
+        Right ftor ->
+          ftor `shouldBe` 
+            ("#f" @-> "#val" @-> 
+              E.caseof "#val" 
+                [ (E.match "Pos" [bindp 0], "Pos" @@ (("x" @-> "b" @-> "#f" @@ ("x" @@ (("x" @-> "x") @@ "b"))) @@ varm 0))
+                ]
+            )
       
 
   describe "evalExprStep" $ do

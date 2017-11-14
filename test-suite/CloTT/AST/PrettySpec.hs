@@ -14,6 +14,9 @@ import           CloTT.AST.Parsed ((@->:), (@@:))
 import           CloTT.AST.Parsed (LamCalc(..))
 import           CloTT.QuasiQuoter
 import           CloTT.Pretty
+import           CloTT.TestUtils
+import           NeatInterpolation
+import           Data.Text (unpack)
 
 
 prettySpec :: Spec
@@ -77,4 +80,16 @@ prettySpec = do
       pps (E.aliasd "Sum" ["a", "b"] $ "Either" @@: "a" @@: "b") `shouldBe` "type Sum a b = Either a b."
       ppsw 80 (E.aliasd "CList" ["a"] $ E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")
         `shouldBe` "type CList a = ∀r. (a -> r -> r) -> r -> r."
+  
+  describe "programs" $ do
+    it "works with nonsense program" $ do
+      let Right prog = pprog [text|
+        main : forall a (k : Clock). |>k (a, F (G Int)).
+        main = \x y z ->
+          let x' = x : F a
+          in x' {a} (foo y) z z.
+      |]
+      ppsw 1000 prog `shouldBe` (
+        "main : ∀a (k : Clock). ⊳k (a, F (G Int)).\n" 
+        ++ "main = \\x y z -> let x' = (x : F a) in x' {a} (foo y) z z.")
 
