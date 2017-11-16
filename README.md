@@ -73,5 +73,33 @@ we should have eta-equivalence for `f` as well...
 
 Is this a general problem that you cannot have "full" eta-equivalence with predicative types? I know that it seems undecidable to have both eta-equivalence and impredicative types in SystemF, but since this system is predicative, I feel like I should have "full" eta-equivalence
 
+## Type-classes and stuff
+I generally want to avoid type-classes, as it is complicated to implement. However, I have a problem with fmap and primRec since they're
+effectively overloaded functions. Type-classes can help model this elegantly. However, such a solution would require that the checking
+procedure somehow annotated applications of polymorphic functions with their dictionaries/implementations. In any case, we need to look
+up the type of a value at runtime to dispatch to fmap. We can hardcode this rule for fmap and map constructors to their types and
+then to the fmap implementation, but it is a nasty hack for sure. Also, we cannot check at compile-time whether fmap/primRec is called
+on a Fix type whose argument is in fact a functor or not...
+I think we could generate constraints and keep them around. Then, when we substitute contexts we also substitute in constraints. The
+question is when to solve these constraints? After checking, as a separate step? Local constraints will need to be discharged.
+Or can we do it at other points safely? At subsumption?
+Before checking? Should we solve a constraint everytime its argument is instantiated to a complete type (no existentials?)
+
+Another solution is to mandate the user annotate uses of fmap/primRec with the type. This is probably the easy solution, but
+it also makes me sad now that I've spent some time making these functions actually inferable.
+
+```
+fmap (+2) [1,2,3] <= [Int]
+  [->E] (fmap (+2)) [1,2,3] <= [Int]
+    [->E] fmap (+2) <= [Int] -> [Int]
+      [Var] fmap => ∀f a b. Functor f => (a -> b) -> f a -> f b
+      [AppI] (∀f a b. Functor f => (a -> b) -> f a -> f b) ̇∙ (+2) => ∃f Int -> ∃f Int, {Functor ∃f}
+        [∀App]*3  
+          [ConstraintApp] Functor f => (a -> b) -> f a -> f b) ̇∙ (+2) => ∃f Int -> ∃f Int, {Functor ∃f}
+            [->App] (∃a -> ∃b) -> ∃f ∃a -> ∃f ∃b) ̇∙ (+2) => ∃f Int -> ∃f Int, {Functor ∃f}
+              [→I] (λx -> x + 2) <= (∃a -> ∃b) -- solves a = Int, b = Int
+    [->App] (∃f Int -> ∃f Int) ∙ [1,2,3]
+      [->E] 1::2::3::[] <= ∃f Int
+```
 
 [clott]: https://github.com/adamschoenemann/clott

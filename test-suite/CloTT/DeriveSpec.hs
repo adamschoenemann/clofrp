@@ -239,6 +239,7 @@ deriveSpec = do
           fmapTy `shouldBe` fmapt ["r"] ("Cont" @@: "r")
           let tr = mktr [unsafeProg|data Cont r a = Cont ((a -> r) -> r).|]
           runCheck tr fmapDef fmapTy `shouldYield` mempty
+
   describe "deriving in elabProg" $ do
     it "works for simple example " $ do
       ep <- runElabProg [unsafeProg|
