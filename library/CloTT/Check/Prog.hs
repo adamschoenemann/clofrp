@@ -50,11 +50,11 @@ data ElabRes a = ElabRes
 instance Monoid (ElabRes a) where
   mempty = ElabRes mempty mempty mempty mempty mempty mempty
   er1 `mappend` er2 =
-    ElabRes { erKinds   = erKinds er1 `mappend` erKinds er2
-            , erDefs    = erDefs er1 `mappend` erDefs er2
-            , erSigs    = erSigs er1 `mappend` erSigs er2
+    ElabRes { erKinds   = erKinds   er1 `mappend` erKinds   er2
+            , erDefs    = erDefs    er1 `mappend` erDefs    er2
+            , erSigs    = erSigs    er1 `mappend` erSigs    er2
             , erConstrs = erConstrs er1 `mappend` erConstrs er2
-            , erDestrs  = erDestrs er1 `mappend` erDestrs er2
+            , erDestrs  = erDestrs  er1 `mappend` erDestrs  er2
             , erAliases = erAliases er1 `mappend` erAliases er2
             }
 

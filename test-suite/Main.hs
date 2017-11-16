@@ -22,6 +22,7 @@ import CloTT.Check.RecSpec
 import CloTT.Check.HigherKinded
 import CloTT.AST.PrettySpec
 import CloTT.EvalSpec
+import CloTT.DeriveSpec
 
 
 main :: IO ()
@@ -36,5 +37,6 @@ main = do
   recursive <- testSpec "recursive types" recSpec
   higherKinded <- testSpec "higher kinded types" higherKindedSpec
   eval <- testSpec "evaluation" evalSpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, typecheck, decl, pretty, checkProg, clocks, recursive, higherKinded, eval]
+  derive <- testSpec "derivation" deriveSpec
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, typecheck, decl, pretty, checkProg, clocks, recursive, higherKinded, eval, derive]
   Test.Tasty.defaultMain group
