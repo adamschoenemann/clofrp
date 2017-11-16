@@ -25,7 +25,7 @@ import Data.String (IsString(..))
 import qualified Data.Set as S
 import Data.Data (Data, Typeable)
 import Data.Char (isUpper)
-import Data.Text.Prettyprint.Doc
+import CloTT.Pretty
 import Control.DeepSeq
 import GHC.Generics
 
@@ -53,6 +53,7 @@ data Type' :: * -> TySort -> * where
 deriving instance Eq a       => Eq (Type' a s)
 deriving instance Data a     => Data (Type' a Poly)
 deriving instance Typeable a => Typeable (Type' a Poly)
+-- deriving instance Show a => Show (Type' a s)
 
 instance NFData a => NFData (Type' a Poly) where
   rnf a = seq a ()
@@ -95,8 +96,8 @@ instance Pretty (Type' a s) where
 instance Pretty (Type a s) where
   pretty (A _ t) = prettyT' False t
 
--- instance Show (Type' a s) where
---   show = show . pretty
+instance Show (Type' a s) where
+  show = ppsw 1000
 
 instance Unann (Type a s) (Type () s) where
   unann = unannT
@@ -119,7 +120,6 @@ unannT' = \case
   TTuple ts     -> TTuple (map unannT ts)
   Later x t     -> Later (unannT x) (unannT t)
 
-deriving instance Show a => Show (Type' a s)
 
 nameToType' :: Name -> Type' a s
 nameToType' nm@(UName (c:cs)) | isUpper c = TFree nm

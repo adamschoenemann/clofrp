@@ -22,12 +22,14 @@ data Datatype a =
     { dtName    :: Name
     , dtBound   :: [(Name, Kind)]
     , dtConstrs :: [Constr a]
+    , dtDeriving :: [String]
     } deriving (Show, Eq, Data, Typeable)
 
 
 instance Pretty (Datatype a) where
-  pretty (Datatype {dtName = nm, dtBound = b, dtConstrs = cs}) =
+  pretty (Datatype {dtName = nm, dtBound = b, dtConstrs = cs, dtDeriving = ds}) =
      "data" <+> pretty nm <+> (sep $ map pretty b) <+> "=" <+> (encloseSep "" "" " | " $ map pretty cs)
+     <> line <> "deriving" <+> tupled (map pretty ds)
 
 instance Unann (Datatype a) (Datatype ()) where
   unann dt@(Datatype {dtConstrs = cstrs}) =

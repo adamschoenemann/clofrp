@@ -5,32 +5,39 @@ For my master's thesis at ITU
 ## TODO
 - Support higher-kinded types (should be not that hard)
   - Infer kind of tvar syntactically
-  - Maintain the kind-info either in kind-ctx or annotate with kind in TyCtx
-- Check/infer lambdas with annotated type-params
+  - Maintain the kind-info either in kind-ctx or annotate with kind in TyCtx ✓
+- Check/infer lambdas with annotated type-params ✓
 - Parse and desugar multi-param lambdas ✓
-- Syntax sugar for tuples/units/lists?
+- Syntax sugar for
+  - tuples ✓
+  - units?
+  - lists?
 - Optimize type-checking in general
 - Make sure everything is sane by checking context-wellformedness more and checking that no impredicativeness takes place
   - Note: Assigning an existential to a partially-applied type-constructor is fine
-- Add the actual CloTT primitives and rules
+- Add the actual CloTT primitives and rules ✓
 - Support (co)-inductive and guarded types
-- Implement primitive recursion and guarded recursion 
+  - no syntax sugar yet but otherwise
+- Implement primitive recursion and guarded recursion
+  - typechecking ✓
+  - evaluation
 - Think of a module strategy
 - Integrate with Haskell
 - Write a demo (Pong or Pacman if crazy)
-- Expand type-aliases in type annotations
-- Parse (:) syntax for type annotations instead of `the (A) e`
+- Expand type-aliases in type annotations ✓
+- Parse (:) syntax for type annotations instead of `the (A) e` ✓
 - application-synthesis leaves solved existentials in context (as it must to curried functions)
   but this pollutes the context after the application. We'd probably need to treat application as
   "spines" to fix this..
 - Clean up error messages
   - Remove most uses of `Other` in favor of semantic variants
-  - Add ability to decorate errors
+  - Add ability to decorate errors ✓
   - Add source-location to errors
   - Parsing and checking is pretty laissez faire with propagating and maintaining annotations, leading
     to possibly incorrect source-locations in errors
 - Check data decls and type aliases for well-formedness before elaboration
 - Is OK to re-assign an existential iff it is the same type we're attempting to assign?
+  - should never happen now since we maintain optimally-solved contexts
 - Improve inference for "unfold"
 
 ## Type Aliases
@@ -41,7 +48,7 @@ For my master's thesis at ITU
   - After each alias is in normal form, go through each type (signatures and annotations in expressions)
     - We know the arity n of each alias, so we should be able to simply search for its name applied to n
       arguments
-    - We can then substitute the arguments (after they've been expanded as well)for the bound variables in
+    - We can then substitute the arguments (after they've been expanded as well) for the bound variables in
       the alias definition and replace it directly into the AST.
 
 ## Recursive Types

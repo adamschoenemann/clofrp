@@ -160,7 +160,7 @@ constr :: Name -> [Type () Poly] -> Constr ()
 constr nm ts = A () $ Constr nm ts
 
 datad :: Name -> [(Name, Kind)] -> [Constr ()] -> Decl ()
-datad nm bs cs = A () $ DataD (Datatype nm bs cs)
+datad nm bs cs = A () $ DataD (Datatype nm bs cs [])
 
 fund :: Name -> Expr () -> Decl ()
 fund nm e =  A () $ FunD nm e

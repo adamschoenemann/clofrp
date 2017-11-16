@@ -63,7 +63,7 @@ deriveSpec = do
   describe "deriveFunctor" $ do
     let bindp x = E.bind . E.UName $ ("#" ++ show (x :: Int))
     let varm x  = E.var . E.UName $ ("#" ++ show (x :: Int))
-    let fmapt b con = E.forAll (b ++ ["a", "b"]) $ ("a" @->: "b") @->: con @@: "a" @->: con @@: "b"
+    let fmapt b con = E.forAll (b ++ ["#a", "#b"]) $ ("#a" @->: "#b") @->: con @@: "#a" @->: con @@: "#b"
     let mktr p = 
           let (Right (ElabProg { kinds, destrs, types }), _, _) = runTypingM0 (elabProg . unann $ p) mempty
           in  mempty { trKinds = kinds, trDestrs = destrs, trFree = types }
@@ -72,34 +72,37 @@ deriveSpec = do
       let dt = E.Datatype
             { E.dtName = "NatF"
             , E.dtBound = [("f", E.Star)]
+            , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
               [ A () $ E.Constr "Z" []
               , A () $ E.Constr "S" ["f"]
               ]
             }
-      let Right ftor = deriveFunctor dt
-      ftor `shouldBe` 
+      let Right (fmapNm, fmapTy, fmapDef) = deriveFunctor dt
+      fmapDef `shouldBe` 
         ("#f" @-> "#val" @-> 
           E.caseof "#val" 
             [ (E.match "Z" [], "Z")
             , (E.match "S" [bindp 0], "S" @@ ("#f" @@ varm 0))
             ]
         )
-      
+
+      fmapTy `shouldBe` fmapt [] "NatF"
       let tr = mktr [unsafeProg|data NatF f = Z | S f.|]
-      runCheck tr ftor (fmapt [] "NatF") `shouldYield` mempty
+      runCheck tr fmapDef fmapTy `shouldYield` mempty
 
     it "derives list functor" $ do
       let dt = E.Datatype
             { E.dtName = "ListF"
             , E.dtBound = [("a", E.Star), ("f", E.Star)]
+            , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
               [ A () $ E.Constr "Nil" []
               , A () $ E.Constr "Cons" ["a", "f"]
               ]
             }
-      let Right ftor = deriveFunctor dt
-      ftor `shouldBe` 
+      let Right (fmapNm, fmapTy, fmapDef) = deriveFunctor dt
+      fmapDef `shouldBe` 
         ("#f" @-> "#val" @-> 
           E.caseof "#val" 
             [ (E.match "Nil" [], "Nil")
@@ -107,13 +110,15 @@ deriveSpec = do
             ]
         )
 
+      fmapTy `shouldBe` fmapt ["a"] ("ListF" @@: "a")
       let tr = mktr [unsafeProg|data ListF a f = Nil | Cons a f.|]
-      runCheck tr ftor (fmapt ["u"] $ "ListF" @@: "u") `shouldYield` mempty
+      runCheck tr fmapDef fmapTy `shouldYield` mempty
 
     it "derives functor for strictly positive type-var (1)" $ do
       let dt = E.Datatype
             { E.dtName = "Pos"
             , E.dtBound = [("f", E.Star)]
+            , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
               [ A () $ E.Constr "Pos" ["Unit" @->: "f"]
               ]
@@ -127,45 +132,48 @@ deriveSpec = do
       -}
       case deriveFunctor dt of
         Left err -> failure err
-        Right ftor -> do
-          let tr = mktr [unsafeProg|data Unit = Unit. data Pos f = Pos (Unit -> f).|]
-          runCheck tr ftor (fmapt [] $ "Pos") `shouldYield` mempty
-          ftor `shouldBe` 
+        Right (fmapNm, fmapTy, fmapDef) -> do
+          fmapDef `shouldBe` 
             ("#f" @-> "#val" @-> 
               E.caseof "#val" 
                 [ (E.match "Pos" [bindp 0], "Pos" @@ (("x" @-> "b" @-> "#f" @@ ("x" @@ (("x" @-> "x") @@ "b"))) @@ varm 0))
                 ]
             )
-
+          fmapTy `shouldBe` fmapt [] "Pos"
+          let tr = mktr [unsafeProg|data Unit = Unit. data Pos f = Pos (Unit -> f).|]
+          runCheck tr fmapDef fmapTy `shouldYield` mempty
 
     it "cannot derive functor for negative type-var (1)" $ do
       let dt = E.Datatype
             { E.dtName = "Neg"
             , E.dtBound = [("f", E.Star)]
+            , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
               [ A () $ E.Constr "Pos" ["f" @->: "Int"]
               ]
             }
       case deriveFunctor dt of
         Left err -> err `shouldBe` "type variable f is in a negative position"
-        Right ftor -> failure ("got " ++ pps ftor ++ " but expected failure")
+        Right (fmapNm, fmapTy, fmapDef) -> failure ("got " ++ pps fmapDef ++ " but expected failure")
 
     it "cannot derive functor for negative type-var (2)" $ do
       let dt = E.Datatype
             { E.dtName = "Neg"
             , E.dtBound = [("f", E.Star)]
+            , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
               [ A () $ E.Constr "Pos" [("Int" @->: "f") @->: "Int"]
               ]
             }
       case deriveFunctor dt of
         Left err -> err `shouldBe` "type variable f is in a negative position"
-        Right ftor -> failure ("got " ++ pps ftor ++ " but expected failure")
+        Right (fmapNm, fmapTy, fmapDef) -> failure ("got " ++ pps fmapDef ++ " but expected failure")
 
     it "derives functor for strictly positive type-var (2)" $ do
       let dt = E.Datatype
             { E.dtName = "Pos"
             , E.dtBound = [("f", E.Star)]
+            , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
               [ A () $ E.Constr "Pos" [("f" @->: "Unit") @->: "Unit"]
               ]
@@ -180,40 +188,43 @@ deriveSpec = do
       -}
       case deriveFunctor dt of
         Left err -> failure err
-        Right ftor -> do
+        Right (fmapNm, fmapTy, fmapDef) -> do
           let ide = "x" @-> "x"
               bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("#f" @@ "b"))) @@ "b"))
               fn = "x" @-> "b" @-> bd
               pos = fn @@ varm 0
-          let tr = mktr [unsafeProg|data Unit = Unit. data Pos f = Pos ((f -> Unit) -> Unit).|]
-          runCheck tr ftor (fmapt [] $ "Pos") `shouldYield` mempty
-          ftor `shouldBe` 
+          fmapDef `shouldBe` 
             ("#f" @-> "#val" @-> 
               E.caseof "#val" 
                 [ (E.match "Pos" [bindp 0], "Pos" @@ pos)
                 ]
             )
+          fmapTy `shouldBe` fmapt [] "Pos"
+          let tr = mktr [unsafeProg|data Unit = Unit. data Pos f = Pos ((f -> Unit) -> Unit).|]
+          runCheck tr fmapDef fmapTy `shouldYield` mempty
 
     it "derives functor for continuations" $ do
       let dt = E.Datatype
             { E.dtName = "Cont"
             , E.dtBound = [("r", E.Star), ("a", E.Star)]
+            , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
               [ A () $ E.Constr "Cont" [("a" @->: "r") @->: "r"]
               ]
             }
       case deriveFunctor dt of
         Left err -> failure err
-        Right ftor -> do
+        Right (fmapNm, fmapTy, fmapDef) -> do
           let ide = "x" @-> "x"
               bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("#f" @@ "b"))) @@ "b"))
               fn = "x" @-> "b" @-> bd
               pos = fn @@ varm 0
-          let tr = mktr [unsafeProg|data Cont r a = Cont ((a -> r) -> r).|]
-          runCheck tr ftor (fmapt ["u"] $ "Cont" @@: "u") `shouldYield` mempty
-          ftor `shouldBe` 
+          fmapDef `shouldBe` 
             ("#f" @-> "#val" @-> 
               E.caseof "#val" 
                 [ (E.match "Cont" [bindp 0], "Cont" @@ pos)
                 ]
             )
+          fmapTy `shouldBe` fmapt ["r"] ("Cont" @@: "r")
+          let tr = mktr [unsafeProg|data Cont r a = Cont ((a -> r) -> r).|]
+          runCheck tr fmapDef fmapTy `shouldYield` mempty

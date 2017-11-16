@@ -53,6 +53,7 @@ reservedNames = [ "if"
                 , "primRec"
                 , "Clock"
                 , "[<>]"
+                , "deriving"
                 ]
 
 languageDef :: Tok.LanguageDef ()

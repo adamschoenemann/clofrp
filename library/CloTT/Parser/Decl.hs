@@ -42,8 +42,10 @@ datad = ann <*> p where
   p = do 
     nm <- E.UName <$> (reserved "data" *> uidentifier)
     bound <- many P.boundp
-    constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) <* reservedOp "."
-    pure $ E.DataD (E.Datatype nm bound constrs)
+    constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) 
+    derivs <- option [] $ reserved "deriving" *> ((:[]) <$> uidentifier <|> parens (many1 uidentifier))
+    _ <- reservedOp "."
+    pure $ E.DataD (E.Datatype nm bound constrs derivs)
 
 
 constr :: Parser (E.Constr SourcePos)

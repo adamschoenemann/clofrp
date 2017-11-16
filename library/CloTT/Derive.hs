@@ -27,16 +27,50 @@ instance Functor NatF where
   fmap f (S n) = S (f n)
 -}
 
+-- total definition of last
+lst :: a -> [a] -> a
+lst d [] = d
+lst d [x] = x
+lst d (x:xs) = lst d xs
+
+-- total def of init
+inits :: [a] -> [a]
+inits [] = []
+inits [x] = []
+inits (x:xs) = x : inits xs
+
+-- a giant hack of course
+-- deriveClass :: Name -> Datatype a -> Either String (Name, Type a Poly, Expr a)
+-- deriveClass (UName "Functor") (Datatype {dtName, dtBound = [], dtConstrs}) = Left $ show $ "Cannot derive functor for concrete type" <+> pretty dtName
+-- deriveClass (UName "Functor") (Datatype {dtName, dtBound, dtConstrs = []}) = Left $ show $ "Cannot derive functor uninhabited  type" <+> pretty dtName
+-- deriveClass (Datatype {dtName, dtBound = bs@(_:_):_, dtConstrs = cs@(A ann c1 : _)}) =
+--   expr <- deriveFunctor ann (last bs) cs
+--   let ?annotation = ann
+--   let typ = forAll ["#a", "#b"] $ (tvar "#a" `arr` tvar "#b") `arr` 
+
+-- deriveClass nm dt = Left $ show $ "Cannot derive" <+> pretty nm <+> "for" <+> (pretty $ dtName dt) <+> "since we can only derive functor atm."
+
+deriveFunctor :: Datatype a -> Either String (Name, Type a Poly, Expr a)
+deriveFunctor (Datatype {dtName, dtBound = [], dtConstrs}) = Left $ show $ "Cannot derive functor for concrete type" <+> pretty dtName
+deriveFunctor (Datatype {dtName, dtBound, dtConstrs = []}) = Left $ show $ "Cannot derive functor uninhabited  type" <+> pretty dtName
+deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : _)}) = do
+  expr <- deriveFunctorDef ann (fst $ lst b bs) cs
+  let ?annotation = ann
+  let extrabs = map fst $ inits bs
+  let nfa = foldl (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
+  let typ = forAll (extrabs ++ ["#a", "#b"]) $ (tvar "#a" `arr` tvar "#b") `arr` (nfa `tapp` tvar "#a") `arr` (nfa `tapp` tvar "#b")
+  let fmapNm = UName $ show (pretty dtName <> "_fmap")
+  pure (fmapNm, typ, expr)
+
 type TVarName = Name
-deriveFunctor :: Datatype a -> Either String (Expr a)
-deriveFunctor (Datatype {dtName, dtBound, dtConstrs}) =
+
+deriveFunctorDef :: a -> Name -> [Constr a] -> Either String (Expr a)
+deriveFunctorDef ann tnm cs =
   let vn = UName "#val"
       fn = UName "#f"
-      tnm = fst . last $ dtBound -- TODO: make total
-      A ann _ = head dtConstrs -- TODO: make total
   in  let ?annotation = ann
   in  lam fn Nothing . lam vn Nothing .
-        casee (var vn) <$> traverse (deriveFunctorConstr (var fn) tnm) dtConstrs
+        casee (var vn) <$> traverse (deriveFunctorConstr (var fn) tnm) cs
 
 deriveFunctorConstr :: forall a. Expr a -> TVarName -> Constr a -> Either String (Pat a, Expr a)
 deriveFunctorConstr f tnm constr@(A ann (Constr nm args)) = do

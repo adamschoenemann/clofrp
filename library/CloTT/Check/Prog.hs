@@ -37,6 +37,7 @@ import CloTT.Context
 -- alias for definitions
 type Defs a = M.Map Name (Expr a)
 type Aliases a = M.Map Name (Alias a)
+type Deriving a = M.Map Name [Datatype a] -- Class to list of data-types
 
 data ElabRes a = ElabRes
   { erKinds   :: KindCtx a    -- kinds
@@ -45,25 +46,26 @@ data ElabRes a = ElabRes
   , erConstrs :: FreeCtx a    -- constructors
   , erDestrs  :: DestrCtx  a  -- destructors
   , erAliases :: Aliases a    -- type aliases
+  , erDeriving :: Deriving a  -- data-types that must derive stuff
   } deriving (Show, Eq, Data, Typeable)
 
 instance Monoid (ElabRes a) where
-  mempty = ElabRes mempty mempty mempty mempty mempty mempty
+  mempty = ElabRes mempty mempty mempty mempty mempty mempty mempty
   er1 `mappend` er2 =
-    ElabRes { erKinds   = erKinds   er1 `mappend` erKinds   er2
-            , erDefs    = erDefs    er1 `mappend` erDefs    er2
-            , erSigs    = erSigs    er1 `mappend` erSigs    er2
-            , erConstrs = erConstrs er1 `mappend` erConstrs er2
-            , erDestrs  = erDestrs  er1 `mappend` erDestrs  er2
-            , erAliases = erAliases er1 `mappend` erAliases er2
+    ElabRes { erKinds    = erKinds    er1 `mappend` erKinds    er2
+            , erDefs     = erDefs     er1 `mappend` erDefs     er2
+            , erSigs     = erSigs     er1 `mappend` erSigs     er2
+            , erConstrs  = erConstrs  er1 `mappend` erConstrs  er2
+            , erDestrs   = erDestrs   er1 `mappend` erDestrs   er2
+            , erAliases  = erAliases  er1 `mappend` erAliases  er2
+            , erDeriving = erDeriving er1 `mappend` erDeriving er2
             }
 
-
 data ElabProg a = ElabProg
-  { kinds  :: KindCtx a
-  , types  :: FreeCtx a
-  , defs   :: Defs a
-  , destrs :: DestrCtx a
+  { kinds   :: KindCtx a
+  , types   :: FreeCtx a
+  , defs    :: Defs a
+  , destrs  :: DestrCtx a
   , aliases :: Aliases a
   } deriving (Show, Eq, Data, Typeable)
 
@@ -235,10 +237,11 @@ collectDecls :: Prog a -> ElabRes a
 collectDecls (Prog decls) = foldr folder mempty decls where
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> ElabRes a
-    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erAliases = als}) = case x of
-      DataD dt@(Datatype nm b cs') ->
+    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erAliases = als, erDeriving = drv}) = case x of
+      DataD dt@(Datatype nm b cs' derivs) ->
         let (tys, dstrs) = elabCs nm b cs' 
-        in  er {erKinds = extend nm (dtKind dt) ks, erConstrs = tys <> cs, erDestrs = dstrs <> ds}
+            drv' = foldr (\x acc -> M.insertWith (++) (UName x) [dt] acc) drv derivs
+        in  er {erKinds = extend nm (dtKind dt) ks, erConstrs = tys <> cs, erDestrs = dstrs <> ds, erDeriving = drv'}
 
       FunD nm e        -> er {erDefs = M.insert nm e fs}
       SigD nm t        -> er {erSigs = extend nm t ss}
@@ -248,7 +251,7 @@ collectDecls (Prog decls) = foldr folder mempty decls where
 -- TODO: modularize this
 elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg program = do
-  let ElabRes kinds funds sigds cnstrs destrs aliases = collectDecls program 
+  let ElabRes kinds funds sigds cnstrs destrs aliases derivs = collectDecls program 
   let defsNoSig = funds `M.difference` unFreeCtx sigds
       sigsNoDef = unFreeCtx sigds `M.difference` funds
       defsHaveSigs = M.null defsNoSig -- all tlds have signatures
@@ -268,9 +271,6 @@ elabProg program = do
       typ' <- expandAliases als typ
       args' <- traverse (expandAliases als) args
       pure (d {typ = typ', args = args'})
-
-
-
 
 -- "Elaborate" the constructors of a type, return a mapping from constructor names
 -- to their types, e.g.

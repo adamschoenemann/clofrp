@@ -21,7 +21,7 @@ recSpec = do
   describe "recursive types" $ do
     it "works in very simple cases (Nat)" $ do
       let Right prog = pprog [text|
-        data NatF a = Z | S a.
+        data NatF a = Z | S a deriving Functor.
         type Nat = Fix NatF.
 
         foldNat' : NatF (Fix NatF) -> Fix NatF.
