@@ -40,15 +40,9 @@ inits [x] = []
 inits (x:xs) = x : inits xs
 
 -- a giant hack of course
--- deriveClass :: Name -> Datatype a -> Either String (Name, Type a Poly, Expr a)
--- deriveClass (UName "Functor") (Datatype {dtName, dtBound = [], dtConstrs}) = Left $ show $ "Cannot derive functor for concrete type" <+> pretty dtName
--- deriveClass (UName "Functor") (Datatype {dtName, dtBound, dtConstrs = []}) = Left $ show $ "Cannot derive functor uninhabited  type" <+> pretty dtName
--- deriveClass (Datatype {dtName, dtBound = bs@(_:_):_, dtConstrs = cs@(A ann c1 : _)}) =
---   expr <- deriveFunctor ann (last bs) cs
---   let ?annotation = ann
---   let typ = forAll ["#a", "#b"] $ (tvar "#a" `arr` tvar "#b") `arr` 
-
--- deriveClass nm dt = Left $ show $ "Cannot derive" <+> pretty nm <+> "for" <+> (pretty $ dtName dt) <+> "since we can only derive functor atm."
+deriveClass :: Name -> Datatype a -> Either String (Name, Type a Poly, Expr a)
+deriveClass (UName "Functor") dt = deriveFunctor dt
+deriveClass nm dt = Left $ show $ "Cannot derive" <+> pretty nm <+> "for" <+> (pretty $ dtName dt) <+> "since we can only derive functor atm."
 
 deriveFunctor :: Datatype a -> Either String (Name, Type a Poly, Expr a)
 deriveFunctor (Datatype {dtName, dtBound = [], dtConstrs}) = Left $ show $ "Cannot derive functor for concrete type" <+> pretty dtName

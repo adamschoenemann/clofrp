@@ -10,6 +10,8 @@
 module CloTT.DeriveSpec where
 
 import Test.Tasty.Hspec
+import Data.Maybe (isJust)
+import qualified Data.Map.Strict as M
 
 import qualified CloTT.AST.Parsed  as E
 import qualified CloTT.AST.Prim    as P
@@ -23,6 +25,7 @@ import           CloTT.Annotated
 import           CloTT.Check
 import           CloTT.Check.Prog
 import           CloTT.QuasiQuoter
+import           CloTT.Context
 
 data Ftor0 f = Ftor0 (forall a. (a, f))
 
@@ -58,15 +61,23 @@ data Cont r a = Cont ((a -> r) -> r)
 instance Functor (Cont r) where
   fmap f (Cont c) = Cont (\c' -> c (\x -> c' (f x)))
 
+runElabProg p = 
+  case runTypingM0 (elabProg . unann $ p) mempty of
+    (Right ep, _, _) -> pure ep
+    (Left err, _, _) -> fail (show err)
+
+
+mktr p = 
+  let (Right (ElabProg { kinds, destrs, types }), _, _) = runTypingM0 (elabProg . unann $ p) mempty
+  in  mempty { trKinds = kinds, trDestrs = destrs, trFree = types }
+
+fmapt b con = E.forAll (b ++ ["#a", "#b"]) $ ("#a" @->: "#b") @->: con @@: "#a" @->: con @@: "#b"
+
 deriveSpec :: Spec
 deriveSpec = do
   describe "deriveFunctor" $ do
     let bindp x = E.bind . E.UName $ ("#" ++ show (x :: Int))
     let varm x  = E.var . E.UName $ ("#" ++ show (x :: Int))
-    let fmapt b con = E.forAll (b ++ ["#a", "#b"]) $ ("#a" @->: "#b") @->: con @@: "#a" @->: con @@: "#b"
-    let mktr p = 
-          let (Right (ElabProg { kinds, destrs, types }), _, _) = runTypingM0 (elabProg . unann $ p) mempty
-          in  mempty { trKinds = kinds, trDestrs = destrs, trFree = types }
 
     it "derives peano numerals functor" $ do
       let dt = E.Datatype
@@ -228,3 +239,13 @@ deriveSpec = do
           fmapTy `shouldBe` fmapt ["r"] ("Cont" @@: "r")
           let tr = mktr [unsafeProg|data Cont r a = Cont ((a -> r) -> r).|]
           runCheck tr fmapDef fmapTy `shouldYield` mempty
+  describe "deriving in elabProg" $ do
+    it "works for simple example " $ do
+      ep <- runElabProg [unsafeProg|
+        data NatF f = Z | S f deriving Functor.
+        data ListF a f = Nil | Cons a f deriving (Functor).
+      |]
+      query "NatF_fmap" (types ep) `shouldBe` Just (fmapt [] "NatF")
+      M.lookup "NatF_fmap" (defs ep) `shouldSatisfy` isJust
+      query "ListF_fmap" (types ep) `shouldBe` Just (fmapt ["a"] $ "ListF" @@: "a")
+      M.lookup "ListF_fmap" (defs ep) `shouldSatisfy` isJust

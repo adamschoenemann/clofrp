@@ -27,6 +27,7 @@ import CloTT.Pretty hiding ((<>))
 import CloTT.Annotated (Annotated(..))
 import CloTT.AST.Parsed
 import CloTT.Check
+import CloTT.Derive
 import CloTT.Context
 
 -- Program "elaboration"
@@ -265,8 +266,15 @@ elabProg program = do
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
-            pure $ ElabProg kinds (FreeCtx expFree) expFunds expDestrs aliases
+            (derivDefs, derivTyps) <- M.foldr (\(x,y) (xs, ys) -> (x ++ xs, y ++ ys)) ([], []) <$> M.traverseWithKey traverseDerivs derivs
+            let allFree = FreeCtx $ expFree <> M.fromList derivTyps
+            let allDefs = expFunds <> M.fromList derivDefs
+            pure $ ElabProg kinds allFree allDefs expDestrs aliases
   where 
+    traverseDerivs nm dts = do 
+      trips <- traverse (\dt -> either otherErr pure $ deriveClass nm dt) dts
+      pure $ foldr (\(nm, ty, ex) (exs, tys) -> ((nm, ex) : exs, (nm, ty) : tys)) ([], []) trips
+
     expandDestr als d@(Destr {typ, args}) = do
       typ' <- expandAliases als typ
       args' <- traverse (expandAliases als) args
