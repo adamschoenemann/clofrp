@@ -67,6 +67,14 @@ casep = do
   where
     matchp = (,) <$> (pat <* reservedOp "->") <*> expr
 
+fmapp :: Parser Expr
+fmapp = ann <*> p where 
+  p = E.Fmap <$> (reserved "fmap" *> braces (T.typep))
+
+primRecP :: Parser Expr
+primRecP = ann <*> p where 
+  p = E.PrimRec <$> (reserved "primRec" *> braces (T.typep))
+
 
 -- a bit annoying with all this copy-paste but meh
 pat :: Parser Pat
@@ -85,11 +93,11 @@ atom =   nat
      <|> try tuple
      <|> reserved "fold" *> (ann <*> pure (E.Prim E.Fold))
      <|> reserved "unfold" *> (ann <*> pure (E.Prim E.Unfold))
-     <|> reserved "primRec" *> (ann <*> pure (E.Prim E.PrimRec))
      <|> reserved "[<>]" *> (ann <*> pure (E.Prim E.Tick))
      <|> reserved "fix" *> (ann <*> pure (E.Prim E.Fix))
      <|> reserved "undefined" *> (ann <*> pure (E.Prim E.Undefined))
-     <|> reserved "__fmap__" *> (ann <*> pure (E.Prim E.Fmap))
+     <|> primRecP 
+     <|> fmapp
      <|> letp
      <|> var
      <|> tickvar

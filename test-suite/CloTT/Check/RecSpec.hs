@@ -191,7 +191,7 @@ recSpec = do
             case x of
               | Z -> n
               | S (m', r) -> fold (S r)
-          in  primRec body m.
+          in  primRec {NatF} body m.
 
         multRec : Nat -> NatF (Nat, Nat) -> Nat.
         multRec = \n x ->
@@ -201,7 +201,7 @@ recSpec = do
         
         mult : Nat -> Nat -> Nat.
         mult = \m n ->
-          primRec (multRec n) m.
+          primRec {NatF} (multRec n) m.
 
         -- without annotations :O
         mult' : Nat -> Nat -> Nat.
@@ -209,7 +209,7 @@ recSpec = do
           let body = \x -> case x of
             | Z -> fold Z
             | S (m', r) -> plus n r
-          in primRec body m.
+          in primRec {NatF} body m.
 
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -226,7 +226,7 @@ recSpec = do
             | Cons x (xs, ys) -> fold (Cons (f x) ys).
 
         map : forall a b. (a -> b) -> List a -> List b.
-        map = \f xs -> primRec (mapRec f) xs.
+        map = \f xs -> primRec {ListF a} (mapRec f) xs.
 
         -- without annotations :O
         map' : forall a b. (a -> b) -> List a -> List b.
@@ -235,7 +235,7 @@ recSpec = do
             case x of
               | Nil -> fold Nil
               | Cons x (xs, ys) -> fold (Cons (f x) ys)
-          in  primRec body xs.
+          in  primRec {ListF a} body xs.
 
         type Fmap (f : * -> *) = forall a b. (a -> b) -> f a -> f b.
         data Functor (f : * -> *) = Functor (Fmap f).
@@ -264,7 +264,7 @@ recSpec = do
             | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec).
 
         map : forall a b. (a -> b) -> Tree a -> Tree b.
-        map = \f xs -> primRec (mapRec f) xs.
+        map = \f xs -> primRec {TreeF a} (mapRec f) xs.
 
         -- -- without annotations :O
         map' : forall a b. (a -> b) -> Tree a -> Tree b.
@@ -273,7 +273,7 @@ recSpec = do
             case t of
               | Empty -> fold Empty
               | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec)
-          in  primRec body xs.
+          in  primRec {TreeF a} body xs.
 
       |]
       runCheckProg mempty prog `shouldYield` ()

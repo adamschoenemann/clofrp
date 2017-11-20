@@ -301,8 +301,11 @@ traverseAnnos fn = go where
       Let p e1 e2 -> A a <<< Let p <$> go e1 <*> go e2
       Case e clauses -> A a <<< Case <$> go e <*> sequence (map (\(p,c) -> (p,) <$> go c) clauses)
       TypeApp e t -> A a <<< TypeApp <$> go e <*> fn t 
+      Fmap t -> A a . Fmap <$> fn t
+      PrimRec t -> A a . PrimRec <$> fn t
       Prim p -> pure $ A a e'
     (<<<) = (.) . (.)
+
 
 -- substitute type for name in expr (traverses and substitutes in annotations and type applications)
 substTVarInExpr :: Type a Poly -> Name -> Expr a -> Expr a 

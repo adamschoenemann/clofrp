@@ -352,18 +352,17 @@ evalSpec = do
       |]
       takeValueList vboolToBool 1000 (evalProg "trues" prog) `shouldBe` (replicate 1000 True)
     
-    it "evals map" $ do
+    it "evals fmap" $ do
       let Right prog = pprog [text|
-        data NatF a = Z | S a. 
+        data NatF a = Z | S a deriving Functor. 
         data Bool = True | False.
 
         main : Bool.
-        main = __fmap__ (\x -> True) (S False).
+        main = fmap {NatF} (\x -> True) (S False).
       |]
       let v = evalProg "main" prog
       v `shouldBe` (Constr "S" [Constr "True" []])
 
-    
     it "evals primitive recursion over natural numbers" $ do
       let Right prog = pprog [text|
         data NatF a = Z | S a. 
@@ -381,7 +380,7 @@ evalSpec = do
             case x of
               | Z -> n
               | S (m', r) -> fold (S r)
-          in  primRec body m.
+          in  primRec {NatF} body m.
 
         multRec : Nat -> NatF (Nat, Nat) -> Nat.
         multRec = \n x ->
@@ -391,7 +390,7 @@ evalSpec = do
         
         mult : Nat -> Nat -> Nat.
         mult = \m n ->
-          primRec (multRec n) m.
+          primRec {NatF} (multRec n) m.
         
         one : Nat.
         one = s z.
@@ -409,6 +408,9 @@ evalSpec = do
         fmap f x = case x of
           | Z -> Z
           | S n -> S (f n)
+
+      primRec τ
+      => \body z -> body (fmap (\x -> (x, primRec body x))) z
 
       plus (S Z) (S Z)
       => primRec body (S Z)

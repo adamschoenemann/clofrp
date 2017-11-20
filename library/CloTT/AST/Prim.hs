@@ -18,11 +18,10 @@ data Prim
   | Integer (Pr.Integer)
   | Fold
   | Unfold
-  | PrimRec
+  -- | PrimRec
   | Tick
   | Fix
   | Undefined
-  | Fmap
   deriving (Eq, Data, Typeable, Generic, NFData)
 
 instance Show Prim where
@@ -30,13 +29,10 @@ instance Show Prim where
   show (Integer x) = show x
   show Fold    = "fold"
   show Unfold  = "unfold"
-  show PrimRec = "primRec"
+  -- show PrimRec = "primRec"
   show Tick    = "◇"
   show Fix     = "fix"
   show Undefined  = "⊥"
-  show Fmap  = "__fmap__"
 
 instance Pretty Prim where
   pretty = fromString . show
-
-

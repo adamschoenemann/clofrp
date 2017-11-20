@@ -32,7 +32,7 @@ data PrimVal
   | PrimRec
   | Fix 
   | RuntimeErr String
-  | Fmap
+  -- | Fmap
   deriving (Eq, Generic, NFData, Show)
 
 instance Pretty PrimVal where
@@ -43,7 +43,7 @@ instance Pretty PrimVal where
     Unfold   -> "unfold"
     PrimRec  -> "primRec"
     Fix      -> "fix"
-    Fmap     -> "__fmap__"
+    -- Fmap     -> "__fmap__"
     RuntimeErr s -> fromString s
 
 -- instance Show PrimVal where show = show . pretty
@@ -57,7 +57,7 @@ data Value a
   | TickClosure (Env a) Name (Expr a)
   | Tuple [Value a]
   | Constr Name [Value a]
-  | GetFmap (Expr a)
+  -- | GetFmap (Expr a)
   deriving (Show, Eq, Generic, NFData)
 
 instance Pretty (Value a) where
@@ -70,7 +70,7 @@ instance Pretty (Value a) where
     Tuple vs -> tupled (map pretty vs)
     Constr nm [] -> pretty nm
     Constr nm vs -> parens $ pretty nm <+> fillSep (map pretty vs)
-    GetFmap e -> "__getfmap__" <+> parens (pretty e)
+    -- GetFmap e -> "__getfmap__" <+> parens (pretty e)
 
 newtype Env a = Env {unEnv :: Map Name (Value a)}
   deriving newtype (Eq, Monoid)

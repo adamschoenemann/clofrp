@@ -335,7 +335,7 @@ clockSpec = do
             in lcons x (r xs').
 
         take : forall a. Nat -> CoStream a -> List a.
-        take = \n -> primRec takeBody n.
+        take = \n -> primRec {NatF} takeBody n.
 
         -- maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
         -- maapfix = \f r xs ->
@@ -405,7 +405,7 @@ clockSpec = do
         type Tree a = Fix (TreeF a).
 
         min : Nat -> Nat -> Nat.
-        min = primRec (\m n -> 
+        min = primRec {NatF} (\m n -> 
           case m of 
           | Z -> fold Z
           | S (m', r) -> fold (S (r n))
@@ -420,7 +420,7 @@ clockSpec = do
         data Delay a (k : Clock) = Delay (|>k a).
 
         replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (Delay (Tree Nat) k, Nat).
-        replaceMinBody = primRec (\t m ->
+        replaceMinBody = primRec {TreeF Nat} (\t m ->
           case t of
           | Leaf x -> (Delay (map leaf m), x)
           | Br (l, lrec) (r, rrec) -> 
@@ -494,7 +494,7 @@ clockSpec = do
         -- fixpoint above with full types
         applyfix : forall (k : Clock) i o. |>k (SP i o k -> CoStream i -> CoStream o) -> SP i o k -> CoStream i -> CoStream o.
         applyfix = \rec -> 
-          primRec (\x s ->
+          primRec {SPF i o k} (\x s ->
             case x of
             | Get f -> let (sp', g) = f (hd s) in g (tl s)
             | Put b sp -> 
@@ -505,7 +505,7 @@ clockSpec = do
         -- it even works without annotations!
         apply : forall (k : Clock) i o. SP i o k -> CoStream i -> CoStream o.
         apply = fix (\rec -> 
-          primRec (\x s ->
+          primRec {SPF i o k} (\x s ->
             case x of
             | Get f -> (snd (f (hd s))) (tl s) 
             | Put b sp -> 

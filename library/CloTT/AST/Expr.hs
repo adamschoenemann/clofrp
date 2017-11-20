@@ -26,7 +26,7 @@ import Data.Text.Prettyprint.Doc
 import Control.DeepSeq
 import GHC.Generics
 
-import CloTT.Annotated 
+import CloTT.Annotated
 import CloTT.AST.Name
 import CloTT.AST.Type
 import CloTT.AST.Pat
@@ -45,7 +45,8 @@ data Expr' a
   | Let (Pat a) (Expr a) (Expr a) -- let p = e1 in e2
   | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
   | TypeApp (Expr a) (Type a Poly) -- e {τ}
-  -- | Fmap (Type a Poly) -- fmap τ
+  | Fmap (Type a Poly) -- fmap τ
+  | PrimRec (Type a Poly) -- primRec τ
   | Prim P.Prim -- primitive (will probably just include ints in the end)
   deriving (Eq, Data, Typeable, Generic, NFData)
 
@@ -56,13 +57,13 @@ data PrettyEP ann = PrettyEP
   }
 
 prettyE' :: PrettyEP ann -> Expr' a -> Doc ann
-prettyE' (PrettyEP {lamParens, otherParens}) = \case 
+prettyE' (PrettyEP {lamParens, otherParens}) = \case
   Var nm -> pretty nm
   TickVar  nm -> brackets $ pretty nm
   Ann e t -> parens $ prettyE parlam e <+> ":" <+> pretty t
   App e1 e2 -> otherParens $ prettyE parlam e1 <+> prettyE (ep parens parens) e2
 
-  Lam nm mty e -> 
+  Lam nm mty e ->
     let (ps', e') = collect pred e
         ps = (nm, mty) : ps'
         params = sep $ map rndrp ps
@@ -71,7 +72,7 @@ prettyE' (PrettyEP {lamParens, otherParens}) = \case
       rndrp (nm, Just ty) = parens (pretty nm <+> ":" <+> pretty ty)
       pred (Lam nm' mty' e'') = Just ((nm', mty'), e'')
       pred _                  = Nothing
-  
+
   TickAbs  nm kappa e -> lamParens $ "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
 
   Tuple es -> tupled (map (prettyE nopars) es)
@@ -79,8 +80,10 @@ prettyE' (PrettyEP {lamParens, otherParens}) = \case
 
   Case e clauses ->
     "case" <+> prettyE parlam e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
-  
+
   TypeApp e t -> otherParens (pretty e <+> braces (prettyT False t))
+  Fmap t -> "fmap" <+> braces (pretty t)
+  Fmap t -> "primRec" <+> braces (pretty t)
 
   Prim p -> fromString . show $ p
   where
@@ -104,7 +107,7 @@ instance Show (Expr' a) where
 instance IsString (Expr ()) where
   fromString input = A () $ case input of
     [] -> error "illegal empty name"
-    xs 
+    xs
       | length xs > 2, head xs == '[', last xs == ']' -> TickVar . UName . tail . init $ xs
       | otherwise -> Var . UName $ xs
 
@@ -130,3 +133,4 @@ unannE' = \case
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
   TypeApp e t -> TypeApp (unannE e) (unannT t)
   Prim p -> Prim p
+

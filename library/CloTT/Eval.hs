@@ -73,6 +73,12 @@ fmapNat ann =
       ]
      ) 
 
+fmapFromType :: Type a Poly -> EvalM a (Expr a)
+fmapFromType (A ann ty) =
+  case ty of
+    E.TFree "NatF" -> pure $ fmapNat ann
+    _     -> error "fmapFromType"
+
 lookupFmap :: a -> Value a -> EvalM a (Expr a)
 lookupFmap ann (Constr "Z" _) = pure $ fmapNat ann
 lookupFmap ann (Constr "S" _) = pure $ fmapNat ann
@@ -134,10 +140,8 @@ evalPrim = \case
   P.Integer i        -> pure . Prim . IntVal $ i
   P.Fold             -> pure . Prim $ Fold
   P.Unfold           -> pure . Prim $ Unfold
-  P.PrimRec          -> pure . Prim $ PrimRec
   P.Tick             -> pure . Prim $ Tick
   P.Fix              -> pure . Prim $ Fix
-  P.Fmap             -> pure . Prim $ Fmap
   P.Undefined        -> otherErr $ "Undefined!"
 
 evalExprStep :: Expr a -> EvalM a (Value a)
@@ -157,6 +161,21 @@ evalExprStep (A ann expr') =
       env <- getEnv
       pure (TickClosure env x e)
     
+    E.Fmap t -> evalExprStep =<< fmapFromType t
+    E.PrimRec t -> do
+      let oname = UName "__outer__"
+      let ovar = var oname
+      let iname = UName "__inner__"
+      let ivar = var iname
+      let bdnm = UName "__body__"
+      let bdvar = var bdnm
+
+      let conte = (primRec t `app` bdvar) `app` ivar
+      let etup = tuple [ivar, conte]
+      let fmaplam = lam iname Nothing etup
+      let fmape = (fmapE t `app` fmaplam) `app` ovar
+      evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
+      
     E.App e1 e2 -> do
       v1 <- evalExprStep e1
       v2 <- evalExprStep e2
@@ -188,12 +207,9 @@ evalExprStep (A ann expr') =
           let cenv' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) cenv
           withEnv (combine cenv') $ evalExprStep e2'
         
-        (Prim Fmap, _) -> do
-          pure $ GetFmap e2
-        
-        (GetFmap f, v) -> do
-          fm <- lookupFmap ann v
-          evalExprStep ((fm `app` f `app`) e2)
+        -- (GetFmap f, v) -> do
+        --   fm <- lookupFmap ann v
+        --   evalExprStep ((fm `app` f `app`) e2)
         
         {-
         primRec body x
@@ -202,20 +218,20 @@ evalExprStep (A ann expr') =
         primRec body
         => \x -> body (fmap (\x -> (x, primRec body x)) x)
         -}
-        (Prim PrimRec, _) -> do
-          let oname = UName "__outer__"
-          let ovar = var oname
-          let iname = UName "__inner__"
-          let ivar = var iname
+        -- (Prim PrimRec, _) -> do
+        --   let oname = UName "__outer__"
+        --   let ovar = var oname
+        --   let iname = UName "__inner__"
+        --   let ivar = var iname
 
-          let conte = (prim P.PrimRec `app` e2) `app` ivar
-          let etup = tuple [ivar, conte]
-          let fmaplam = lam iname Nothing etup
-          let fmape = (prim E.Fmap `app` fmaplam) `app` ovar
-          let bdeapp = e2 `app` fmape 
-          env <- getEnv
-          let r = Closure env oname bdeapp
-          pure $ r
+        --   let conte = (prim P.PrimRec `app` e2) `app` ivar
+        --   let etup = tuple [ivar, conte]
+        --   let fmaplam = lam iname Nothing etup
+        --   let fmape = (prim E.Fmap `app` fmaplam) `app` ovar
+        --   let bdeapp = e2 `app` fmape 
+        --   env <- getEnv
+        --   let r = Closure env oname bdeapp
+        --   pure $ r
         
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim( RuntimeErr _)) -> pure v2

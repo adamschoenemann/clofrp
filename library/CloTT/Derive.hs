@@ -103,8 +103,8 @@ deriveFmapArg f tnm typ@(A anno _) = go typ where
         let af = UName "0af"
             k  = UName "0k"
         in  pure $ lam "x" Nothing $ tAbs af k (f `app` (var "x" `app` tickvar af))
-      TTuple ts -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x" -- TODO: fmap for tuples
-      t1 `TApp` t2 -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x"
+      TTuple ts -> pure $ lam "x" Nothing $ (A anno $ Fmap typ) `app` var "x" -- TODO: fmap for tuples
+      t1 `TApp` t2 -> pure $ lam "x" Nothing $ (A anno $ Fmap typ) `app` var "x"
       t1 :->: t2     -> do
         e1 <- cogo t1
         e2 <- go t2
@@ -125,8 +125,8 @@ deriveFmapArg f tnm typ@(A anno _) = go typ where
         let af = UName "0af"
             k  = UName "0k"
         in  pure $ lam "x" Nothing $ tAbs af k (f `app` (var "x" `app` tickvar af))
-      TTuple ts -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x" -- TODO: fmap for tuples
-      t1 `TApp` t2 -> pure $ lam "x" Nothing $ prim P.Fmap `app` var "x"
+      TTuple ts -> pure $ lam "x" Nothing    $ (A anno $ Fmap typ) `app` var "x" -- TODO: fmap for tuples
+      t1 `TApp` t2 -> pure $ lam "x" Nothing $ (A anno $ Fmap typ) `app` var "x"
       t1 :->: t2     -> do
         e1 <- go t1
         e2 <- cogo t2

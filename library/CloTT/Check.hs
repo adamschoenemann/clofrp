@@ -18,6 +18,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module CloTT.Check
   ( module CloTT.Check
@@ -36,6 +37,7 @@ import Data.List (find, genericLength)
 import Data.Maybe (isJust)
 
 import CloTT.AST.Name
+import qualified CloTT.AST.Helpers as H
 import CloTT.Context
 import CloTT.Annotated
 import CloTT.AST.Parsed hiding (exists)
@@ -1016,6 +1018,18 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   --     A ann2 (RecTy fty) -> pure (A ann2 $ fty `TApp` e2ty', theta)
   --     _                  -> otherErr $ show $ pretty e2ty' <+> "cannot be unfolded"
 
+  -- PrimRec=>
+  synthesize' (PrimRec prty) = do
+    let ?annotation = ann
+    let resultty = H.tvar "A"
+    let ftorty = prty
+    let ftorq =  H.forAllK [("F", Star :->*: Star)]
+    let resultq = H.forAll ["A"]
+    let inductivet = A ann $ RecTy ftorty
+    let ftorresultty = ftorty `H.tapp` H.ttuple [inductivet, resultty]
+    let body = ftorresultty `H.arr` resultty
+    ctx <- getCtx
+    pure (ftorq . resultq $ body `H.arr` inductivet `H.arr` resultty, ctx)
 
   -- ->E
   synthesize' (e1 `App` e2) = do
@@ -1119,16 +1133,16 @@ inferPrim ann p = case p of
     let arr = folded --> unfolded
     pure (fall a1 (Star :->*: Star) arr, ctx)
   
-  PrimRec -> do
-    let resultty = tv "A"
-    let ftorty = tv "F"
-    let ftorq = fall "F" (Star :->*: Star)
-    let resultq = fall "A" Star 
-    let inductivet = A ann $ RecTy ftorty
-    let ftorresultty = ftorty `tapp` ttuple [inductivet, resultty]
-    let body = ftorresultty --> resultty
-    ctx <- getCtx
-    pure (ftorq . resultq $ body --> inductivet --> resultty, ctx)
+  -- PrimRec -> do
+  --   let resultty = tv "A"
+  --   let ftorty = tv "F"
+  --   let ftorq = fall "F" (Star :->*: Star)
+  --   let resultq = fall "A" Star 
+  --   let inductivet = A ann $ RecTy ftorty
+  --   let ftorresultty = ftorty `tapp` ttuple [inductivet, resultty]
+  --   let body = ftorresultty --> resultty
+  --   ctx <- getCtx
+  --   pure (ftorq . resultq $ body --> inductivet --> resultty, ctx)
   
   Fix -> do
     let ltr k = A ann . Later k

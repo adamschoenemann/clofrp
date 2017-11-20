@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
 
 
 module CloTT.Experiments where
@@ -91,3 +92,7 @@ type List a = Fix (ListF a)
 
 sing :: a -> List a
 sing x = Into (Cons x (Into Nil))
+
+
+rank :: forall a b. b -> a -> Int
+rank _ _ = 0
