@@ -1020,16 +1020,16 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
   -- PrimRec=>
   synthesize' (PrimRec prty) = do
+    errIf (kindOf prty) (/= (Star :->*: Star)) (const $ Other $ show $ "Expected" <+> pretty prty <+> "to have kind * -> *")
     let ?annotation = ann
     let resultty = H.tvar "A"
     let ftorty = prty
-    let ftorq =  H.forAllK [("F", Star :->*: Star)]
     let resultq = H.forAll ["A"]
     let inductivet = A ann $ RecTy ftorty
     let ftorresultty = ftorty `H.tapp` H.ttuple [inductivet, resultty]
     let body = ftorresultty `H.arr` resultty
     ctx <- getCtx
-    pure (ftorq . resultq $ body `H.arr` inductivet `H.arr` resultty, ctx)
+    pure (resultq $ body `H.arr` inductivet `H.arr` resultty, ctx)
 
   -- ->E
   synthesize' (e1 `App` e2) = do

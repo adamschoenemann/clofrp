@@ -87,7 +87,7 @@ toInt (Into n) =
     Z -> 0
     S n' -> 1 + toInt n'
 
-data ListF a f = Nil | Cons a f
+data ListF a f = Nil | Cons a f deriving (Functor, Show)
 type List a = Fix (ListF a)
 
 sing :: a -> List a

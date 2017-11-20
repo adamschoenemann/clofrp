@@ -18,6 +18,7 @@ import Data.Data
 import GHC.Exts (IsList(..))
 import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import Data.List (break, find)
 import Data.Maybe (isJust)
 
@@ -182,6 +183,9 @@ instance (IsList (ClockCtx a)) where
 instance Pretty (ClockCtx a) where
   pretty (ClockCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
     fn (k, v) = pretty k 
+
+newtype InstanceCtx a = InstanceCtx { unInstanceCtx :: M.Map Name (S.Set (Type () Poly)) }
+  deriving (Show, Eq, Monoid)
 
 -- Lists are left-prepend but contexts are right-append
 -- It doesn't matter, so we just pretend that we right-append stuff,

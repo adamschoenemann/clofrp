@@ -68,7 +68,8 @@ data ElabProg a = ElabProg
   , defs    :: Defs a
   , destrs  :: DestrCtx a
   , aliases :: Aliases a
-  } deriving (Show, Eq, Data, Typeable)
+  -- , instances :: InstanceCtx a
+  } deriving (Show, Eq, Typeable)
 
 {-
   type FlipSum a b = Either b a.
@@ -266,11 +267,15 @@ elabProg program = do
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
+            -- let instances = getInstances derivs
             (derivDefs, derivTyps) <- M.foldr (\(x,y) (xs, ys) -> (x ++ xs, y ++ ys)) ([], []) <$> M.traverseWithKey traverseDerivs derivs
             let allFree = FreeCtx $ expFree <> M.fromList derivTyps
             let allDefs = expFunds <> M.fromList derivDefs
             pure $ ElabProg kinds allFree allDefs expDestrs aliases
   where 
+    -- getInstances dts = M.map mapper dts where
+    --   mapper v = S.fromList $ map dtName
+
     traverseDerivs nm dts = do 
       trips <- traverse (\dt -> either otherErr pure $ deriveClass nm dt) dts
       pure $ foldr (\(nm, ty, ex) (exs, tys) -> ((nm, ex) : exs, (nm, ty) : tys)) ([], []) trips
