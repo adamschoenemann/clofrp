@@ -395,6 +395,22 @@ rule name info = do
   ctx <- selfapp =<< getCtx
   root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
+assertFunctor :: Type a Poly -> TypingM a ()
+assertFunctor ty@(A _ ty') = 
+  case ty' of
+    TFree n      ->
+      lookupFunctor n >>= \case 
+    TVar n       -> notFunctor ty
+    TExists n    -> notFunctor ty
+    TApp x y     -> lookupFunctor x 
+    x :->: y     -> notFunctor ty
+    Forall n k t -> notFunctor ty
+    RecTy t      -> parensIf $ "Fix" <+> prettyT True t
+    TTuple ts -> tupled $ map (prettyT False) ts
+    Later t1 t2 -> parensIf $ "⊳" <> prettyT True t1 <+> prettyT True t2
+
+
+
 -- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
 -- at least implement them both in terms of a more general combinator
 
@@ -775,7 +791,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     (delta, _, _) <- splitCtx c =<< withCtx (const $ ctx' <+ c) (branch $ check e2 bty)
     pure delta
 
-  
   -- Case<=
   check' (Case on clauses) _ = do
     root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
@@ -1021,13 +1036,14 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- PrimRec=>
   synthesize' (PrimRec prty) = do
     errIf (kindOf prty) (/= (Star :->*: Star)) (const $ Other $ show $ "Expected" <+> pretty prty <+> "to have kind * -> *")
-    let ?annotation = ann
-    let resultty = H.tvar "A"
-    let ftorty = prty
-    let resultq = H.forAll ["A"]
-    let inductivet = A ann $ RecTy ftorty
+    assertFunctor prty
+    let ?annotation  = ann
+    let resultty     = H.tvar "A"
+    let ftorty       = prty
+    let resultq      = H.forAll ["A"]
+    let inductivet   = A ann $ RecTy ftorty
     let ftorresultty = ftorty `H.tapp` H.ttuple [inductivet, resultty]
-    let body = ftorresultty `H.arr` resultty
+    let body         = ftorresultty `H.arr` resultty
     ctx <- getCtx
     pure (resultq $ body `H.arr` inductivet `H.arr` resultty, ctx)
 
@@ -1059,7 +1075,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     where
       folder e (ts', acc) = do
         (t', acc') <- branch $ withCtx (const acc) $ synthesize e
-        pure (t' : ts', acc')
+        pure (t' : ts', acc'
 
   -- [TickAbs=>]
   synthesize' (TickAbs nm k e) = do
