@@ -45,6 +45,7 @@ data Expr' a
   | Let (Pat a) (Expr a) (Expr a) -- let p = e1 in e2
   | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
   | TypeApp (Expr a) (Type a Poly) -- e {τ}
+  -- | Fmap (Type a Poly) -- fmap τ
   | Prim P.Prim -- primitive (will probably just include ints in the end)
   deriving (Eq, Data, Typeable, Generic, NFData)
 
@@ -53,6 +54,7 @@ data PrettyEP ann = PrettyEP
   { lamParens   :: Doc ann -> Doc ann
   , otherParens :: Doc ann -> Doc ann
   }
+
 prettyE' :: PrettyEP ann -> Expr' a -> Doc ann
 prettyE' (PrettyEP {lamParens, otherParens}) = \case 
   Var nm -> pretty nm

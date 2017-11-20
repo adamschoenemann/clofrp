@@ -27,48 +27,48 @@ higherKindedSpec = do
   describe "functors!" $ do
     it "works" $ do
       let prog = [unsafeProg|
-        type Fmap (f : * -> *) = forall a b. (a -> b) -> f a -> f b.
-        data Functor (f : * -> *) = Functor (Fmap f).
+        type Map (f : * -> *) = forall a b. (a -> b) -> f a -> f b.
+        data Functor (f : * -> *) = Functor (Map f).
         data Id a = Id a.
         data Maybe a = Nothing | Just a.
         data List a = Nil | Cons a (List a).
         data Pair a b = Pair a b.
 
-        fmap : forall (f : * -> *). Functor f -> Fmap f.
-        fmap = \x -> case x of
-          | Functor fmap' -> fmap'.
+        map : forall (f : * -> *). Functor f -> Map f.
+        map = \x -> case x of
+          | Functor map' -> map'.
 
         idf : Functor Id.
         idf = Functor (\f x -> case x of
                 | Id x' -> Id (f x')                
               ).
         
-        fmapMaybe : forall a b. (a -> b) -> Maybe a -> Maybe b.
-        fmapMaybe = \f x -> case x of
+        mapMaybe : forall a b. (a -> b) -> Maybe a -> Maybe b.
+        mapMaybe = \f x -> case x of
           | Nothing -> Nothing
           | Just x' -> Nothing.
         
         maybef : Functor Maybe.
-        maybef = Functor fmapMaybe.
+        maybef = Functor mapMaybe.
 
         -- we use general recursion here. Soon, we cannot do this
-        fmapList : forall a b. (a -> b) -> List a -> List b.
-        fmapList = \f xs -> case xs of
+        mapList : forall a b. (a -> b) -> List a -> List b.
+        mapList = \f xs -> case xs of
           | Nil -> Nil
-          | Cons x xs' -> Cons (f x) (fmapList f xs).
+          | Cons x xs' -> Cons (f x) (mapList f xs).
 
         listf : Functor List.
-        listf = Functor fmapList.
+        listf = Functor mapList.
 
-        fmapPair : forall a b c. (b -> c) -> Pair a b -> Pair a c.
-        fmapPair = \f p -> case p of
+        mapPair : forall a b c. (b -> c) -> Pair a b -> Pair a c.
+        mapPair = \f p -> case p of
           | Pair x y -> Pair x (f y).
         
         pairf : forall a. Functor (Pair a).
-        pairf = Functor fmapPair.
+        pairf = Functor mapPair.
 
-        fmapListMaybe : forall a b. (a -> b) -> List (Maybe a) -> List (Maybe b).
-        fmapListMaybe = \f xs -> (fmap listf) (fmap maybef f) xs.
+        mapListMaybe : forall a b. (a -> b) -> List (Maybe a) -> List (Maybe b).
+        mapListMaybe = \f xs -> (map listf) (map maybef f) xs.
         
       |]
       runCheckProg mempty prog `shouldYield` ()

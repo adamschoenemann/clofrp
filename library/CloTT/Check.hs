@@ -299,7 +299,7 @@ checkWfType ty@(A ann ty') = do
         errIf (kindOf tt) (/= Star) (\tt' -> Other $ show $ pretty tt' <+> "must have kind *")
         checkWfType tt
     
-    -- |>WF
+    -- \|>WF
     Later t1 t2 -> 
       kindOf t1 >>= \case
         ClockK -> checkWfType t2
@@ -1224,7 +1224,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- TODO: Abstract the common stuff in these two
   applysynth' (TExists alpha) = 
     case e of
-      -- ^alpha TickApp
+      -- α^ TickApp
       (A _ (TickVar tv)) -> do
         ctx <- getCtx
         rule "αTickApp" (pretty ty <+> "•" <+> pretty e)
@@ -1240,7 +1240,7 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
           else
             nameNotFound alpha
 
-    -- ^alpha App
+    -- α^ App
       _  -> do 
         ctx <- getCtx
         rule "αApp" (pretty ty <+> "•" <+> pretty e)

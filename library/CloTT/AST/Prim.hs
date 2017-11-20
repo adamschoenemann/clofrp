@@ -11,11 +11,12 @@ import Data.Text.Prettyprint.Doc
 import Data.String (fromString)
 import Control.DeepSeq
 import GHC.Generics
+import CloTT.AST.Type
 
 data Prim
   = Unit
   | Integer (Pr.Integer)
-  | Fold 
+  | Fold
   | Unfold
   | PrimRec
   | Tick

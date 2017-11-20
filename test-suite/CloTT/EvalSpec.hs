@@ -144,7 +144,7 @@ evalSpec = do
             b `shouldBe` (E.fixp @@ "body")
           e  -> failure ("did not expect " ++ show (pretty e))
 
-      it "evals first iter of map correctly" $ do
+      it "evals first iter of strmap correctly" $ do
         {-
           map S (const Z) =>
           fix mapfix (const Z) =>
@@ -155,7 +155,7 @@ evalSpec = do
         -}
         let p = unann [unsafeExpr|
           let cons = \x xs -> fold (Cons x xs) in 
-          let map = \f -> 
+          let strmap = \f -> 
             let mapfix = \g xs ->
                 case unfold xs of
                 | Cons x xs' -> 
@@ -165,7 +165,7 @@ evalSpec = do
           let const = \x ->
              let body = \xs -> Cons x xs
              in  fix body
-          in map S (const Z)
+          in strmap S (const Z)
         |]
         let m = [s,z,cons]
         case eval m p of 
@@ -203,7 +203,7 @@ evalSpec = do
     it "evals the stream of naturals" $ do
       let Right p = pexprua [text|
         let cons = \x xs -> fold (Cons x xs) in 
-        let map = \f -> 
+        let strmap = \f -> 
           let mapfix = \g xs ->
               case unfold xs of
               | Cons x xs' -> 
@@ -212,7 +212,7 @@ evalSpec = do
           in fix mapfix in
         let z = fold Z in
         let s = \x -> fold (S x) in
-        let nats = fix (\g -> cons z (\\(af : k) -> (map s) (g [af]))) in
+        let nats = fix (\g -> cons z (\\(af : k) -> (strmap s) (g [af]))) in
         nats
       |]
       let m = [s,z,cons]
@@ -237,11 +237,11 @@ evalSpec = do
           f a.
 
         -- functor
-        fmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-        fmap = \f la -> app (pure f) la.
+        map : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        map = \f la -> app (pure f) la.
 
-        map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
-        map = \f -> 
+        strmap : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+        strmap = \f -> 
           --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
           let mapfix = \g xs ->
                 case unfold xs of
@@ -260,7 +260,7 @@ evalSpec = do
         cons = \x xs -> fold (Cons x xs).
 
         nats : forall (k : Clock). Stream k Nat.
-        nats = fix (\g -> cons z (fmap (map s) g)).
+        nats = fix (\g -> cons z (map (strmap s) g)).
 
       |]
 
@@ -313,7 +313,7 @@ evalSpec = do
 
         cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with fmap :(
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
@@ -352,7 +352,7 @@ evalSpec = do
       |]
       takeValueList vboolToBool 1000 (evalProg "trues" prog) `shouldBe` (replicate 1000 True)
     
-    it "evals fmap" $ do
+    it "evals map" $ do
       let Right prog = pprog [text|
         data NatF a = Z | S a. 
         data Bool = True | False.

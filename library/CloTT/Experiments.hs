@@ -91,6 +91,3 @@ type List a = Fix (ListF a)
 
 sing :: a -> List a
 sing x = Into (Cons x (Into Nil))
-
-useless :: Eq a => Int
-useless = 0
