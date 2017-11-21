@@ -396,21 +396,9 @@ rule name info = do
   root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
 assertFunctor :: Type a Poly -> TypingM a ()
-assertFunctor ty = do
-  instances <- getInstancesOf "Functor"
-  or <$> traverse hasInstance instances >>= \case
-    True -> pure ()
-    False -> otherErr $ show $ "Cannot resolve functor instance of" <+> pretty ty
-  where
-    hasInstance (ClassInstance {ciInstanceTypeName = nm , ciParams = params}) = genPred nm params ty
-
-    -- FIXME: this is a crazy hack to resolve "type-class" instances by folding a predicate over
-    -- the bound variables of a type constructor
-    genPred tnm bnd = foldr folder (\x -> pure (unann x == A () (TFree tnm))) bnd where
-      folder b acc ty = 
-        case ty of
-          A _ (a `TApp` b) -> acc a
-          _                -> pure False
+assertFunctor ty = findInstanceOf "Functor" ty >>= \case
+  Just _ -> pure ()
+  Nothing -> otherErr $ show $ "Cannot resolve functor instance of" <+> pretty ty
 
 -- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
 -- at least implement them both in terms of a more general combinator

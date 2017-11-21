@@ -29,7 +29,7 @@ import           CloTT.Annotated (unann, Annotated(..))
 evalSpec :: Spec
 evalSpec = do
   let eval0 e = runEvalM (evalExprStep e) mempty
-  let eval environ e = runEvalM (evalExprStep e) environ
+  let eval environ e = runEvalM (evalExprStep e) (mempty { erEnv = environ })
   let int = Prim . IntVal
   let constr nm vs = Constr nm vs
   let c nm = (nm, Constr nm [])
@@ -174,19 +174,19 @@ evalSpec = do
           e  -> failure ("did not expect " ++ show (pretty e))
     
   describe "evalExprCorec" $ do
-    let evforever environ x = 
-          runEvalM (evalExprCorec x) environ
+    let evcorec environ x = 
+          runEvalM (evalExprCorec x) (mempty { erEnv = environ })
     let step m e = runEvalM (evalExprStep e) m
     let forceit m e = runEvalM (force e) m
 
-    let evforever0 x = evforever mempty x
+    let evcorec0 x = evcorec mempty x
     it "forever terminates with primitives" $ do
-      evforever0 (E.int 10) `shouldBe` (int 10)
-      evforever [just] ("Just" @@ E.int 10) `shouldBe` (Constr "Just" [int 10])
+      evcorec0 (E.int 10) `shouldBe` (int 10)
+      evcorec [just] ("Just" @@ E.int 10) `shouldBe` (Constr "Just" [int 10])
 
     it "forever terminates with 2-step comp" $ do
       let e = "Cons" @@ E.int 1 @@ (("af", "k") `E.tAbs` ("Cons" @@ E.int 2 @@ "Nil"))
-      evforever [cons, nil] e `shouldBe` (Constr "Cons" [int 1, Constr "Cons" [int 2, Constr "Nil" []]])
+      evcorec [cons, nil] e `shouldBe` (Constr "Cons" [int 1, Constr "Cons" [int 2, Constr "Nil" []]])
     
     it "evals the constant stream" $ do
       let Right p = pexprua [text|
@@ -197,7 +197,7 @@ evalSpec = do
       |]
       let m = [s,z,cons]
 
-      let cs = evforever m p
+      let cs = evcorec m p
       takeValueList vnatToInt 10 cs `shouldBe` (replicate 10 0)
 
     it "evals the stream of naturals" $ do
@@ -216,7 +216,7 @@ evalSpec = do
         nats
       |]
       let m = [s,z,cons]
-      let cs = evforever m p
+      let cs = evcorec m p
       takeValueList vnatToInt 10 cs `shouldBe` ([0..9])
     
   describe "evalProg" $ do
@@ -365,7 +365,7 @@ evalSpec = do
 
     it "evals primitive recursion over natural numbers" $ do
       let Right prog = pprog [text|
-        data NatF a = Z | S a. 
+        data NatF a = Z | S a deriving Functor.
         type Nat = Fix NatF.
 
         s : Nat -> Nat.

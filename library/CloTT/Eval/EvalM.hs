@@ -22,8 +22,19 @@ import CloTT.Eval.Value
 import CloTT.AST.Name
 import qualified CloTT.AST.Expr as E
 import CloTT.AST.Expr (Expr)
+import CloTT.Check.Contexts (InstanceCtx(..), HasInstances(..))
 
-type EvalRead a = Env a
+data EvalRead a = 
+  EvalRead { erEnv :: Env a, erInstances :: InstanceCtx a }
+  deriving (Show, Eq)
+
+instance Monoid (EvalRead a) where
+  mempty = EvalRead mempty mempty
+  er1 `mappend` er2 = 
+    EvalRead { erEnv       = erEnv er1 `mappend` erEnv er2 
+             , erInstances = erInstances er1 `mappend` erInstances er2 
+             }
+
 type EvalWrite = ()
 type Globals a = Map Name (Either (Expr a) (Value a)) -- either unevaled defs or already evaled values
 type EvalState a = Globals a
@@ -40,22 +51,20 @@ newtype EvalM a r = Eval { unEvalM :: RWS (EvalRead a) EvalWrite (EvalState a) r
            , MonadReader (EvalRead a)
            )
 
+instance HasInstances (EvalM a) a where
+  getInstances = asks erInstances
+
 type EvalMRes r = r
-
--- instance Alternative (EvalM a) where 
---   empty = otherErr "Alternative.empty for EvalM"
---   x <|> y = x `catchError` \e -> y
-
 
 runEvalM :: EvalM a r -> (EvalRead a) -> EvalMRes r
 -- runEvalM tm r = let x = runRWS (unEvalM tm) r in x
 runEvalM tm r = let (x, _, _) = runRWS (unEvalM tm) r mempty in x
 
 getEnv :: EvalM a (Env a)
-getEnv = ask
+getEnv = asks erEnv
 
-withEnv :: (EvalRead a -> EvalRead a) -> EvalM a r -> EvalM a r
-withEnv = local
+withEnv :: (Env a -> Env a) -> EvalM a r -> EvalM a r
+withEnv f = local (\e -> e { erEnv = f (erEnv e) })
 
 updGlobals :: (EvalState a -> EvalState a) -> EvalM a ()
 

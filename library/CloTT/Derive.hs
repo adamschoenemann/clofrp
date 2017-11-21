@@ -19,6 +19,7 @@ import CloTT.AST.Datatype
 import CloTT.AST.Helpers
 import qualified CloTT.AST.Prim as P
 import CloTT.Check.Contexts (ClassInstance(..))
+import CloTT.Utils (safeLast, safeInit)
 
 {-
 data NatF f = Z | S f.
@@ -29,19 +30,6 @@ instance Functor NatF where
   fmap f Z = Z
   fmap f (S n) = S (f n)
 -}
-
--- total definition of last
-lst :: a -> [a] -> a
-lst d [] = d
-lst d [x] = x
-lst d (x:xs) = lst d xs
-
--- total def of init
-inits :: [a] -> [a]
-inits [] = []
-inits [x] = []
-inits (x:xs) = x : inits xs
-
 
 -- data Constraint = HasKind Kind
 
@@ -77,9 +65,9 @@ deriveFunctor :: Datatype a -> Either String (ClassInstance a)
 deriveFunctor (Datatype {dtName, dtBound = [], dtConstrs}) = Left $ show $ "Cannot derive functor for concrete type" <+> pretty dtName
 deriveFunctor (Datatype {dtName, dtBound, dtConstrs = []}) = Left $ show $ "Cannot derive functor uninhabited  type" <+> pretty dtName
 deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : _)}) = do
-  expr <- deriveFunctorDef ann (fst $ lst b bs) cs
+  expr <- deriveFunctorDef ann (fst $ safeLast b bs) cs
   let ?annotation = ann
-  let extrabs = map fst $ inits bs
+  let extrabs = map fst $ safeInit bs
   let nfa = foldl (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
   let typ = forAll (extrabs ++ ["#a", "#b"]) $ (tvar "#a" `arr` tvar "#b") `arr` (nfa `tapp` tvar "#a") `arr` (nfa `tapp` tvar "#b")
   -- let fmapNm = UName $ show (pretty dtName <> "_fmap")

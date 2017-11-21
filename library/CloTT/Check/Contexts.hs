@@ -9,6 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module CloTT.Check.Contexts
   ( module CloTT.Check.Contexts
@@ -21,7 +22,7 @@ import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (break, find)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, catMaybes, listToMaybe)
 
 import CloTT.Check.Destr
 import CloTT.AST.Parsed hiding (exists)
@@ -155,6 +156,34 @@ instance Show (ClassInstance a) where
 
 newtype InstanceCtx a = InstanceCtx { unInstanceCtx :: M.Map Name [ClassInstance a] }
   deriving (Show, Eq, Monoid)
+
+class HasInstances m a | m -> a where
+  getInstances :: m (InstanceCtx a)
+
+getInstancesOf :: (Monad m, HasInstances m a) => Name -> m [ClassInstance a]
+getInstancesOf name = do
+  is <- getInstances
+  case M.lookup name (unInstanceCtx is) of
+    Just is' -> pure is'
+    Nothing  -> pure []
+
+findInstanceOf :: (Monad m, HasInstances m a) => Name -> Type a Poly -> m (Maybe (ClassInstance a))
+findInstanceOf className ty = do
+  instances <- getInstancesOf className
+  pure (listToMaybe . catMaybes $ map hasInstance instances)
+  where
+    hasInstance ci@(ClassInstance {ciInstanceTypeName = nm , ciParams = params}) = 
+      case genPred nm params ty of
+        True -> Just ci
+        False -> Nothing
+
+    -- FIXME: this is a crazy hack to resolve "type-class" instances by folding a predicate over
+    -- the bound variables of a type constructor
+    genPred tnm bnd = foldr folder (\x -> unann x == A () (TFree tnm)) bnd where
+      folder b acc ty = 
+        case ty of
+          A _ (a `TApp` b) -> acc a
+          _                -> False
 
 -- instance Pretty (DestrCtx a) where
 --   pretty (DestrCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where

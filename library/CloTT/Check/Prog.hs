@@ -250,6 +250,11 @@ collectDecls (Prog decls) = foldr folder mempty decls where
       AliasD alias     -> er {erAliases = M.insert (alName alias) alias als}
 
 
+elabInstances :: Applicative m => (Either String (ClassInstance a) -> m (ClassInstance a)) -> Deriving a -> m (InstanceCtx a)
+elabInstances inject derivs = InstanceCtx <$> M.traverseWithKey traverseDerivs derivs where
+  traverseDerivs nm dts = 
+    traverse (\dt -> inject $ deriveClass nm dt) dts
+
 -- TODO: modularize this
 elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg program = do
@@ -267,7 +272,7 @@ elabProg program = do
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
-            instances <- InstanceCtx <$> M.traverseWithKey traverseDerivs derivs
+            instances <- elabInstances (either otherErr pure) derivs
             let allFree = FreeCtx $ expFree -- <> M.fromList derivTyps
             let allDefs = expFunds -- <> M.fromList derivDefs
             pure $ ElabProg kinds allFree allDefs expDestrs aliases instances
@@ -275,9 +280,6 @@ elabProg program = do
     -- getInstances dts = M.map mapper dts where
     --   mapper v = S.fromList $ map dtName
 
-    traverseDerivs nm dts = 
-      traverse (\dt -> either otherErr pure $ deriveClass nm dt) dts
-      -- pure $ foldr (\(nm, ty, ex) (exs, tys) -> ((nm, ex) : exs, (nm, ty) : tys)) ([], []) trips
 
     expandDestr als d@(Destr {typ, args}) = do
       typ' <- expandAliases als typ

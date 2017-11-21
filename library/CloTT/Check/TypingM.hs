@@ -14,6 +14,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module CloTT.Check.TypingM where
 
@@ -214,15 +215,8 @@ getDCtx = asks trDestrs
 getKCtx :: TypingM a (KindCtx a)
 getKCtx = asks trKinds
 
-getInstances :: TypingM a (InstanceCtx a)
-getInstances = asks trInstances
-
-getInstancesOf :: Name -> TypingM a [ClassInstance a]
-getInstancesOf name = do
-  is <- getInstances
-  case M.lookup name (unInstanceCtx is) of
-    Just is' -> pure is'
-    Nothing  -> pure []
+instance HasInstances (TypingM a) a where
+  getInstances = asks trInstances
 
 -- TODO: Argh, nasty hack. Ideally, get rid of the clock-ctx entirely and just rely on
 -- the normal "local context", but I'm still not completely convinced it is a good idea..

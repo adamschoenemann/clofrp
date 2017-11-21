@@ -39,6 +39,8 @@ import qualified CloTT.AST.Prim as P
 import           CloTT.AST.Parsed (Expr, Prog, Pat, Type, TySort(..), Datatype(..))
 import qualified CloTT.AST.Parsed as E
 
+runtimeErr :: String -> Value a
+runtimeErr = Prim . RuntimeErr
 
 globalLookup :: Name -> EvalM a (Maybe (Value a))
 globalLookup nm = do
@@ -73,16 +75,18 @@ fmapNat ann =
       ]
      ) 
 
-fmapFromType :: Type a Poly -> EvalM a (Expr a)
-fmapFromType (A ann ty) =
-  case ty of
-    E.TFree "NatF" -> pure $ fmapNat ann
-    _     -> error "fmapFromType"
+fmapFromType :: Type a Poly -> EvalM a (Value a)
+fmapFromType ty = findInstanceOf "Functor" ty >>= \case
+  Just (ClassInstance {ciDictionary = dict}) -> 
+    maybe (pure $ runtimeErr "Functor without fmap!!") (evalExprStep . snd) (M.lookup "fmap" dict)
 
-lookupFmap :: a -> Value a -> EvalM a (Expr a)
-lookupFmap ann (Constr "Z" _) = pure $ fmapNat ann
-lookupFmap ann (Constr "S" _) = pure $ fmapNat ann
-lookupFmap _ _             = error "lookupFmap"
+  Nothing -> pure $ runtimeErr $ show $ "No functor instance for" <+> pretty ty
+
+
+-- lookupFmap :: a -> Value a -> EvalM a (Expr a)
+-- lookupFmap ann (Constr "Z" _) = pure $ fmapNat ann
+-- lookupFmap ann (Constr "S" _) = pure $ fmapNat ann
+-- lookupFmap _ _                = error "lookupFmap"
 
 -- getFmap :: Value a -> Value a -> EvalM (Value a)
 -- getFmap f = \case
@@ -117,11 +121,11 @@ evalPat (A _ p) v =
         folder _  (Left err)  = pure (Left err)
 
 evalClauses :: Value a -> [(Pat a, Expr a)] -> EvalM a (Value a)
-evalClauses (Prim (RuntimeErr e)) _ = pure (Prim $ RuntimeErr e)
+evalClauses (Prim (RuntimeErr e)) _ = pure (runtimeErr e)
 evalClauses value clauses = helper value clauses where
   helper val [] = 
     let pcls = indent 4 $ vsep $ map (\(a,b) -> group (pretty a) <+> "->" <+> pretty b) clauses
-    in  pure . Prim . RuntimeErr $ show $ "None of the clauses" <> line <> pcls <+> "matched" <+> pretty val
+    in  pure . runtimeErr $ show $ "None of the clauses" <> line <> pcls <+> "matched" <+> pretty val
   helper val (c : cs) = 
     evalClause val c >>= \case 
       Right v -> pure v
@@ -161,7 +165,7 @@ evalExprStep (A ann expr') =
       env <- getEnv
       pure (TickClosure env x e)
     
-    E.Fmap t -> evalExprStep =<< fmapFromType t
+    E.Fmap t -> fmapFromType t
     E.PrimRec t -> do
       let oname = UName "__outer__"
       let ovar = var oname
@@ -249,7 +253,7 @@ evalExprStep (A ann expr') =
       envE' <- evalPat p v1
       case envE' of
         Right env' -> withEnv (const env') $ evalExprStep e2
-        Left err -> pure . Prim . RuntimeErr $ "Let match failed: " ++ err
+        Left err -> pure . runtimeErr $ "Let match failed: " ++ err
     
     E.Case e1 cs -> do
       v1 <- evalExprStep e1
@@ -292,11 +296,16 @@ evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where
 
 evalProg :: Name -> Prog a -> Value a
 evalProg mainnm pr =
-  let er@(ElabRes {erDefs, erConstrs}) = collectDecls pr
+  let er@(ElabRes {erDefs, erConstrs, erDeriving}) = collectDecls pr
       vconstrs = M.mapWithKey (\k v -> Right (Constr k [])) . unFreeCtx $ erConstrs
       initState = (M.map Left erDefs) `M.union` vconstrs
-  in  case M.lookup mainnm erDefs of 
-        Just maindef -> 
-          runEvalM (updGlobals (const initState) >> evalExprCorec maindef) mempty
-        Nothing -> Prim . RuntimeErr $ "No main definition of name " ++ pps mainnm ++ " found"
+      instancesOrErr = elabInstances id erDeriving
+  in  case instancesOrErr of
+      Left err -> runtimeErr err
+      Right instances -> 
+        let initRead = mempty { erInstances = instances }
+        in  case M.lookup mainnm erDefs of 
+              Just maindef -> 
+                runEvalM (updGlobals (const initState) >> evalExprCorec maindef) initRead
+              Nothing -> runtimeErr $ "No main definition of name " ++ pps mainnm ++ " found"
 
