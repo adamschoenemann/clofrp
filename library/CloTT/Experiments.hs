@@ -16,7 +16,7 @@ data Fix f = Into (f (Fix f))
 out :: Fix f -> f (Fix f)
 out (Into f) = f
 
-data NatF a = Z | S a
+data NatF a = Z | S a deriving Show
 
 instance Functor NatF where
   fmap f Z = Z
@@ -100,3 +100,32 @@ sing x = Into (Cons x (Into Nil))
 
 rank :: forall a b. b -> a -> Int
 rank _ _ = 0
+
+data TreeF a f = Leaf a | Br f f deriving (Functor, Show)
+type Tree a = Fix (TreeF a)
+
+instance Show a => Show (Tree a) where
+  show (Into tf) = show tf
+
+z = Into Z
+s = Into . S
+leaf = Into . Leaf
+br x y = Into (Br x y)
+
+ofHeight :: Nat -> Tree Nat
+ofHeight n = fst $ primRec fn n z where
+  fn Z m           = (leaf m, s m)
+  fn (S (m', r)) m = 
+    let (t1, x) = r m
+        (t2, y) = r x
+    in (br t1 t2, y)
+
+data SPF i o f
+  = Get (i -> f)
+  | Put o f
+
+type SP i o = Fix (SPF i o)
+
+idsp :: SP i i 
+idsp = fix (\f -> Into $ Get (\x -> Into (Put x f)))
+  

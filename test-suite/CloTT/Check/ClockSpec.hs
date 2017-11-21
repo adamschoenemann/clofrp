@@ -8,6 +8,7 @@ module CloTT.Check.ClockSpec where
 import Test.Tasty.Hspec
 
 import CloTT.Check.TestUtils
+import qualified Fixtures
 import CloTT.QuasiQuoter
 import CloTT.Check.Prog
 import CloTT.Check.TypingM
@@ -373,153 +374,11 @@ clockSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "implements replaceMin" $ do
-      let Right prog = pprog [text|
-
-        -- applicative structure        
-        pure : forall (k : Clock) a. a -> |>k a.
-        pure = \x -> \\(af : k) -> x.
-
-        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
-        app = \lf la -> \\(af : k) -> 
-          let f = lf [af] in
-          let a = la [af] in
-          f a.
-
-        -- functor
-        map : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-        map = \f la -> app (pure f) la.
-
-        fst : forall a b. (a, b) -> a.
-        fst = \x -> case x of | (y, z) -> y.
-
-        snd : forall a b. (a, b) -> b.
-        snd = \x -> case x of | (y, z) -> z.
-
-        feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
-        feedback = \f -> fst (fix (\x -> f (map snd x))).
-
-        data NatF f = Z | S f deriving Functor.
-        type Nat = Fix NatF.
-
-        data TreeF a f = Leaf a | Br f f deriving Functor.
-        type Tree a = Fix (TreeF a).
-
-        min : Nat -> Nat -> Nat.
-        min = primRec {NatF} (\m n -> 
-          case m of 
-          | Z -> fold Z
-          | S (m', r) -> fold (S (r n))
-        ).
-
-        leaf : forall a. a -> Tree a.
-        leaf = \x -> fold (Leaf x).
-
-        br : forall a. Tree a -> Tree a -> Tree a.
-        br = \l r -> fold (Br l r).
-
-        data Delay a (k : Clock) = Delay (|>k a).
-
-        replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (Delay (Tree Nat) k, Nat).
-        replaceMinBody = primRec {TreeF Nat} (\t m ->
-          case t of
-          | Leaf x -> (Delay (map leaf m), x)
-          | Br (l, lrec) (r, rrec) -> 
-            let (Delay l', ml) = lrec m {- : (Delay (Tree Nat) k, Nat) -} in
-            let (Delay r', mr) = rrec m {- : (Delay (Tree Nat) k, Nat) -} in
-            let m'       = min ml mr in
-            (Delay (app (map br l') r'), m')
-        ).
-
-        replaceMinK : forall (k : Clock). Tree Nat -> Delay (Tree Nat) k.
-        replaceMinK = \t -> feedback (replaceMinBody t).
-
-        replaceMin : Tree Nat -> Tree Nat.
-        replaceMin = \t -> 
-          let Delay t' = replaceMinK {K0} t
-          in t' [<>].
-      |]
+      let Right prog = pprog Fixtures.replaceMin
       runCheckProg mempty prog `shouldYield` ()
 
     it "implements stream processing" $ do
-      let Right prog = pprog [text|
-        
-        data SPF i o (k : Clock) f
-          = Get (i -> f)
-          | Put o (|>k f) deriving Functor.
-        
-        type SP i o (k : Clock) = Fix (SPF i o k).
-
-        step : forall (k : Clock) i o. SP i o k -> SPF i o k (Fix (SPF i o k)).
-        step = unfold.
-
-        data StreamF (k : Clock) a f = Cons a (|>k f).
-        type Stream (k : Clock) a = Fix (StreamF k a).
-        data CoStream a = Cos (forall (k : Clock). Stream k a).
-
-        hd : forall a. CoStream a -> a.
-        hd = \xs -> 
-          let Cos s = xs
-          in case unfold s of
-             | Cons x xs' -> x.
-
-        -- see if you can do this better with let generalization
-        tl : forall a. CoStream a -> CoStream a.
-        tl = \x ->
-          let Cos s = x in
-          let r = (case unfold s of
-                  | Cons x xs' -> xs' 
-                  ) : forall (k : Clock). |>k (Stream k a)
-          in Cos (r [<>]).
-
-        fst : forall a b. (a, b) -> a.
-        fst = \x -> case x of | (y, z) -> y.
-
-        snd : forall a b. (a, b) -> b.
-        snd = \x -> case x of | (y, z) -> z.
-
-        -- applicative structure        
-        pure : forall (k : Clock) a. a -> |>k a.
-        pure = \x -> \\(af : k) -> x.
-
-        app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
-        app = \lf la -> \\(af : k) -> 
-          let f = lf [af] in
-          let a = la [af] in
-          f a.
-
-        -- functor
-        map : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-        map = \f la -> app (pure f) la.
-
-        -- fixpoint above with full types
-        applyfix : forall (k : Clock) i o. |>k (SP i o k -> CoStream i -> CoStream o) -> SP i o k -> CoStream i -> CoStream o.
-        applyfix = \rec -> 
-          primRec {SPF i o k} (\x s ->
-            case x of
-            | Get f -> let (sp', g) = f (hd s) in g (tl s)
-            | Put b sp -> 
-              let sp1 = map fst sp in
-              cos b (app (app rec sp1) (pure s))
-          ).
-
-        -- it even works without annotations!
-        apply : forall (k : Clock) i o. SP i o k -> CoStream i -> CoStream o.
-        apply = fix (\rec -> 
-          primRec {SPF i o k} (\x s ->
-            case x of
-            | Get f -> (snd (f (hd s))) (tl s) 
-            | Put b sp -> 
-              let sp1 = map fst sp in
-              cos b (app (app rec sp1) (pure s))
-          )).
-
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-        cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). 
-
-        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
-      |]
+      let Right prog = pprog Fixtures.streamProcessing
       runCheckProg mempty prog `shouldYield` ()
 
       

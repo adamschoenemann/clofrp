@@ -7,20 +7,20 @@ import qualified CloTT.AST.Parsed  as E
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
 
-import Fixtures
+import qualified Fixtures
 
 quasiSpec :: Spec
 quasiSpec = do
   it "expression quoter works" $ do
-    E.unannE expr01 `shouldBe` "x" @-> "y" @-> E.the (E.free "Nat") ("x" @@ "y" @@ E.true)
+    E.unannE Fixtures.expr01 `shouldBe` "x" @-> "y" @-> E.the (E.free "Nat") ("x" @@ "y" @@ E.true)
   it "decl quoter works" $ do
-    E.unannD decl01 `shouldBe`
+    E.unannD Fixtures.decl01 `shouldBe`
       E.datad "Tree"  [("a", Star)]
                       [ E.constr "Leaf" []
                       , E.constr "Branch" ["a", "Tree" @@: "a", "Tree" @@: "a"]
                       ]
   it "program quoter works (01)" $ do
-    E.unannP prog01 `shouldBe`
+    E.unannP Fixtures.prog01 `shouldBe`
       E.prog [
         E.sigd "id" ("a" @->: "a")
       , E.fund "id" ("x" @-> "x")
@@ -40,7 +40,7 @@ quasiSpec = do
       , E.fund "head" ("xs" @-> "xs")
       ]
   it "program quoter works (02)" $ do
-    E.unannP prog02 `shouldBe`
+    E.unannP Fixtures.prog02 `shouldBe`
       E.prog [
         E.datad "N" 
           []

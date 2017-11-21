@@ -18,6 +18,7 @@ import qualified CloTT.AST.Parsed  as E
 import qualified CloTT.AST.Prim    as P
 import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
 import           CloTT.AST.Parsed (LamCalc(..))
+import qualified Fixtures
 
 import qualified Data.Map.Strict as M
 import           CloTT.QuasiQuoter
@@ -431,7 +432,28 @@ evalSpec = do
       -- putStrLn (pps v)
       -- putStrLn (replicate 80 '-')
       -- True `shouldBe` True
-          
+
+  it "evals replaceMin example" $ do
+    let Right prog = pprog Fixtures.replaceMin
+    let v = evalProg "main" prog
+    takeTree v `shouldBe` ofHeight "Z" 5 
+
+  it "evals stream processing example" $ do
+    let Right prog = pprog Fixtures.streamProcessing
+    let v = evalProg "main" prog
+    let conv (Constr "MkUnit" []) = ()
+        conv _                   = undefined
+    takeValueList conv 10 v `shouldBe` replicate 10 ()
+        
+data Tree a = Leaf a | Br (Tree a) (Tree a) deriving (Eq, Show)
+takeTree :: Value a -> Tree String
+takeTree (Constr "Leaf" [Constr "Z" []]) = Leaf "Z"
+takeTree (Constr "Br" [t1, t2]) = Br (takeTree t1) (takeTree t2)
+takeTree v = error $ pps v
+
+ofHeight :: a -> Int -> Tree a
+ofHeight x 0 = Leaf x 
+ofHeight x n = Br (ofHeight x (n-1)) (ofHeight x (n-1))
 
 -- takes n levels down in a tree of constructors
 takeConstr :: Int -> Value a -> Value a

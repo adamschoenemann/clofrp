@@ -26,7 +26,7 @@ For my master's thesis at ITU
 - Write a demo (Pong or Pacman if crazy)
 - Expand type-aliases in type annotations ✓
 - Parse (:) syntax for type annotations instead of `the (A) e` ✓
-- application-synthesis leaves solved existentials in context (as it must to curried functions)
+- application-synthesis leaves solved existentials in context (as it must because of curried functions)
   but this pollutes the context after the application. We'd probably need to treat application as
   "spines" to fix this..
 - Clean up error messages
@@ -39,6 +39,7 @@ For my master's thesis at ITU
 - Is OK to re-assign an existential iff it is the same type we're attempting to assign?
   - should never happen now since we maintain optimally-solved contexts
 - Improve inference for "unfold"
+- Derive functor for Recursive types and tuples
 
 ## Type Aliases
 - Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:

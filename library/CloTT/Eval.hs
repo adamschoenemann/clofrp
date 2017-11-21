@@ -94,7 +94,7 @@ fmapFromType ty = findInstanceOf "Functor" ty >>= \case
 --     fm <- lookupFmap nm
 
 evalPat :: Pat a -> Value a -> EvalM a (Either String (Env a))
-evalPat (A _ p) v =
+evalPat pat@(A _ p) v =
   case p of
     E.Bind nm -> Right <$> extend nm v <$> getEnv
     E.PTuple ps -> 
@@ -115,7 +115,7 @@ evalPat (A _ p) v =
               env <- getEnv
               foldrM folder (Right env) (zip ps vs) 
           | otherwise -> pure $ Left $ show $ "Constructor pattern failed: expected" <+> pretty nm <+> "but got" <+> pretty nm'
-        _        -> pure $ Left $ "Constructor pattern failed:"
+        _        -> pure $ Left $ show $ "Constructor pattern failed: pattern was" <+> pretty pat <+> "but got value" <+> pretty v
       where
         folder (p', v') (Right acc) = withEnv (const acc) $ evalPat p' v'
         folder _  (Left err)  = pure (Left err)
