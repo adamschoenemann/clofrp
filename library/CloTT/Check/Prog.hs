@@ -306,7 +306,7 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
   anned ann fn = \x y -> A ann $ fn x y
 
 checkElabedProg :: ElabProg a -> TypingM a ()
-checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases}) = do
+checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
   _ <- checkTypes
   _ <- checkDefs
   _ <- checkAliases
@@ -317,7 +317,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases}) = do
     checkAliases = traverse traverseAlias aliases
 
     initKinds = extend "K0" ClockK kinds
-    ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trInstances = mempty}
+    ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trInstances = instances}
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor

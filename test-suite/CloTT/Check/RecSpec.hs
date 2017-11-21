@@ -175,7 +175,7 @@ recSpec = do
     
     specify "primRec with Nat" $ do
       let Right prog = pprog [text|
-        data NatF a = Z | S a. 
+        data NatF a = Z | S a deriving Functor. 
         type Nat = Fix NatF.
 
         plusRec : Nat -> NatF (Nat, Nat) -> Nat.
@@ -216,7 +216,7 @@ recSpec = do
 
     specify "primRec with List" $ do
       let Right prog = pprog [text|
-        data ListF a f = Nil | Cons a f.
+        data ListF a f = Nil | Cons a f deriving Functor.
         type List a = Fix (ListF a).
 
         mapRec : forall a b. (a -> b) -> ListF a (List a, List b) -> List b.
@@ -254,7 +254,7 @@ recSpec = do
 
     specify "primRec with Tree" $ do
       let Right prog = pprog [text|
-        data TreeF a f = Empty | Branch a f f.
+        data TreeF a f = Empty | Branch a f f deriving Functor.
         type Tree a = Fix (TreeF a).
 
         mapRec : forall a b. (a -> b) -> TreeF a (Tree a, Tree b) -> Tree b.

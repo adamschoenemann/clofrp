@@ -517,6 +517,24 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
+    it "derives functor and checks fmap" $ do
+      let Right prog = pprog [text|
+        data Unit = MkUnit.
+        data Maybe a = Nothing | Just a deriving Functor.
+        mapMaybe : forall a b. (a -> b) -> Maybe a -> Maybe b.
+        mapMaybe = fmap {Maybe}.
+        data NatF f = Z | S f deriving Functor.
+        mapNatF : forall a b. (a -> b) -> NatF a -> NatF b.
+        mapNatF = fmap {NatF}.
+        data ListF a f = Nil | Cons a f deriving Functor.
+        mapListF : forall x a b. (a -> b) -> ListF x a -> ListF x b.
+        mapListF = fmap {ListF x}.
+        data Phantom a b c f = Weird f deriving Functor.
+        mapPhantom : forall a b c f g. (f -> g) -> Phantom a b c f -> Phantom a b c g.
+        mapPhantom = fmap {Phantom a b c}.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
     it "suceeds for contravariant functor" $ do
       let Right prog = pprog [text|
         data Bool = True | False.

@@ -395,11 +395,6 @@ rule name info = do
   ctx <- selfapp =<< getCtx
   root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
-{-
-  ∀(a : Type). Functor (ListF a)
-  -----------------
-  Functor (ListF a)
--}
 assertFunctor :: Type a Poly -> TypingM a ()
 assertFunctor ty = do
   instances <- getInstancesOf "Functor"
@@ -1031,6 +1026,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
   -- PrimRec=>
   synthesize' (PrimRec prty) = do
+    rule "PrimRec=>" (pretty expr)
     errIf (kindOf prty) (/= (Star :->*: Star)) (const $ Other $ show $ "Expected" <+> pretty prty <+> "to have kind * -> *")
     assertFunctor prty
     let ?annotation  = ann
@@ -1042,6 +1038,17 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     let body         = ftorresultty `H.arr` resultty
     ctx <- getCtx
     pure (resultq $ body `H.arr` inductivet `H.arr` resultty, ctx)
+
+   -- Fmap=>
+  synthesize' (Fmap fmapty) = do
+    rule "Fmap=>" (pretty expr)
+    errIf (kindOf fmapty) (/= (Star :->*: Star)) (const $ Other $ show $ "Expected" <+> pretty fmapty <+> "to have kind * -> *")
+    assertFunctor fmapty
+    let ?annotation  = ann
+    ctx <- getCtx
+    let av = H.tvar "a"
+        bv = H.tvar "b"
+    pure (H.forAll ["a", "b"] $ (av `H.arr` bv) `H.arr` (fmapty `H.tapp` av) `H.arr` (fmapty `H.tapp` bv), ctx)
 
   -- ->E
   synthesize' (e1 `App` e2) = do

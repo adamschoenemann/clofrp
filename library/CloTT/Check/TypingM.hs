@@ -50,9 +50,12 @@ data ClassInstance a = ClassInstance
   , ciDictionary :: M.Map Name (Type a Poly, Expr a)
   }
 
-instance Show (ClassInstance a) where
-  show (ClassInstance {ciClassName, ciHasInstance, ciDictionary}) = show $
+instance Pretty (ClassInstance a) where
+  pretty (ClassInstance {ciClassName, ciHasInstance, ciDictionary}) = 
     "Instance" <+> tupled [pretty ciClassName, list $ M.elems $ M.map pretty ciDictionary]
+
+instance Show (ClassInstance a) where
+  show = show . pretty
 
 instance Eq a => Eq (ClassInstance a) where
   ci1 == ci2 =
@@ -76,6 +79,10 @@ instance (IsList (InstanceCtx a)) where
   type Item (InstanceCtx a) = (Name, [ClassInstance a])
   fromList xs = InstanceCtx $ M.fromList xs
   toList (InstanceCtx m) = M.toList m
+
+instance Pretty (InstanceCtx a) where
+  pretty (InstanceCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
+    fn (k, v) = pretty k <+> "↦" <+> pretty v 
 
 -- Typing state
 
@@ -234,10 +241,11 @@ getInstances :: TypingM a (InstanceCtx a)
 getInstances = asks trInstances
 
 getInstancesOf :: Name -> TypingM a [ClassInstance a]
-getInstancesOf name = 
-  (M.lookup name . unInstanceCtx <$> getInstances) >>= \case
-    Just (i:is) -> pure (i:is)
-    Nothing -> otherErr $ show $ "There are no instances of class" <+> pretty name
+getInstancesOf name = do
+  is <- getInstances
+  case M.lookup name (unInstanceCtx is) of
+    Just is' -> pure is'
+    Nothing  -> pure []
 
 -- TODO: Argh, nasty hack. Ideally, get rid of the clock-ctx entirely and just rely on
 -- the normal "local context", but I'm still not completely convinced it is a good idea..

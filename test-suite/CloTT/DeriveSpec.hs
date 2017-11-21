@@ -6,12 +6,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DataKinds #-}
 
 module CloTT.DeriveSpec where
 
 import Test.Tasty.Hspec
 import Data.Maybe (isJust)
 import qualified Data.Map.Strict as M
+import Data.List (find)
 
 import qualified CloTT.AST.Parsed  as E
 import qualified CloTT.AST.Prim    as P
@@ -36,7 +38,7 @@ data Ftor1 f = Ftor1 (forall a. a -> f)
 data Ftor2 f = Ftor2 (Int -> f)
 
 instance Functor Ftor1 where
-  fmap f (Ftor1 g) = Ftor1 (\x -> f (g x))
+  fmap f (Ftor1 g) = Ftor1 (f . g) -- Ftor1 (\x -> f (g x))
 
 instance Functor Ftor2 where
   fmap f (Ftor2 g) = Ftor2 (\x -> f (g x))
@@ -61,18 +63,22 @@ data Cont r a = Cont ((a -> r) -> r)
 instance Functor (Cont r) where
   fmap f (Cont c) = Cont (\c' -> c (\x -> c' (f x)))
 
+runElabProg :: (Show a2, Monad f, Unann a1 (E.Prog a2)) => a1 -> f (ElabProg a2)
 runElabProg p = 
   case runTypingM0 (elabProg . unann $ p) mempty of
     (Right ep, _, _) -> pure ep
     (Left err, _, _) -> fail (show err)
 
 
+mktr :: Unann p (E.Prog a) => p -> TypingRead a
 mktr p = 
   let (Right (ElabProg { kinds, destrs, types }), _, _) = runTypingM0 (elabProg . unann $ p) mempty
   in  mempty { trKinds = kinds, trDestrs = destrs, trFree = types }
 
+fmapt :: [String] -> E.Type () 'E.Poly -> E.Type () 'E.Poly
 fmapt b con = E.forAll (b ++ ["#a", "#b"]) $ ("#a" @->: "#b") @->: con @@: "#a" @->: con @@: "#b"
 
+deriveFunctorAndExtract :: E.Datatype a -> Either String (E.Type a 'E.Poly, E.Expr a)
 deriveFunctorAndExtract dt = 
   case deriveFunctor dt of
     Left err -> Left err
@@ -254,7 +260,10 @@ deriveSpec = do
         data NatF f = Z | S f deriving Functor.
         data ListF a f = Nil | Cons a f deriving (Functor).
       |]
-      query "NatF_fmap" (types ep) `shouldBe` Just (fmapt [] "NatF")
-      M.lookup "NatF_fmap" (defs ep) `shouldSatisfy` isJust
-      query "ListF_fmap" (types ep) `shouldBe` Just (fmapt ["a"] $ "ListF" @@: "a")
-      M.lookup "ListF_fmap" (defs ep) `shouldSatisfy` isJust
+      let Just ftors = query "Functor" (instances ep)
+      let natf = (ftors !! 0)
+      let listf = (ftors !! 0)
+      ciClassName natf `shouldBe` "Functor"
+      fst <$> M.lookup "fmap" (ciDictionary natf) `shouldBe` Just (fmapt [] "NatF")
+      ciClassName listf `shouldBe` "Functor"
+      fst <$> M.lookup "fmap" (ciDictionary listf) `shouldBe` Just (fmapt [] "NatF")

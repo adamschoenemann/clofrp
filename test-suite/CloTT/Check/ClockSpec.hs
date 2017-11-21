@@ -215,7 +215,7 @@ clockSpec = do
 
     it "implements some good old stream functions" $ do
       let Right prog = pprog [text|
-        data StreamF (k : Clock) a f = Cons a (|>k f).
+        data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
         type Stream (k : Clock) a = Fix (StreamF k a).
         data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
@@ -264,7 +264,7 @@ clockSpec = do
         map : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
         map = \f la -> app (pure f) la.
 
-        data NatF f = Z | S f.
+        data NatF f = Z | S f deriving Functor.
         type Nat = Fix NatF.
 
         z : Nat.
@@ -308,7 +308,7 @@ clockSpec = do
         eo : forall a. CoStream a -> CoStream a.
         eo = fix eof.
 
-        data ListF a f = Nil | LCons a f.
+        data ListF a f = Nil | LCons a f deriving Functor.
         type List a = Fix (ListF a).
 
         nil : forall a. List a.
@@ -398,10 +398,10 @@ clockSpec = do
         feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
         feedback = \f -> fst (fix (\x -> f (map snd x))).
 
-        data NatF f = Z | S f.
+        data NatF f = Z | S f deriving Functor.
         type Nat = Fix NatF.
 
-        data TreeF a f = Leaf a | Br f f.
+        data TreeF a f = Leaf a | Br f f deriving Functor.
         type Tree a = Fix (TreeF a).
 
         min : Nat -> Nat -> Nat.
@@ -445,7 +445,7 @@ clockSpec = do
         
         data SPF i o (k : Clock) f
           = Get (i -> f)
-          | Put o (|>k f).
+          | Put o (|>k f) deriving Functor.
         
         type SP i o (k : Clock) = Fix (SPF i o k).
 

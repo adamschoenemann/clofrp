@@ -42,6 +42,32 @@ inits [] = []
 inits [x] = []
 inits (x:xs) = x : inits xs
 
+
+-- data Constraint = HasKind Kind
+
+-- data InstanceResolver a
+--   = NoConstraints Name -- NatF, Maybe
+--   | Constraints [Constraint] Name
+
+-- natFRes = NoConstraints "NatF"
+-- maybeFRes = NoConstraints "Maybe"
+-- listFRes = Constraint [HasKind Star] "ListF"
+
+-- resolveInstance :: Type a Poly -> InstanceResolver -> TypingM a Bool
+-- resolveInstance (A _ ty') ir =
+--   case (ty', ir) of
+--     (TFree n, NoConstraints n') -> n == n'
+--     (TVar n,   -> S.singleton n
+--     TExists n -> S.singleton n
+--     TApp x y -> freeVars x `S.union` freeVars y
+--     x :->: y  -> freeVars x `S.union` freeVars y
+--     Forall n k t -> freeVars t `S.difference` S.singleton n
+--     RecTy  t -> freeVars t 
+--     TTuple ts -> S.unions $ map freeVars ts
+--     Later t1 t2 -> freeVars t1 `S.union` freeVars t2
+
+
+
 -- a giant hack of course
 deriveClass :: Name -> Datatype a -> Either String (ClassInstance a)
 deriveClass (UName "Functor") dt = deriveFunctor dt
@@ -57,11 +83,16 @@ deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : 
   let nfa = foldl (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
   let typ = forAll (extrabs ++ ["#a", "#b"]) $ (tvar "#a" `arr` tvar "#b") `arr` (nfa `tapp` tvar "#a") `arr` (nfa `tapp` tvar "#b")
   -- let fmapNm = UName $ show (pretty dtName <> "_fmap")
-  let inst = ClassInstance { ciClassName = "Functor", ciHasInstance = predicate, ciDictionary = M.singleton "fmap" (typ, expr)}
+  let inst = ClassInstance { ciClassName = "Functor", ciHasInstance = predicate extrabs, ciDictionary = M.singleton "fmap" (typ, expr)}
   pure $ inst
   where
-    predicate (A _ (TApp (A _ (TApp (A _ (TFree name)) inner)) outer)) = pure True
-    predicate _                                                        = pure False
+    -- FIXME: this is a crazy hack to resolve "type-class" instances by folding a predicate over
+    -- the bound variables of a type constructor
+    predicate bnd = foldr folder (\x -> pure (unann x == A () (TFree dtName))) bnd where
+      folder b acc ty = 
+        case ty of
+          A _ (a `TApp` b) -> acc a
+          _                -> pure False
   -- pure (fmapNm, typ, expr)
 
 type TVarName = Name
