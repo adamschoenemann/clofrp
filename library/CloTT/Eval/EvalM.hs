@@ -32,11 +32,9 @@ data EvalErr = Other String
   deriving (Show, Eq)
 
 newtype EvalM a r = Eval { unEvalM :: RWS (EvalRead a) EvalWrite (EvalState a) r }
--- newtype EvalM a r = Eval { unEvalM :: Reader (EvalRead a) r }
   deriving ( Functor
            , Applicative
            , Monad
-          --  , MonadError  EvalErr 
            , MonadState  (EvalState a)
            , MonadWriter EvalWrite 
            , MonadReader (EvalRead a)
@@ -65,7 +63,6 @@ updGlobals = modify
 
 getGlobals :: EvalM a (Globals a)
 getGlobals = get
-
 
 otherErr :: String -> EvalM a (Value a)
 otherErr = pure . Prim . RuntimeErr 

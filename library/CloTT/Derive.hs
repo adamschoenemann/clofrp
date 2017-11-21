@@ -18,7 +18,7 @@ import CloTT.AST.Name
 import CloTT.AST.Datatype
 import CloTT.AST.Helpers
 import qualified CloTT.AST.Prim as P
-import CloTT.Check.TypingM
+import CloTT.Check.Contexts (ClassInstance(..))
 
 {-
 data NatF f = Z | S f.
@@ -83,17 +83,8 @@ deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : 
   let nfa = foldl (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
   let typ = forAll (extrabs ++ ["#a", "#b"]) $ (tvar "#a" `arr` tvar "#b") `arr` (nfa `tapp` tvar "#a") `arr` (nfa `tapp` tvar "#b")
   -- let fmapNm = UName $ show (pretty dtName <> "_fmap")
-  let inst = ClassInstance { ciClassName = "Functor", ciHasInstance = predicate extrabs, ciDictionary = M.singleton "fmap" (typ, expr)}
+  let inst = ClassInstance { ciClassName = "Functor", ciInstanceTypeName = dtName, ciParams = extrabs, ciDictionary = M.singleton "fmap" (typ, expr)}
   pure $ inst
-  where
-    -- FIXME: this is a crazy hack to resolve "type-class" instances by folding a predicate over
-    -- the bound variables of a type constructor
-    predicate bnd = foldr folder (\x -> pure (unann x == A () (TFree dtName))) bnd where
-      folder b acc ty = 
-        case ty of
-          A _ (a `TApp` b) -> acc a
-          _                -> pure False
-  -- pure (fmapNm, typ, expr)
 
 type TVarName = Name
 
@@ -175,31 +166,3 @@ deriveFmapArg f tnm typ@(A anno _) = go typ where
   
   ide = A anno $ Lam "x" Nothing (A anno $ Var "x")
   
-
-        
-        
-
-
--- deriveFunctor pname typ@(A ann typ') = 
---   case typ' of
---     TFree y     | y == forY  -> x
---                 | otherwise -> A a $ TFree y
-
---     TVar y      | y == forY  -> x
---                 | otherwise -> A a $ TVar y
-
---     TExists y   | y == forY  -> x
---                 | otherwise -> A a $ TExists y
-
---     Forall y k t  | y == forY -> A a $ Forall y k t 
---                   | otherwise -> A a $ Forall y k (subst x forY t)
-
---     Later  t1 t2  -> A a (Later (subst x forY t1) (subst x forY t2))
-
-
---     RecTy  t  -> A a $ RecTy (subst x forY t)
---     TTuple ts -> A a $ TTuple (map (subst x forY) ts)
-
---     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
-    
---     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2

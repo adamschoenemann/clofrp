@@ -8,6 +8,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module CloTT.Check.Contexts
   ( module CloTT.Check.Contexts
@@ -136,6 +137,24 @@ instance (IsList (DestrCtx a)) where
   type Item (DestrCtx a) = (Name, Destr a)
   fromList xs = DestrCtx $ M.fromList xs
   toList (DestrCtx m) = M.toList m
+
+-- context of instances of type-classes
+data ClassInstance a = ClassInstance
+  { ciClassName :: Name
+  , ciInstanceTypeName :: Name
+  , ciParams :: [Name]
+  , ciDictionary :: M.Map Name (Type a Poly, Expr a)
+  } deriving (Eq)
+
+instance Pretty (ClassInstance a) where
+  pretty (ClassInstance {ciClassName, ciParams, ciDictionary, ciInstanceTypeName}) = 
+    "Instance" <+> tupled [pretty ciClassName, pretty ciInstanceTypeName, pretty ciParams, list $ M.elems $ M.map pretty ciDictionary]
+
+instance Show (ClassInstance a) where
+  show = show . pretty
+
+newtype InstanceCtx a = InstanceCtx { unInstanceCtx :: M.Map Name [ClassInstance a] }
+  deriving (Show, Eq, Monoid)
 
 -- instance Pretty (DestrCtx a) where
 --   pretty (DestrCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where

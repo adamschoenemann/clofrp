@@ -44,29 +44,6 @@ branch comp = do
 root :: Doc () -> TypingM a ()
 root x = gets level >>= \l -> tell [(l,x)]
 
-data ClassInstance a = ClassInstance
-  { ciClassName :: Name
-  , ciHasInstance :: Type a Poly -> TypingM a Bool
-  , ciDictionary :: M.Map Name (Type a Poly, Expr a)
-  }
-
-instance Pretty (ClassInstance a) where
-  pretty (ClassInstance {ciClassName, ciHasInstance, ciDictionary}) = 
-    "Instance" <+> tupled [pretty ciClassName, list $ M.elems $ M.map pretty ciDictionary]
-
-instance Show (ClassInstance a) where
-  show = show . pretty
-
-instance Eq a => Eq (ClassInstance a) where
-  ci1 == ci2 =
-    ciClassName ci1 == ciClassName ci2 
-    && ciDictionary ci1 == ciDictionary ci2
-    
-
--- TODO: we cannot this to Contexts.hs because ClassInstance relies on TypingM.
--- this leads to cyclic import
-newtype InstanceCtx a = InstanceCtx { unInstanceCtx :: M.Map Name [ClassInstance a] }
-  deriving (Show, Eq, Monoid)
 
 instance Context (InstanceCtx a) where
   type Elem (InstanceCtx a) = [ClassInstance a]
