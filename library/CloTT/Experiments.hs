@@ -16,7 +16,11 @@ data Fix f = Into (f (Fix f))
 out :: Fix f -> f (Fix f)
 out (Into f) = f
 
-data NatF a = Z | S a deriving (Functor, Eq)
+data NatF a = Z | S a
+
+instance Functor NatF where
+  fmap f Z = Z
+  fmap f (S n) = S (f n)
 
 instance Show (Fix NatF) where
   show = show . toInt

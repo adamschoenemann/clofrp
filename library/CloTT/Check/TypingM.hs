@@ -21,6 +21,9 @@ import Control.Monad.RWS.Strict hiding ((<>))
 import Control.Monad.Except
 import Control.Monad.State ()
 import Data.String (fromString)
+import qualified Data.Map.Strict as M
+import GHC.Exts (IsList(..))
+import Data.Data
 
 import CloTT.AST.Name
 import CloTT.Annotated
@@ -41,27 +44,64 @@ branch comp = do
 root :: Doc () -> TypingM a ()
 root x = gets level >>= \l -> tell [(l,x)]
 
+data ClassInstance a = ClassInstance
+  { ciClassName :: Name
+  , ciHasInstance :: Type a Poly -> TypingM a Bool
+  , ciDictionary :: M.Map Name (Type a Poly, Expr a)
+  }
+
+instance Show (ClassInstance a) where
+  show (ClassInstance {ciClassName, ciHasInstance, ciDictionary}) = show $
+    "Instance" <+> tupled [pretty ciClassName, list $ M.elems $ M.map pretty ciDictionary]
+
+instance Eq a => Eq (ClassInstance a) where
+  ci1 == ci2 =
+    ciClassName ci1 == ciClassName ci2 
+    && ciDictionary ci1 == ciDictionary ci2
+    
+
+-- TODO: we cannot this to Contexts.hs because ClassInstance relies on TypingM.
+-- this leads to cyclic import
+newtype InstanceCtx a = InstanceCtx { unInstanceCtx :: M.Map Name [ClassInstance a] }
+  deriving (Show, Eq, Monoid)
+
+instance Context (InstanceCtx a) where
+  type Elem (InstanceCtx a) = [ClassInstance a]
+  type Key (InstanceCtx a)  = Name
+  extend nm ty (InstanceCtx m) = InstanceCtx $ M.insert nm ty m
+  isMemberOf nm (InstanceCtx m) = M.member nm m
+  query x (InstanceCtx m) = M.lookup x m
+
+instance (IsList (InstanceCtx a)) where
+  type Item (InstanceCtx a) = (Name, [ClassInstance a])
+  fromList xs = InstanceCtx $ M.fromList xs
+  toList (InstanceCtx m) = M.toList m
+
+-- Typing state
+
 data TypingState   = 
   TS { names :: Integer -- |Just an integer for generating names
      , level :: Integer
      }
+
+-- Typing reader
 
 data TypingRead a  = 
   TR { trCtx :: TyCtx a
      , trFree :: FreeCtx a
      , trKinds :: KindCtx a
      , trDestrs :: DestrCtx a
-     , trClocks :: ClockCtx a
+     , trInstances :: InstanceCtx a
      }
 
 instance Monoid (TypingRead a) where
-  mempty = TR mempty mempty mempty mempty mempty
-  mappend (TR c1 f1 k1 d1 clk1) (TR c2 f2 k2 d2 clk2) =
+  mempty = TR mempty mempty mempty mempty mempty 
+  mappend (TR c1 f1 k1 d1 is1) (TR c2 f2 k2 d2 is2) =
     TR { trCtx    = mappend c1 c2
        , trFree   = mappend f1 f2 
        , trKinds  = mappend k1 k2
        , trDestrs = mappend d1 d2
-       , trClocks = mappend clk1 clk2
+       , trInstances = mappend is1 is2
        }
   
 
@@ -176,7 +216,7 @@ runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
 runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
 
 initRead :: TypingRead a 
-initRead = TR { trFree = mempty, trCtx = mempty, trKinds = mempty, trDestrs = mempty, trClocks = mempty }
+initRead = TR { trFree = mempty, trCtx = mempty, trKinds = mempty, trDestrs = mempty, trInstances = mempty }
 
 getCtx :: TypingM a (TyCtx a)
 getCtx = asks trCtx
@@ -190,13 +230,21 @@ getDCtx = asks trDestrs
 getKCtx :: TypingM a (KindCtx a)
 getKCtx = asks trKinds
 
+getInstances :: TypingM a (InstanceCtx a)
+getInstances = asks trInstances
+
+getInstancesOf :: Name -> TypingM a [ClassInstance a]
+getInstancesOf name = 
+  (M.lookup name . unInstanceCtx <$> getInstances) >>= \case
+    Just (i:is) -> pure (i:is)
+    Nothing -> otherErr $ show $ "There are no instances of class" <+> pretty name
+
 -- TODO: Argh, nasty hack. Ideally, get rid of the clock-ctx entirely and just rely on
 -- the normal "local context", but I'm still not completely convinced it is a good idea..
 getCCtx :: TypingM a (ClockCtx a)
 getCCtx = do
-  clks <- asks trClocks
   Gamma ctx <- getCtx
-  pure $ foldr folder clks ctx
+  pure $ foldr folder (ClockCtx mempty) ctx
   where
     folder (Uni x ClockK)    acc = extend x () acc
     folder (Exists x ClockK) acc = extend x () acc
@@ -214,9 +262,9 @@ withKCtx :: (KindCtx a -> KindCtx a) -> TypingM a r -> TypingM a r
 withKCtx fn = local fn' where
   fn' rd = rd { trKinds = fn (trKinds rd) }
 
-withCCtx :: (ClockCtx a -> ClockCtx a) -> TypingM a r -> TypingM a r
-withCCtx fn = local fn' where
-  fn' rd = rd { trClocks = fn (trClocks rd) }
+-- withCCtx :: (ClockCtx a -> ClockCtx a) -> TypingM a r -> TypingM a r
+-- withCCtx fn = local fn' where
+--   fn' rd = rd { trClocks = fn (trClocks rd) }
 
 freshName :: TypingM a Name
 freshName = do 

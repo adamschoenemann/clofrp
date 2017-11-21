@@ -73,6 +73,14 @@ mktr p =
 
 fmapt b con = E.forAll (b ++ ["#a", "#b"]) $ ("#a" @->: "#b") @->: con @@: "#a" @->: con @@: "#b"
 
+deriveFunctorAndExtract dt = 
+  case deriveFunctor dt of
+    Left err -> Left err
+    Right (ClassInstance {ciDictionary}) ->
+      case M.lookup "fmap" ciDictionary of 
+        Nothing -> Left "didnt even find fmap"
+        Just r -> Right r
+
 deriveSpec :: Spec
 deriveSpec = do
   describe "deriveFunctor" $ do
@@ -89,7 +97,7 @@ deriveSpec = do
               , A () $ E.Constr "S" ["f"]
               ]
             }
-      let Right (fmapNm, fmapTy, fmapDef) = deriveFunctor dt
+      let Right (fmapTy, fmapDef) = deriveFunctorAndExtract dt
       fmapDef `shouldBe` 
         ("#f" @-> "#val" @-> 
           E.caseof "#val" 
@@ -112,7 +120,7 @@ deriveSpec = do
               , A () $ E.Constr "Cons" ["a", "f"]
               ]
             }
-      let Right (fmapNm, fmapTy, fmapDef) = deriveFunctor dt
+      let Right (fmapTy, fmapDef) = deriveFunctorAndExtract dt
       fmapDef `shouldBe` 
         ("#f" @-> "#val" @-> 
           E.caseof "#val" 
@@ -141,9 +149,9 @@ deriveSpec = do
       => Pos (\b -> #f (`a b))
       Pos (\b -> #f (`a b))
       -}
-      case deriveFunctor dt of
+      case deriveFunctorAndExtract dt of
         Left err -> failure err
-        Right (fmapNm, fmapTy, fmapDef) -> do
+        Right (fmapTy, fmapDef) -> do
           fmapDef `shouldBe` 
             ("#f" @-> "#val" @-> 
               E.caseof "#val" 
@@ -163,9 +171,9 @@ deriveSpec = do
               [ A () $ E.Constr "Pos" ["f" @->: "Int"]
               ]
             }
-      case deriveFunctor dt of
+      case deriveFunctorAndExtract dt of
         Left err -> err `shouldBe` "type variable f is in a negative position"
-        Right (fmapNm, fmapTy, fmapDef) -> failure ("got " ++ pps fmapDef ++ " but expected failure")
+        Right (fmapTy, fmapDef) -> failure ("got " ++ pps fmapDef ++ " but expected failure")
 
     it "cannot derive functor for negative type-var (2)" $ do
       let dt = E.Datatype
@@ -176,9 +184,9 @@ deriveSpec = do
               [ A () $ E.Constr "Pos" [("Int" @->: "f") @->: "Int"]
               ]
             }
-      case deriveFunctor dt of
+      case deriveFunctorAndExtract dt of
         Left err -> err `shouldBe` "type variable f is in a negative position"
-        Right (fmapNm, fmapTy, fmapDef) -> failure ("got " ++ pps fmapDef ++ " but expected failure")
+        Right (fmapTy, fmapDef) -> failure ("got " ++ pps fmapDef ++ " but expected failure")
 
     it "derives functor for strictly positive type-var (2)" $ do
       let dt = E.Datatype
@@ -197,9 +205,9 @@ deriveSpec = do
       =>
       Pos ((\b -> (`a (\b' -> b (#f b')))))
       -}
-      case deriveFunctor dt of
+      case deriveFunctorAndExtract dt of
         Left err -> failure err
-        Right (fmapNm, fmapTy, fmapDef) -> do
+        Right (fmapTy, fmapDef) -> do
           let ide = "x" @-> "x"
               bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("#f" @@ "b"))) @@ "b"))
               fn = "x" @-> "b" @-> bd
@@ -223,9 +231,9 @@ deriveSpec = do
               [ A () $ E.Constr "Cont" [("a" @->: "r") @->: "r"]
               ]
             }
-      case deriveFunctor dt of
+      case deriveFunctorAndExtract dt of
         Left err -> failure err
-        Right (fmapNm, fmapTy, fmapDef) -> do
+        Right (fmapTy, fmapDef) -> do
           let ide = "x" @-> "x"
               bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("#f" @@ "b"))) @@ "b"))
               fn = "x" @-> "b" @-> bd

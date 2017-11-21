@@ -144,6 +144,21 @@ infixr 2 @->:
 (@->:) :: Type () s -> Type () s -> Type () s 
 a @->: b = A () $ a :->: b
 
+-- alphaEquiv :: Type a s -> Type b s -> Bool
+-- alphaEquiv t1 t2 = go (unann t1) (unann t2) 0 where
+--   go (A _ t1') (A _ t2') =
+--     case (t1', t2') of
+--       (TFree n1, TFree n2) -> n1 == n2
+--       (TVar n1, TVar n2) -> n1 == n2
+--       TVar n  -> S.singleton n
+--       TExists n -> S.singleton n
+--       TApp x y -> freeVars x `S.union` freeVars y
+--       x :->: y  -> freeVars x `S.union` freeVars y
+--       Forall n k t -> freeVars t `S.difference` S.singleton n
+--       RecTy  t -> freeVars t 
+--       TTuple ts -> S.unions $ map freeVars ts
+--       Later t1 t2 -> freeVars t1 `S.union` freeVars t2
+
 freeVars :: Type a s -> S.Set Name
 freeVars (A _ ty) =
   case ty of

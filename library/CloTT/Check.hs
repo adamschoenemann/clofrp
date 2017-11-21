@@ -395,21 +395,17 @@ rule name info = do
   ctx <- selfapp =<< getCtx
   root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
+{-
+  ∀(a : Type). Functor (ListF a)
+  -----------------
+  Functor (ListF a)
+-}
 assertFunctor :: Type a Poly -> TypingM a ()
-assertFunctor ty@(A _ ty') = 
-  case ty' of
-    TFree n      ->
-      lookupFunctor n >>= \case 
-    TVar n       -> notFunctor ty
-    TExists n    -> notFunctor ty
-    TApp x y     -> lookupFunctor x 
-    x :->: y     -> notFunctor ty
-    Forall n k t -> notFunctor ty
-    RecTy t      -> parensIf $ "Fix" <+> prettyT True t
-    TTuple ts -> tupled $ map (prettyT False) ts
-    Later t1 t2 -> parensIf $ "⊳" <> prettyT True t1 <+> prettyT True t2
-
-
+assertFunctor ty = do
+  instances <- getInstancesOf "Functor"
+  or <$> traverse (\inst -> ciHasInstance inst ty) instances >>= \case
+    True -> pure ()
+    False -> otherErr $ show $ "Cannot resolve functor instance of" <+> pretty ty
 
 -- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
 -- at least implement them both in terms of a more general combinator
@@ -1075,7 +1071,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     where
       folder e (ts', acc) = do
         (t', acc') <- branch $ withCtx (const acc) $ synthesize e
-        pure (t' : ts', acc'
+        pure (t' : ts', acc')
 
   -- [TickAbs=>]
   synthesize' (TickAbs nm k e) = do

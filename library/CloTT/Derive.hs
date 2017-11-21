@@ -7,6 +7,8 @@
 
 module CloTT.Derive where
 
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import CloTT.Annotated
 import CloTT.Pretty
 import CloTT.AST.Expr
@@ -16,6 +18,7 @@ import CloTT.AST.Name
 import CloTT.AST.Datatype
 import CloTT.AST.Helpers
 import qualified CloTT.AST.Prim as P
+import CloTT.Check.TypingM
 
 {-
 data NatF f = Z | S f.
@@ -40,11 +43,11 @@ inits [x] = []
 inits (x:xs) = x : inits xs
 
 -- a giant hack of course
-deriveClass :: Name -> Datatype a -> Either String (Name, Type a Poly, Expr a)
+deriveClass :: Name -> Datatype a -> Either String (ClassInstance a)
 deriveClass (UName "Functor") dt = deriveFunctor dt
 deriveClass nm dt = Left $ show $ "Cannot derive" <+> pretty nm <+> "for" <+> (pretty $ dtName dt) <+> "since we can only derive functor atm."
 
-deriveFunctor :: Datatype a -> Either String (Name, Type a Poly, Expr a)
+deriveFunctor :: Datatype a -> Either String (ClassInstance a)
 deriveFunctor (Datatype {dtName, dtBound = [], dtConstrs}) = Left $ show $ "Cannot derive functor for concrete type" <+> pretty dtName
 deriveFunctor (Datatype {dtName, dtBound, dtConstrs = []}) = Left $ show $ "Cannot derive functor uninhabited  type" <+> pretty dtName
 deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : _)}) = do
@@ -53,8 +56,13 @@ deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : 
   let extrabs = map fst $ inits bs
   let nfa = foldl (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
   let typ = forAll (extrabs ++ ["#a", "#b"]) $ (tvar "#a" `arr` tvar "#b") `arr` (nfa `tapp` tvar "#a") `arr` (nfa `tapp` tvar "#b")
-  let fmapNm = UName $ show (pretty dtName <> "_fmap")
-  pure (fmapNm, typ, expr)
+  -- let fmapNm = UName $ show (pretty dtName <> "_fmap")
+  let inst = ClassInstance { ciClassName = "Functor", ciHasInstance = predicate, ciDictionary = M.singleton "fmap" (typ, expr)}
+  pure $ inst
+  where
+    predicate (A _ (TApp (A _ (TApp (A _ (TFree name)) inner)) outer)) = pure True
+    predicate _                                                        = pure False
+  -- pure (fmapNm, typ, expr)
 
 type TVarName = Name
 

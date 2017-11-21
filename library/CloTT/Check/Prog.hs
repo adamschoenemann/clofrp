@@ -68,7 +68,7 @@ data ElabProg a = ElabProg
   , defs    :: Defs a
   , destrs  :: DestrCtx a
   , aliases :: Aliases a
-  -- , instances :: InstanceCtx a
+  , instances :: InstanceCtx a
   } deriving (Show, Eq, Typeable)
 
 {-
@@ -267,18 +267,17 @@ elabProg program = do
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
-            -- let instances = getInstances derivs
-            (derivDefs, derivTyps) <- M.foldr (\(x,y) (xs, ys) -> (x ++ xs, y ++ ys)) ([], []) <$> M.traverseWithKey traverseDerivs derivs
-            let allFree = FreeCtx $ expFree <> M.fromList derivTyps
-            let allDefs = expFunds <> M.fromList derivDefs
-            pure $ ElabProg kinds allFree allDefs expDestrs aliases
+            instances <- InstanceCtx <$> M.traverseWithKey traverseDerivs derivs
+            let allFree = FreeCtx $ expFree -- <> M.fromList derivTyps
+            let allDefs = expFunds -- <> M.fromList derivDefs
+            pure $ ElabProg kinds allFree allDefs expDestrs aliases instances
   where 
     -- getInstances dts = M.map mapper dts where
     --   mapper v = S.fromList $ map dtName
 
-    traverseDerivs nm dts = do 
-      trips <- traverse (\dt -> either otherErr pure $ deriveClass nm dt) dts
-      pure $ foldr (\(nm, ty, ex) (exs, tys) -> ((nm, ex) : exs, (nm, ty) : tys)) ([], []) trips
+    traverseDerivs nm dts = 
+      traverse (\dt -> either otherErr pure $ deriveClass nm dt) dts
+      -- pure $ foldr (\(nm, ty, ex) (exs, tys) -> ((nm, ex) : exs, (nm, ty) : tys)) ([], []) trips
 
     expandDestr als d@(Destr {typ, args}) = do
       typ' <- expandAliases als typ
@@ -318,7 +317,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases}) = do
     checkAliases = traverse traverseAlias aliases
 
     initKinds = extend "K0" ClockK kinds
-    ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trClocks = mempty}
+    ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trInstances = mempty}
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor

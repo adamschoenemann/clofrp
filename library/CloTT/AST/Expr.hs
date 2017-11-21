@@ -56,6 +56,7 @@ data PrettyEP ann = PrettyEP
   , otherParens :: Doc ann -> Doc ann
   }
 
+
 prettyE' :: PrettyEP ann -> Expr' a -> Doc ann
 prettyE' (PrettyEP {lamParens, otherParens}) = \case
   Var nm -> pretty nm
@@ -83,7 +84,7 @@ prettyE' (PrettyEP {lamParens, otherParens}) = \case
 
   TypeApp e t -> otherParens (pretty e <+> braces (prettyT False t))
   Fmap t -> "fmap" <+> braces (pretty t)
-  Fmap t -> "primRec" <+> braces (pretty t)
+  PrimRec t -> "primRec" <+> braces (pretty t)
 
   Prim p -> fromString . show $ p
   where
@@ -132,5 +133,7 @@ unannE' = \case
   Let p e1 e2 -> Let (unannPat p) (unannE e1) (unannE e2)
   Case e clauses -> Case (unannE e) $ map (\(p,c) -> (unannPat p, unannE c)) clauses
   TypeApp e t -> TypeApp (unannE e) (unannT t)
+  Fmap t -> Fmap (unannT t)
+  PrimRec t -> PrimRec (unannT t)
   Prim p -> Prim p
 
