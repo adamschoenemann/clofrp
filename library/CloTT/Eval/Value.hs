@@ -10,6 +10,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module CloTT.Eval.Value where
 
@@ -19,6 +20,7 @@ import Data.Text.Prettyprint.Doc
 import Control.DeepSeq
 import GHC.Generics
 import GHC.Exts
+import Data.Data
 
 import CloTT.AST.Name
 import           CloTT.AST.Expr (Expr)
@@ -33,7 +35,7 @@ data PrimVal
   | Fix 
   | RuntimeErr String
   -- | Fmap
-  deriving (Eq, Generic, NFData, Show)
+  deriving (Eq, Generic, NFData, Show, Data, Typeable)
 
 instance Pretty PrimVal where
   pretty = \case
@@ -58,7 +60,7 @@ data Value a
   | Tuple [Value a]
   | Constr Name [Value a]
   -- | GetFmap (Expr a)
-  deriving (Show, Eq, Generic, NFData)
+  deriving (Show, Eq, Generic, NFData, Data, Typeable)
 
 instance Pretty (Value a) where
   pretty = \case
@@ -74,7 +76,7 @@ instance Pretty (Value a) where
 
 newtype Env a = Env {unEnv :: Map Name (Value a)}
   deriving newtype (Eq, Monoid)
-  deriving stock Generic
+  deriving stock (Generic, Data, Typeable)
   deriving anyclass NFData
 
 
@@ -84,8 +86,8 @@ instance Pretty (Env a) where
 instance Show (Env a) where
   show = show . pretty
 
-extend :: Name -> Value a -> Env a -> Env a
-extend k v = Env . M.insert k v . unEnv
+extendEnv :: Name -> Value a -> Env a -> Env a
+extendEnv k v = Env . M.insert k v . unEnv
 
 combine :: Env a -> Env a -> Env a
 combine (Env x) (Env y) = Env $ M.union x y 

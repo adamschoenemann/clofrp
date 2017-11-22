@@ -177,8 +177,6 @@ evalSpec = do
   describe "evalExprCorec" $ do
     let evcorec environ x = 
           runEvalM (evalExprCorec x) (mempty { erEnv = environ })
-    let step m e = runEvalM (evalExprStep e) m
-    let forceit m e = runEvalM (force e) m
 
     let evcorec0 x = evcorec mempty x
     it "forever terminates with primitives" $ do
@@ -423,8 +421,6 @@ evalSpec = do
       => body (S (S Z))
       -} 
       let v = evalProg "main" prog
-      let s x = Constr "S" [x]
-      let z = Constr "Z" []
       let n 0 = Constr "Z" []
           n k = Constr "S" [n (k-1)]
       v `shouldBe` n (10 :: Int)

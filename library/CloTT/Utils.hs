@@ -16,3 +16,10 @@ safeInit (x:xs) = x : safeInit xs
 safeHead :: a -> [a] -> a
 safeHead d [] = d
 safeHead d (x:xs) = x
+
+findMap :: (a -> Maybe b) -> [a] -> Maybe b
+findMap fn = foldr fun Nothing where
+  fun x acc = 
+    case fn x of
+      Just x' -> Just x'
+      Nothing -> acc

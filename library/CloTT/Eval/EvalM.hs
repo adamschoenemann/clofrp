@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module CloTT.Eval.EvalM where
 
@@ -17,6 +18,7 @@ import Data.Text.Prettyprint.Doc
 import Control.Applicative
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import Data.Data
 
 import CloTT.Eval.Value
 import CloTT.AST.Name
@@ -26,7 +28,7 @@ import CloTT.Check.Contexts (InstanceCtx(..), HasInstances(..))
 
 data EvalRead a = 
   EvalRead { erEnv :: Env a, erInstances :: InstanceCtx a }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Typeable, Data)
 
 instance Monoid (EvalRead a) where
   mempty = EvalRead mempty mempty
@@ -56,9 +58,12 @@ instance HasInstances (EvalM a) a where
 
 type EvalMRes r = r
 
-runEvalM :: EvalM a r -> (EvalRead a) -> EvalMRes r
+runEvalM :: EvalM a r -> EvalRead a -> EvalMRes r
+runEvalM tm r = runEvalMState tm r mempty
+
+runEvalMState :: EvalM a r -> EvalRead a -> EvalState a -> EvalMRes r
 -- runEvalM tm r = let x = runRWS (unEvalM tm) r in x
-runEvalM tm r = let (x, _, _) = runRWS (unEvalM tm) r mempty in x
+runEvalMState tm r st = let (x, _, _) = runRWS (unEvalM tm) r st in x
 
 getEnv :: EvalM a (Env a)
 getEnv = asks erEnv
@@ -67,7 +72,6 @@ withEnv :: (Env a -> Env a) -> EvalM a r -> EvalM a r
 withEnv f = local (\e -> e { erEnv = f (erEnv e) })
 
 updGlobals :: (EvalState a -> EvalState a) -> EvalM a ()
-
 updGlobals = modify
 
 getGlobals :: EvalM a (Globals a)

@@ -96,7 +96,7 @@ fmapFromType ty = findInstanceOf "Functor" ty >>= \case
 evalPat :: Pat a -> Value a -> EvalM a (Either String (Env a))
 evalPat pat@(A _ p) v =
   case p of
-    E.Bind nm -> Right <$> extend nm v <$> getEnv
+    E.Bind nm -> Right <$> extendEnv nm v <$> getEnv
     E.PTuple ps -> 
       case v of
         Tuple vs -> do 
@@ -186,11 +186,11 @@ evalExprStep (A ann expr') =
       case (v1, v2) of 
         -- order of union of envs is very important to avoid incorrect name capture
         (Closure cenv nm e1', _) -> do
-          let cenv' = extend nm v2 cenv
+          let cenv' = extendEnv nm v2 cenv
           withEnv (combine cenv') $ evalExprStep e1'
 
         (TickClosure cenv nm e1', _) -> do
-          let cenv' = extend nm v2 cenv
+          let cenv' = extendEnv nm v2 cenv
           withEnv (combine cenv') $ evalExprStep e1'
 
         (Constr nm args, _) -> do
@@ -208,7 +208,7 @@ evalExprStep (A ann expr') =
         (Prim Fix, Closure cenv nm e2') -> do
           let fixe = prim P.Fix
           env <- getEnv
-          let cenv' = extend nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) cenv
+          let cenv' = extendEnv nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) cenv
           withEnv (combine cenv') $ evalExprStep e2'
         
         -- (GetFmap f, v) -> do
@@ -277,7 +277,7 @@ coindplz = let Right x = runTestM loop in x where
 force :: Value a -> EvalM a (Value a)
 force = \case
   TickClosure cenv nm e -> 
-    withEnv (\e -> combine e (extend nm (Prim Tick) cenv)) $ evalExprStep e
+    withEnv (\e -> combine e (extendEnv nm (Prim Tick) cenv)) $ evalExprStep e
   v -> pure v
 
 evalExprCorec :: Expr a -> EvalM a (Value a)
@@ -294,18 +294,23 @@ evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where
     vs' <- evalMany (n-1) vs
     pure (v' : vs')
 
-evalProg :: Name -> Prog a -> Value a
-evalProg mainnm pr =
-  let er@(ElabRes {erDefs, erConstrs, erDeriving}) = collectDecls pr
+
+progToEval :: Name -> Prog a -> Either String (Expr a, Type a Poly, EvalRead a, EvalState a)
+progToEval mainnm pr = do
+  let er@(ElabRes {erDefs, erConstrs, erDeriving, erSigs}) = collectDecls pr
       vconstrs = M.mapWithKey (\k v -> Right (Constr k [])) . unFreeCtx $ erConstrs
       initState = (M.map Left erDefs) `M.union` vconstrs
-      instancesOrErr = elabInstances id erDeriving
-  in  case instancesOrErr of
-      Left err -> runtimeErr err
-      Right instances -> 
-        let initRead = mempty { erInstances = instances }
-        in  case M.lookup mainnm erDefs of 
-              Just maindef -> 
-                runEvalM (updGlobals (const initState) >> evalExprCorec maindef) initRead
-              Nothing -> runtimeErr $ "No main definition of name " ++ pps mainnm ++ " found"
+  instances <- elabInstances id erDeriving
+  let initRead = mempty { erInstances = instances }
+  case M.lookup mainnm erDefs of 
+    Just maindef -> 
+      let Just mainty = query mainnm erSigs
+      in  Right (maindef, mainty, initRead, initState)
+    Nothing -> Left $ "No main definition of name " ++ pps mainnm ++ " found"
+
+evalProg :: Name -> Prog a -> Value a
+evalProg mainnm pr =
+  case progToEval mainnm pr of
+    Right (expr, _ty, er, es) -> runEvalMState (evalExprCorec expr) er es
+    Left err                  -> runtimeErr err
 

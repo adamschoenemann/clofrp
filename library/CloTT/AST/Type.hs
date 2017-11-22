@@ -29,7 +29,7 @@ import CloTT.Pretty
 import Control.DeepSeq
 import GHC.Generics
 
-import CloTT.Annotated 
+import CloTT.Annotated
 import CloTT.AST.Name
 import CloTT.AST.Kind
 import CloTT.AST.Utils
@@ -59,22 +59,22 @@ instance NFData a => NFData (Type' a Poly) where
   rnf a = seq a ()
 
 prettyBound :: Bool -> Name -> Kind -> Doc ann
-prettyBound _ nm Star = pretty nm 
+prettyBound _ nm Star = pretty nm
 prettyBound p nm k    = (if p then parens else id) $ pretty nm <+> ":" <+> pretty k
 
 prettyT' :: Bool -> Type' a s -> Doc ann
-prettyT' pars = \case 
+prettyT' pars = \case
   TFree n    -> fromString . show $ n
   TVar n     -> fromString . show $ n
   TExists n  -> "∃" <> fromString (show n)
   TApp x y   -> parensIf $ prettyT False x <+> prettyT True y
   x :->: y   -> parensIf $ prettyT True x  <> softline <> "->" <+> prettyT False y
 
-  Forall n k t -> 
+  Forall n k t ->
     let (ns, t') = collect p t
         bound = hsep $ map (uncurry $ prettyBound True) ((n,k):ns)
     in  parensIf $ "∀" <> bound <> dot <+> prettyT False t'
-        where 
+        where
           p :: Type' a s -> Maybe ((Name, Kind), Type a s)
           p (Forall n' k' t') = Just ((n', k'), t')
           p _              = Nothing
@@ -109,7 +109,7 @@ instance Unann (Type' a s) (Type' () s) where
   unann = unannT'
 
 unannT' :: Type' a s -> Type' () s
-unannT' = \case 
+unannT' = \case
   TFree x       -> TFree x
   TVar x        -> TVar x
   TExists x     -> TExists x
@@ -129,10 +129,10 @@ nameToExistential' :: Name -> Type' a s
 nameToExistential' nm@(UName (c:cs)) | isUpper c = TFree nm
 nameToExistential' nm = TExists nm
 
-  
+
 instance IsString (Type () s) where
-  fromString [] = error "empty string not expected" 
-  fromString (c:cs) 
+  fromString [] = error "empty string not expected"
+  fromString (c:cs)
     | isUpper c = A () . TFree . UName $ (c:cs)
     | otherwise = A () . TVar . UName  $ (c:cs)
 
@@ -141,7 +141,7 @@ infixl 9 @@:
 a @@: b = A () $ a `TApp` b
 
 infixr 2 @->:
-(@->:) :: Type () s -> Type () s -> Type () s 
+(@->:) :: Type () s -> Type () s -> Type () s
 a @->: b = A () $ a :->: b
 
 -- alphaEquiv :: Type a s -> Type b s -> Bool
@@ -155,7 +155,7 @@ a @->: b = A () $ a :->: b
 --       TApp x y -> freeVars x `S.union` freeVars y
 --       x :->: y  -> freeVars x `S.union` freeVars y
 --       Forall n k t -> freeVars t `S.difference` S.singleton n
---       RecTy  t -> freeVars t 
+--       RecTy  t -> freeVars t
 --       TTuple ts -> S.unions $ map freeVars ts
 --       Later t1 t2 -> freeVars t1 `S.union` freeVars t2
 
@@ -168,7 +168,7 @@ freeVars (A _ ty) =
     TApp x y -> freeVars x `S.union` freeVars y
     x :->: y  -> freeVars x `S.union` freeVars y
     Forall n k t -> freeVars t `S.difference` S.singleton n
-    RecTy  t -> freeVars t 
+    RecTy  t -> freeVars t
     TTuple ts -> S.unions $ map freeVars ts
     Later t1 t2 -> freeVars t1 `S.union` freeVars t2
 
@@ -177,20 +177,20 @@ inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
 asPolytype :: Type a s -> Type a Poly
-asPolytype (A a ty) = A a $ 
+asPolytype (A a ty) = A a $
   case ty of
     TFree x      -> TFree x
     TVar x       -> TVar x
     TExists x    -> TExists x
     t1 `TApp` t2 -> asPolytype t1 `TApp` asPolytype t2
     t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
-    Forall x k t  -> Forall x k (asPolytype t) 
-    RecTy  t     -> RecTy (asPolytype t) 
+    Forall x k t  -> Forall x k (asPolytype t)
+    RecTy  t     -> RecTy (asPolytype t)
     TTuple ts    -> TTuple (map asPolytype ts)
     Later t1 t2  -> Later (asPolytype t1) (asPolytype t2)
 
 asMonotype :: Type a s -> Maybe (Type a Mono)
-asMonotype (A a ty) = 
+asMonotype (A a ty) =
   case ty of
     TFree x -> pure (A a $ TFree x)
     TVar  x -> pure (A a $ TVar x)
@@ -198,9 +198,9 @@ asMonotype (A a ty) =
     TExists x -> pure (A a $ TExists x)
 
     t1 `TApp` t2 -> (\x y -> A a $ TApp x y) <$> asMonotype t1 <*> asMonotype t2
-    
+
     t1 :->: t2 -> (\x y -> A a (x :->: y)) <$> asMonotype t1 <*> asMonotype t2
-    
+
     Forall _ _ _ -> Nothing
 
     RecTy  t -> A a . RecTy <$> asMonotype t
@@ -210,7 +210,7 @@ asMonotype (A a ty) =
     Later t1 t2 -> (\x y -> A a $ Later x y) <$> asMonotype t1 <*> asMonotype t2
 
 subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
-subst x forY (A a inTy) = 
+subst x forY (A a inTy) =
   case inTy of
     TFree y     | y == forY  -> x
                 | otherwise -> A a $ TFree y
@@ -221,7 +221,7 @@ subst x forY (A a inTy) =
     TExists y   | y == forY  -> x
                 | otherwise -> A a $ TExists y
 
-    Forall y k t  | y == forY -> A a $ Forall y k t 
+    Forall y k t  | y == forY -> A a $ Forall y k t
                   | otherwise -> A a $ Forall y k (subst x forY t)
 
     -- TODO: OK, this is a nasty hack to substitute clock variables
@@ -234,5 +234,5 @@ subst x forY (A a inTy) =
     TTuple ts -> A a $ TTuple (map (subst x forY) ts)
 
     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
-    
+
     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2

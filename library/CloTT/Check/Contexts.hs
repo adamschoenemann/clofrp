@@ -13,6 +13,7 @@
 
 module CloTT.Check.Contexts
   ( module CloTT.Check.Contexts
+  , module CloTT.Context
   , module CloTT.Check.Destr
   ) where
 
@@ -29,6 +30,7 @@ import CloTT.AST.Parsed hiding (exists)
 import CloTT.Context
 import CloTT.Annotated
 import CloTT.Pretty
+import CloTT.Utils (findMap)
 
 data Binding = LamB | LetB deriving (Eq, Show)
 
@@ -145,7 +147,7 @@ data ClassInstance a = ClassInstance
   , ciInstanceTypeName :: Name
   , ciParams :: [Name]
   , ciDictionary :: M.Map Name (Type a Poly, Expr a)
-  } deriving (Eq)
+  } deriving (Eq, Data, Typeable)
 
 instance Pretty (ClassInstance a) where
   pretty (ClassInstance {ciClassName, ciParams, ciDictionary, ciInstanceTypeName}) = 
@@ -155,7 +157,7 @@ instance Show (ClassInstance a) where
   show = show . pretty
 
 newtype InstanceCtx a = InstanceCtx { unInstanceCtx :: M.Map Name [ClassInstance a] }
-  deriving (Show, Eq, Monoid)
+  deriving (Show, Eq, Monoid, Data, Typeable)
 
 class HasInstances m a | m -> a where
   getInstances :: m (InstanceCtx a)
@@ -256,14 +258,6 @@ isInFContext = isMemberOf
 
 isInKContext :: Name -> KindCtx a -> Bool
 isInKContext = isMemberOf
-
-
-findMap :: (a -> Maybe b) -> [a] -> Maybe b
-findMap fn = foldr fun Nothing where
-  fun x acc = 
-    case fn x of
-      Just x' -> Just x'
-      Nothing -> acc
 
 ctxFind :: (CtxElem a -> Bool) -> TyCtx a -> Maybe (CtxElem a)
 ctxFind p (Gamma xs) = find p xs
