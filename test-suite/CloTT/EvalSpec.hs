@@ -362,6 +362,7 @@ evalSpec = do
       let v = evalProg "main" prog
       v `shouldBe` (Constr "S" [Constr "True" []])
 
+
     it "evals primitive recursion over natural numbers" $ do
       let Right prog = pprog [text|
         data NatF a = Z | S a deriving Functor.

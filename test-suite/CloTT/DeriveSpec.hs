@@ -28,6 +28,7 @@ import           CloTT.Check
 import           CloTT.Check.Prog
 import           CloTT.QuasiQuoter
 import           CloTT.Context
+import           CloTT.Utils
 
 data Ftor0 f = Ftor0 (forall a. (a, f))
 
@@ -91,6 +92,7 @@ deriveSpec :: Spec
 deriveSpec = do
   describe "deriveFunctor" $ do
     let bindp x = E.bind . E.UName $ ("#" ++ show (x :: Int))
+    let bindpm  = E.bind . E.MName
     let varm x  = E.var . E.UName $ ("#" ++ show (x :: Int))
 
     it "derives peano numerals functor" $ do
@@ -137,6 +139,28 @@ deriveSpec = do
 
       fmapTy `shouldBe` fmapt ["a"] ("ListF" @@: "a")
       let tr = mktr [unsafeProg|data ListF a f = Nil | Cons a f.|]
+      runCheck tr fmapDef fmapTy `shouldYield` mempty
+    
+    it "derives functor for tuple data-type" $ do
+      let dt = E.Datatype
+            { E.dtName = "Pair"
+            , E.dtBound = [("a", E.Star)]
+            , E.dtDeriving = ["Functor"]
+            , E.dtConstrs =
+              [ A () $ E.Constr "Pair" [E.tTup ["a", "a"]]
+              ]
+            }
+
+      let Right (fmapTy, fmapDef) = deriveFunctorAndExtract dt
+      let inner = "x" @-> E.caseof "x" [E.pTup [bindp 0, bindp 1] |-> E.tup ["#f" @@ varm 0, "#f" @@ varm 1]]
+      fmapDef `shouldBe` 
+        ("#f" @-> "#val" @-> 
+          E.caseof "#val" 
+            [ E.match "Pair" [bindp 0] |-> "Pair" @@ (inner @@ varm 0) ]
+        )
+
+      fmapTy `shouldBe` fmapt [] "Pair"
+      let tr = mktr [unsafeProg|data Pair a = Pair (a,a). |]
       runCheck tr fmapDef fmapTy `shouldYield` mempty
 
     it "derives functor for strictly positive type-var (1)" $ do

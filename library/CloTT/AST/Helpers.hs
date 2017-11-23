@@ -51,6 +51,9 @@ bind = A ?annotation . Bind
 match :: (?annotation :: a) => Name -> [Pat a] -> Pat a
 match ps = A ?annotation . Match ps
 
+ptuple :: (?annotation :: a) => [Pat a] -> Pat a
+ptuple = A ?annotation . PTuple
+
 tickvar :: (?annotation :: a) => Name -> Expr a
 tickvar = A ?annotation . TickVar
 

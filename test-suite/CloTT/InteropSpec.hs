@@ -275,7 +275,7 @@ interopSpec = do
           xs.
       |]
       let truefalse = True : False : truefalse :: [Bool]
-      let n = 20000
+      let n = 2000
       -- putStrLn . show $ take n (transform prog truefalse :: [Bool])
       -- putStrLn . show $ take n (repeat True)
       take n (transform prog truefalse) `shouldBe` replicate n True

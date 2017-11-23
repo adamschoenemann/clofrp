@@ -191,10 +191,6 @@ findInstanceOf className ty = do
 --   pretty (DestrCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
 --     fn (k, v) = pretty k <+> "↦" <+> pretty v 
 
-infix 1 |->
-(|->) :: a -> b -> (a,b)
-x |-> y = (x,y)
-
 -- Typing context contains local variables and stuff
 newtype TyCtx a = Gamma { unGamma :: [CtxElem a] }
   deriving (Eq)

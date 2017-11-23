@@ -23,3 +23,7 @@ findMap fn = foldr fun Nothing where
     case fn x of
       Just x' -> Just x'
       Nothing -> acc
+
+infix 1 |->
+(|->) :: a -> b -> (a,b)
+x |-> y = (x,y)

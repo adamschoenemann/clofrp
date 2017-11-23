@@ -23,6 +23,7 @@ import           CloTT.Check.TestUtils
 import           CloTT.TestUtils
 import           CloTT.Pretty
 import           CloTT.Annotated 
+import           CloTT.Utils
 
 foo :: (forall a. a -> a) -> (forall b. b -> b)
 foo f = f
