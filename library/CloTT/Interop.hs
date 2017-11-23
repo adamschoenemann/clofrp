@@ -39,7 +39,7 @@ import           CloTT.Eval
 import           CloTT.Pretty
 
 -- -----------------------------------------------------------------------------
--- Ty
+-- CloTy
 -- -----------------------------------------------------------------------------
 
 infixr 0 :->:
@@ -119,8 +119,20 @@ typeToSingExp (A _ typ') = case typ' of
 class ToHask (t :: CloTy) (r :: *) where
   toHask :: Sing t -> Value a -> r
 
+class ToCloTT (r :: *) (t :: CloTy) where
+  toCloTT :: Sing t -> r -> Value a
+
 execute :: ToHask t r => CloTT t a -> r
 execute (CloTT er st expr sing) = toHask sing $ runEvalMState (evalExprCorec expr) er st
+
+transform :: (ToCloTT hask1 clott1, ToHask clott2 hask2)
+          => CloTT (clott1 :->: clott2) a -> hask1 -> hask2
+transform (CloTT er st expr (SArr s1 s2)) input = toHask s2 $ runEvalMState (evl expr) er st where
+  evl e = do 
+    Closure cenv nm e <- evalExprStep e
+    let inv = toCloTT s1 input
+    let cenv' = extendEnv nm inv cenv
+    withEnv (combine cenv') $ evalExprCorec e
 
 
 --   TyPrim _ TyNat  -> T.conE 'SNat

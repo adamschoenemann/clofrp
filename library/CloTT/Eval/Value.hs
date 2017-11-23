@@ -15,7 +15,7 @@
 module CloTT.Eval.Value where
 
 import Data.Map.Strict (Map)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.Text.Prettyprint.Doc 
 import Control.DeepSeq
 import GHC.Generics
@@ -62,8 +62,19 @@ data Value a
   -- | GetFmap (Expr a)
   deriving (Show, Eq, Generic, NFData, Data, Typeable)
 
+-- takes n levels down in a tree of constructors
+takeConstr :: Int -> Value a -> Value a
+takeConstr n v 
+  | n < 0    = Prim $ RuntimeErr "Stopped evaling"
+  | otherwise = 
+      case v of
+        Constr nm [] -> v
+        Constr nm vs -> Constr nm (map (takeConstr (n-1)) vs)
+        -- Constr nm vs -> Constr nm $ snd (foldr (\v' (n',acc) -> (n' - 1, takeConstr (n' - 1) v' : acc)) (n, []) vs)
+        _            -> v
+
 instance Pretty (Value a) where
-  pretty = \case
+  pretty value = case (takeConstr 10 value) of
     Prim p -> pretty p
     Var nm  -> pretty nm
     TickVar nm  -> pretty nm

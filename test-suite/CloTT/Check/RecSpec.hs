@@ -17,7 +17,7 @@ import           CloTT.AST.Name
 
 recSpec :: Spec 
 recSpec = do
-  let errs e x = fst x `shouldBe` e
+  -- let errs e x = fst x `shouldBe` e
   describe "recursive types" $ do
     it "works in very simple cases (Nat)" $ do
       let Right prog = pprog [text|

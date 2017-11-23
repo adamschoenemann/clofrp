@@ -451,16 +451,6 @@ ofHeight :: a -> Int -> Tree a
 ofHeight x 0 = Leaf x 
 ofHeight x n = Br (ofHeight x (n-1)) (ofHeight x (n-1))
 
--- takes n levels down in a tree of constructors
-takeConstr :: Int -> Value a -> Value a
-takeConstr n v 
-  | n < 0    = Prim $ RuntimeErr "Stopped evaling"
-  | otherwise = 
-      case v of
-        Constr nm [] -> v
-        Constr nm vs -> Constr nm (map (takeConstr (n-1)) vs)
-        -- Constr nm vs -> Constr nm $ snd (foldr (\v' (n',acc) -> (n' - 1, takeConstr (n' - 1) v' : acc)) (n, []) vs)
-        _            -> v
 
 vnatToInt :: Value a -> Int
 vnatToInt (Constr "Z" _) = 0

@@ -2,11 +2,12 @@
 module CloTT.TestUtils where
 
 import Test.Tasty.Hspec
-import Data.Text
+import Data.Text (Text, unpack)
 import Text.Parsec
 import CloTT.Parser.Prog (parseProg)
 import CloTT.Parser.Expr (parseExpr)
 import CloTT.AST.Parsed
+import qualified CloTT.Eval.Value as V
 
 success :: Expectation
 success = pure ()

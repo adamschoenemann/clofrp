@@ -238,7 +238,7 @@ evalExprStep (A ann expr') =
         --   pure $ r
         
         (Prim (RuntimeErr _), _) -> pure v1
-        (_, Prim( RuntimeErr _)) -> pure v2
+        (_, Prim (RuntimeErr _)) -> pure v2
 
         _ -> otherErr $ show $ "Expected" <+> pretty v1 <+> "to be a lambda or something"
 
@@ -280,6 +280,10 @@ force = \case
     withEnv (\e -> combine e (extendEnv nm (Prim Tick) cenv)) $ evalExprStep e
   v -> pure v
 
+{- evalExprCorec (fix (\g -> cons z g))
+  => Constr "Cons" [Constr "Z" [], TickClosure _ _ e]
+  => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
+-}
 evalExprCorec :: Expr a -> EvalM a (Value a)
 evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
   go n v | n <= 0 = pure v

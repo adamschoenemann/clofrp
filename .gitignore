@@ -8,3 +8,4 @@
 **/*.synctex.gz
 cabal-helper*
 *.sublime*
+.vscode
