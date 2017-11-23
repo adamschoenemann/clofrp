@@ -218,8 +218,6 @@ getKCtx = asks trKinds
 instance HasInstances (TypingM a) a where
   getInstances = asks trInstances
 
--- TODO: Argh, nasty hack. Ideally, get rid of the clock-ctx entirely and just rely on
--- the normal "local context", but I'm still not completely convinced it is a good idea..
 getCCtx :: TypingM a (ClockCtx a)
 getCCtx = do
   Gamma ctx <- getCtx
