@@ -103,4 +103,7 @@ fmap (+2) [1,2,3] <= [Int]
       [->E] 1::2::3::[] <= ∃f Int
 ```
 
+### Solution
+Manually annotate primRec and fmap with the types :(
+
 [clott]: https://github.com/adamschoenemann/clott

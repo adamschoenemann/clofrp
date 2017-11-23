@@ -765,9 +765,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     alpha' <- freshName
     let alphat = A tann $ TVar alpha'
     let aty' = subst alphat alpha aty
-    -- FIXME: We need to traverse e and substitute alpha for a fresh name in order to make type annotations
-    -- with type variables work. This is horribly ineffecient, but will do for now
-    let esubst = substTVarInExpr alphat alpha e
+    let esubst = substTVarInExpr alphat alpha e -- not performant but fine for now and probably not bottleneck
     (delta, _, _) <- splitCtx (Uni alpha' k) =<< withCtx (\g -> g <+ Uni alpha' k) (branch $ check esubst aty')
     pure delta
   
