@@ -197,7 +197,7 @@ kindOf ty = go ty `decorateErr` decorate where
     kctx <- getKCtx
     ctx <- getCtx
     case t of
-      TFree "K0" -> pure ClockK -- TODO: HACK ALERT!
+      TFree "K0" -> pure ClockK -- FIXME: K0 Hack
       TFree v -> maybe (freeNotFound v) pure $ query v kctx
 
       TVar v -> queryKind v
@@ -253,6 +253,7 @@ checkWfType ty@(A ann ty') = do
   kctx <- getKCtx
   ctx <- getCtx
   case ty' of
+    TFree (UName "K0") -> pure () -- FIXME: K0 Hack
     -- UFreeWF
     TFree x
       | x `isMemberOf` kctx -> pure ()
@@ -793,12 +794,14 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   check' (TickAbs af k e2) (Later k' t2) = do
     ctx <- getCtx
     rule "TickAbsI" (pretty e <+> "<=" <+> pretty ty)
-    let kty = A eann $ TVar k 
+    let kty = nameToType eann k
     delta <- branch $ k' `subtypeOf` kty
     kty' <- substCtx delta kty
     let c = (LamB, af) `HasType` kty'
     (theta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 t2)
     pure theta
+  
+
   
   -- FoldApp (optimization)
   -- check' (A fann (Prim Fold) `App` e2) (RecTy fty) = do
@@ -1008,7 +1011,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         case kv of
           TExists k -> pure k
           TVar    k -> pure k
-          TFree  "K0" -> pure "K0"
+          TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
           _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
 
   -- ->UnfoldE=>

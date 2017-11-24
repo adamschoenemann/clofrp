@@ -20,6 +20,7 @@ import Data.Either (isLeft)
 import Data.String (fromString)
 import NeatInterpolation
 import Data.Proxy
+import Text.Parsec.Pos (SourcePos)
 
 import qualified CloTT.AST.Parsed  as E
 import qualified CloTT.AST.Prim    as P
@@ -45,23 +46,23 @@ instance ToCloTT Bool ('CTFree "Bool") where
   toCloTT (SFree px) False = (Constr "False" []) 
   -- toCloTT (SFree px) _                   = undefined
 
-data Nat = Z | S Nat deriving (Show, Eq)
+-- data Nat = Z | S Nat deriving (Show, Eq)
 
-five :: Nat
-five = S (S (S (S (S Z))))
+-- five :: Nat
+-- five = S (S (S (S (S Z))))
 
-plus :: Nat -> Nat -> Nat
-plus Z n = n
-plus (S m) n = S (plus m n)
+-- plus :: Nat -> Nat -> Nat
+-- plus Z n = n
+-- plus (S m) n = S (plus m n)
 
-instance ToHask ('CTFree "Nat") Nat where
-  toHask (SFree px) (Constr "Z" [])  = Z
-  toHask (SFree px) (Constr "S" [r]) = S (toHask (SFree px) r)
+instance ToHask ('CTFree "Nat") Int where
+  toHask (SFree px) (Constr "Z" [])  = 0
+  toHask (SFree px) (Constr "S" [r]) = succ (toHask (SFree px) r)
   toHask (SFree px) _                = undefined
 
-instance ToCloTT Nat ('CTFree "Nat") where
-  toCloTT (SFree px) Z     = Constr "Z" [] 
-  toCloTT (SFree px) (S r) = Constr "S" [toCloTT (SFree px) r] 
+instance ToCloTT Int ('CTFree "Nat") where
+  toCloTT (SFree px) 0 = Constr "Z" [] 
+  toCloTT (SFree px) n = Constr "S" [toCloTT (SFree px) (n-1)] 
   -- toCloTT (SFree px) _                = undefined
 
 instance ToHask t r => ToHask ('CTFree "Stream" :@: u :@: t) [r] where
@@ -77,27 +78,77 @@ instance ToCloTT h c => ToCloTT (Wrap h) ('CTFree "Wrap" :@: c) where
 instance ToCloTT h c => ToCloTT (Foo h) ('CTFree "Foo" :@: c) where
   toCloTT (s1 `SApp` s2) (Foo x) = Constr "Foo" [toCloTT (SFree (Proxy @"Wrap") `SApp` s2) x]
 
--- instance ToCloTT hask clott => ToCloTT [hask] ('CTFree "Stream" :@: u :@: clott) where
---   toCloTT s@((s1 `SApp` s2) `SApp` s3) (x : xs) =
---     let v = toCloTT s3 x 
---         c = toCloTT s xs
---     in (Constr "Cons" [v, c])
-
-instance ToCloTT [Bool] ('CTFree "CoStream" :@: 'CTFree "Bool") where
-  toCloTT s@(s1 `SApp` s2) xs = Constr "Cos" [clottStream xs] where
+-- haskell lists to clott streams over k₀
+instance ToCloTT hask clott => ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) where
+  toCloTT s@(s1 `SApp` s2) xs = clottStream xs where
     clottStream (x : xs') = Constr "Cons" [toCloTT s2 x, clottStream xs']
     clottStream []        = runtimeErr "End of stream"
 
--- instance (ToCloTT hask ('CTFree "Stream" :@: u :@: clott)) => ToCloTT hask ('CTFree "CoStream" :@: clott) where
---   toCloTT s@(s1 `SApp` s2) xs = 
---     let s' = SFree (Proxy @"Stream") `SApp` undefined `SApp` s2
---     in  Constr "Cos" [toCloTT s' xs]
+-- haskell lists to clott coinductive streams 
+instance ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) => ToCloTT [hask] ('CTFree "CoStream" :@: clott) where
+  toCloTT s@(s1 `SApp` s2) xs = 
+    let strsing = SFree (Proxy @"Stream") `SApp` SFree (Proxy @"K0") `SApp` s2
+    in  Constr "Cos" [toCloTT strsing xs] where
+
+instance (ToCloTT h1 c1, ToCloTT h2 c2) => ToCloTT (h1, h2) ('CTTuple [c1, c2]) where
+  toCloTT (SPair s1 s2) (x1, x2) = Tuple [toCloTT s1 x1, toCloTT s2 x2]
+  toCloTT (STup ss s)   (x1, x2) = error "impossible" -- Tuple [toCloTT s1 x1, toCloTT s2 x2]
+
+instance (ToHask c1 h1, ToHask c2 h2) => ToHask ('CTTuple [c1, c2]) (h1, h2) where
+  toHask (SPair s1 s2) (Tuple [x1, x2]) = (toHask s1 x1, toHask s2 x2)
+  toHask (SPair s1 s2) v = error $ show $ "Expected tuple but got" <+> pretty v
+
+-- cant make this inductive, since tuples are not inductive in haskell.
+-- alternatively, one could marshall to HList instead which would allow it
+instance (ToHask c1 h1, ToHask c2 h2, ToHask c3 h3) => ToHask ('CTTuple '[c1,c2,c3]) (h1,h2,h3) where
+  toHask (s1 `STup` (s2 `SPair` s3)) (Tuple [x1,x2,x3]) = (toHask s1 x1, toHask s2 x2, toHask s3 x3)
+  toHask (s1 `STup` (s2 `SPair` s3)) v = error $ show $ "Expected tuple but got" <+> pretty v
 
 
-  -- toHask s@((s1 `SApp` s2) `SApp` s3) _ = undefined
+type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
+type CTNat = 'CTFree "Nat"
 
--- instance ToHask ('CTFree "Stream" :@: u :@: 'CTFree "Bool") [Bool] where
---   toHask s@((s1 `SApp` s2) `SApp` s3) (Constr "Cons" [v, c]) = toHask s3 v : toHask s c
+clott_add :: CloTT (CTStream :@: CTTuple [CTNat, CTNat] :->: CTStream :@: CTNat) SourcePos
+clott_add = [clott|
+  data NatF f = Z | S f deriving Functor.
+  type Nat = Fix (NatF).
+  s : Nat -> Nat.
+  s = \x -> fold (S x).
+  z : Nat.
+  z = fold Z.
+
+  data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+  type Stream (k : Clock) a = Fix (StreamF k a).
+
+  plus : Nat -> Nat -> Nat.
+  plus = \m n -> 
+    let body = \x ->
+      case x of
+        | Z -> n
+        | S (m', r) -> s r
+    in  primRec {NatF} body m.
+
+  app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+  app = \lf la -> \\(af : k) -> 
+    let f = lf [af] in
+    let a = la [af] in
+    f a.
+
+  main : Stream K0 (Nat, Nat) -> Stream K0 Nat.
+  main = 
+    fix (\g pairs -> 
+      case unfold pairs of   
+        | Cons pair xs -> 
+          case pair of
+          | (x1, x2) -> fold (Cons (plus x1 x2) (app g xs))
+    ).
+|]
+
+addition_ex :: IO ()
+addition_ex = interact (unlines . process . lines) where
+  process = map (("result: " ++) . (show :: Int -> String)) . transform clott_add .
+            map (read :: String -> (Int,Int))
+
 
 interopSpec :: Spec
 interopSpec = do
@@ -124,7 +175,7 @@ interopSpec = do
         main : Nat.
         main = s (s (s (s (s z)))).
       |]
-      execute prog `shouldBe` five
+      execute prog `shouldBe` 5
     
     it "it works for every-other" $ do
       let prog = [clott|
@@ -212,7 +263,7 @@ interopSpec = do
         main : Nat -> Nat.
         main = \x -> plus x x.
       |]
-      transform prog five `shouldBe` (plus five five)
+      transform prog 5 `shouldBe` 10
     
     it "works with wrapped types" $ do
       let prog = [clott|
@@ -225,6 +276,22 @@ interopSpec = do
           | Foo (Wrap b) -> b.
       |]
       transform prog (Foo (Wrap True)) `shouldBe` True
+    
+    it "works with tuples (1)" $ do
+      let prog = [clott|
+        data Bool = True | False.
+        main : Bool -> (Bool, Bool).
+        main = \x -> (x, x).
+      |]
+      transform prog True `shouldBe` (True, True)
+
+    it "works with tuples (2)" $ do
+      let prog = [clott|
+        data Bool = True | False.
+        main : Bool -> (Bool, Bool, Bool).
+        main = \x -> (x, x, x).
+      |]
+      transform prog True `shouldBe` (True, True, True)
 
     it "it works for every-other" $ do
       let prog = [clott|

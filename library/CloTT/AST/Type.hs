@@ -125,16 +125,15 @@ nameToType' :: Name -> Type' a s
 nameToType' nm@(UName (c:cs)) | isUpper c = TFree nm
 nameToType' nm = TVar nm
 
+nameToType :: a -> Name -> Type a s
+nameToType ann = A ann . nameToType'
+
 nameToExistential' :: Name -> Type' a s
 nameToExistential' nm@(UName (c:cs)) | isUpper c = TFree nm
 nameToExistential' nm = TExists nm
 
-
 instance IsString (Type () s) where
-  fromString [] = error "empty string not expected"
-  fromString (c:cs)
-    | isUpper c = A () . TFree . UName $ (c:cs)
-    | otherwise = A () . TVar . UName  $ (c:cs)
+  fromString s = nameToType () (UName s)
 
 infixl 9 @@:
 (@@:) :: Type () Poly -> Type () Poly -> Type () Poly

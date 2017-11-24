@@ -354,7 +354,7 @@ clockSpec = do
         maapfix = \f r xs ->
           let h = hd xs in
           let t = tl xs in
-          let h' = hd t in 
+          let h' = hd t in nameToVar
           let t' = tl t in
           let inner = \r' -> cos (f h') (pure (r' t'))
           in  cos (f h) (map inner r).

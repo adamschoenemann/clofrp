@@ -14,6 +14,7 @@ import CloTT.Utils (findMap)
 import CloTT.Eval (progToEval)
 import CloTT.Check.Prog (runCheckProg)
 import CloTT.Annotated
+import CloTT.Pretty (ppsw)
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
@@ -81,7 +82,7 @@ clott = QuasiQuoter
     quoteClott s = do
       prog <- liftParse P.prog s
       case runCheckProg mempty prog of
-        (Left err, _, _) -> fail (show err)
+        (Left err, _, _) -> fail (ppsw 200 err)
         (Right _,  _, _) -> 
           case progToEval (UName "main") prog of
             Right (expr, ty, rd, st) -> do

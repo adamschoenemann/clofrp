@@ -48,7 +48,7 @@ infixl 9 :@:
 -- | The type of CloTT-types that can be reflected
 data CloTy
   = CTFree Symbol
-  -- | CTTuple [CloTy]
+  | CTTuple [CloTy]
   | CloTy :->: CloTy
   | CloTy :@:  CloTy
   -- deriving (Show, Eq, Typeable, Data)
@@ -62,14 +62,24 @@ data CloTy
 -- using kind-promotion
 data Sing :: CloTy -> * where
   SFree   :: KnownSymbol s => Proxy s -> Sing (CTFree s)
-  SApp    :: Sing t1 -> Sing t2 -> Sing (t1 :@:  t2)
-  SArr    :: Sing t1 -> Sing t2 -> Sing (t1 :->: t2)
+  SPair   :: Sing t1 -> Sing t2           -> Sing (CTTuple '[t1, t2])
+  STup    :: Sing t  -> Sing (CTTuple ts) -> Sing (CTTuple (t ': ts))
+  SApp    :: Sing t1 -> Sing t2           -> Sing (t1 :@:  t2)
+  SArr    :: Sing t1 -> Sing t2           -> Sing (t1 :->: t2)
 
 instance Show (Sing ct) where
   show x = case x of
     SFree px -> symbolVal px
     t1 `SArr` t2 -> show t1 ++ " -> " ++ show t2
     t1 `SApp` t2 -> "(" ++ show t1 ++ " " ++ show t2 ++ ")"
+    t1 `SPair` t2 -> "(" ++ show t1 ++ ", " ++ show t2 ++ ")"
+    STup t ts -> 
+      "(" ++ show t ++ ", " ++ tupShow ts
+      where
+        tupShow :: Sing (CTTuple ts') -> String
+        tupShow (SPair x y) = show x ++ ", " ++ show y ++ ")"
+        tupShow (STup t' ts') = show t' ++ ", " ++ tupShow ts'
+
 
 
 deriving instance Eq (Sing a)
@@ -82,9 +92,17 @@ reifySing = \case
   SFree px -> A () $ P.TFree (P.UName $ symbolVal px)
   t1 `SArr` t2 -> A () $ reifySing t1 P.:->: reifySing t2
   t1 `SApp` t2 -> A () $ reifySing t1 `P.TApp`  reifySing t2
+  t1 `SPair` t2 -> A () $ P.TTuple [reifySing t1, reifySing t2]
+  STup t ts ->
+    A () $ P.TTuple (reifySing t : tupleSing ts)
+    where
+        tupleSing :: Sing (CTTuple ts') -> [Type () Poly]
+        tupleSing (SPair x y) = [reifySing x, reifySing y]
+        tupleSing (STup t' ts') = reifySing t' : tupleSing ts' 
 
 infixr 0 `SArr`
 infixl 9 `SApp`
+infixr 8 `STup`
 
 -- -----------------------------------------------------------------------------
 -- CloTT
@@ -114,12 +132,21 @@ typeToSingExp (A _ typ') = case typ' of
     let s1 = typeToSingExp t1
         s2 = typeToSingExp t2
     in  [| $(s1) `SApp` $(s2) |]
-  _                    -> fail "Can only convert free types and arrow types atm"
+  P.TTuple ts -> 
+    case ts of
+      (x1 : x2 : xs) -> do
+        let s1 = typeToSingExp x1
+            s2 = typeToSingExp x2
+            base = [| $(s1) `SPair` $(s2) |]
+        foldr (\x acc -> [| STup $(typeToSingExp x) $(acc) |]) base xs -- foldl' here but its never gonna be a real problem
+      _ -> fail $ "Cannot convert tuples of " ++ show (length ts) ++ " elements"
 
-class ToHask (t :: CloTy) (r :: *) where
+  _                    -> fail "Can only convert free types, tuples, and arrow types atm"
+
+class ToHask (t :: CloTy) (r :: *) | t -> r where
   toHask :: Sing t -> Value a -> r
 
-class ToCloTT (r :: *) (t :: CloTy) where
+class ToCloTT (r :: *) (t :: CloTy) | t -> r where
   toCloTT :: Sing t -> r -> Value a
 
 execute :: ToHask t r => CloTT t a -> r

@@ -26,13 +26,16 @@ tuple = ann <*> (E.Tuple <$> parens (expr `sepBy2` comma))
 lname :: Parser Name
 lname = UName <$> lidentifier
 
+name :: Parser Name
+name = UName <$> identifier
+
 tickabs :: Parser Expr
 tickabs = do
   ps <- symbol "\\\\" *> many1 param
   bd <- reservedOp "->" *> expr
   pure $ foldr (\(A.A a (nm, kappa)) acc -> A.A a $ E.TickAbs nm kappa acc) bd ps
   where
-    param = ann <*> parens ((,) <$> lname <*> (reservedOp ":" *> lname))
+    param = ann <*> parens ((,) <$> lname <*> (reservedOp ":" *> name))
             
 letp :: Parser Expr
 letp = ann <*> p where 
