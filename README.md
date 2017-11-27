@@ -35,14 +35,14 @@ The `library` directory contains all the interesting code. `test-suite` contains
 consists of nearly 300 hand-written scenario tests.
 The code is split into several folders and modules:
 - `AST` contains the abstract syntax tree of programs written in CloTT - expressions, types, patterns, names, primitives, declarations and programs
-- `Check.hs` contains code to type-check (and elaborate, which should be refactored out) programs written in CloTT. The meat of the implementation
+- `Check` contains code to type-check (and elaborate, which should be refactored out) programs written in CloTT. The meat of the implementation
   lies within this namespace.
-- `Eval.hs` contains code that evaluates CloTT programs
+- `Evals` contains code that evaluates CloTT programs
 - `Parser` contains parsers for various CloTT terms
-- `Derive.hs` contains code to derive functors from data-type declarations
-- `Interop.hs` defines how to combine CloTT programs with Haskell programs in a somewhat typesafe manner
-- `QuasiQuoter.hs` defines quasi-quoters that allow Haskell programmers to write programs in CloTT easily
-- `Annotated.hs, Context.hs, Pretty.hs` and `Utils.hs` contain mostly un-interesting helper functions to work with annotated AST's, different contexts,
+- `Derive` contains code to derive functors from data-type declarations
+- `Interop` defines how to combine CloTT programs with Haskell programs in a somewhat typesafe manner
+- `QuasiQuoter` defines quasi-quoters that allow Haskell programmers to write programs in CloTT easily
+- `Annotated, Context, Pretty` and `Utils` contain mostly un-interesting helper functions to work with annotated AST's, different contexts,
   pretty-printing ASTs and assorted utility functions.
 
 ## TODO
