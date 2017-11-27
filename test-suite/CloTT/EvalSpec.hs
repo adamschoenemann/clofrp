@@ -14,10 +14,10 @@ import Data.String (fromString)
 import NeatInterpolation
 import Debug.Trace
 
-import qualified CloTT.AST.Parsed  as E
+import qualified CloTT.AST  as E
 import qualified CloTT.AST.Prim    as P
-import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
-import           CloTT.AST.Parsed (LamCalc(..))
+import           CloTT.AST ((@->:), (@@:), Kind(..))
+import           CloTT.AST (LamCalc(..))
 import qualified Fixtures
 
 import qualified Data.Map.Strict as M

@@ -26,7 +26,7 @@ import Data.List (break, find)
 import Data.Maybe (isJust, catMaybes, listToMaybe)
 
 import CloTT.Check.Destr
-import CloTT.AST.Parsed hiding (exists)
+import CloTT.AST hiding (exists)
 import CloTT.Context
 import CloTT.Annotated
 import CloTT.Pretty

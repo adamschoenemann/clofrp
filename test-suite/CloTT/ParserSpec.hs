@@ -9,9 +9,9 @@ import Data.Either (isLeft)
 import qualified CloTT.Parser.Expr as P
 import qualified CloTT.Parser.Type as P
 import qualified CloTT.Parser.Decl as P
-import qualified CloTT.AST.Parsed  as E
-import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
-import           CloTT.AST.Parsed (LamCalc(..))
+import qualified CloTT.AST  as E
+import           CloTT.AST ((@->:), (@@:), Kind(..))
+import           CloTT.AST (LamCalc(..))
 
 import CloTT.TestUtils
 

@@ -12,12 +12,12 @@ import Test.Tasty.Hspec
 import Data.Either (isLeft)
 import Data.String (fromString)
 
-import qualified CloTT.AST.Parsed  as E
+import qualified CloTT.AST  as E
 import           CloTT.Check
 import           CloTT.Check.Prog
 import qualified Data.Map.Strict as M
-import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
-import           CloTT.AST.Parsed (LamCalc(..))
+import           CloTT.AST ((@->:), (@@:), Kind(..))
+import           CloTT.AST (LamCalc(..))
 import           CloTT.QuasiQuoter
 import           CloTT.Check.TestUtils
 import           CloTT.TestUtils

@@ -13,7 +13,7 @@ import Test.Tasty.Hspec
 import NeatInterpolation
 
 import CloTT.Check
-import CloTT.AST.Parsed
+import CloTT.AST
 import CloTT.Parser.Prog (parseProg)
 import CloTT.TestUtils
 import CloTT.Pretty

@@ -7,7 +7,7 @@ import Text.Parsec.Pos
 import Text.Parsec
 
 import qualified CloTT.Annotated  as A
-import qualified CloTT.AST.Parsed as E
+import qualified CloTT.AST as E
 import qualified CloTT.AST.Prim   as P
 import           CloTT.Parser.Lang
 import qualified CloTT.Parser.Type as T

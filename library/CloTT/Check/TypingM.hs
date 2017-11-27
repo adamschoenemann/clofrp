@@ -28,7 +28,7 @@ import Data.Data
 
 import CloTT.AST.Name
 import CloTT.Annotated
-import CloTT.AST.Parsed hiding (exists)
+import CloTT.AST hiding (exists)
 import CloTT.Pretty
 import CloTT.Context
 import CloTT.Check.Contexts

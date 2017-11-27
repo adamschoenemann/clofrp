@@ -31,8 +31,8 @@ import qualified Language.Haskell.TH.Syntax as S
 import qualified Language.Haskell.TH as T
 import           Data.Data
 
-import qualified CloTT.AST.Parsed as P
-import           CloTT.AST.Parsed (Type, TySort(..))
+import qualified CloTT.AST as P
+import           CloTT.AST (Type, TySort(..))
 import           CloTT.Annotated
 import           CloTT.AST.Helpers
 import           CloTT.Eval

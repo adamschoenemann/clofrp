@@ -9,9 +9,9 @@ module CloTT.AST.PrettySpec where
 
 import           Test.Tasty.Hspec
 
-import qualified CloTT.AST.Parsed  as E
-import           CloTT.AST.Parsed ((@->:), (@@:))
-import           CloTT.AST.Parsed (LamCalc(..))
+import qualified CloTT.AST  as E
+import           CloTT.AST ((@->:), (@@:))
+import           CloTT.AST (LamCalc(..))
 import           CloTT.QuasiQuoter
 import           CloTT.Pretty
 import           CloTT.TestUtils

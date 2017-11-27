@@ -3,9 +3,9 @@
 module CloTT.QuasiQuoterSpec where
 
 import           Test.Tasty.Hspec
-import qualified CloTT.AST.Parsed  as E
-import           CloTT.AST.Parsed ((@->:), (@@:), Kind(..))
-import           CloTT.AST.Parsed (LamCalc(..))
+import qualified CloTT.AST  as E
+import           CloTT.AST ((@->:), (@@:), Kind(..))
+import           CloTT.AST (LamCalc(..))
 
 import qualified Fixtures
 

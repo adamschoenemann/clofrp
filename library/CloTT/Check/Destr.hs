@@ -4,7 +4,7 @@
 
 module CloTT.Check.Destr where
 
-import CloTT.AST.Parsed
+import CloTT.AST
 import Data.Data
 
 -- A destructor which is elaborated from a pattern

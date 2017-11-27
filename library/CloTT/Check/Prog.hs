@@ -25,7 +25,7 @@ import Control.Monad.Writer (censor)
 import CloTT.Pretty hiding ((<>))
 
 import CloTT.Annotated (Annotated(..))
-import CloTT.AST.Parsed
+import CloTT.AST
 import CloTT.Check
 import CloTT.Derive
 import CloTT.Context

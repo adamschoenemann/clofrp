@@ -36,8 +36,8 @@ import CloTT.Check.Prog
 import CloTT.AST.Helpers
 
 import qualified CloTT.AST.Prim as P
-import           CloTT.AST.Parsed (Expr, Prog, Pat, Type, TySort(..), Datatype(..))
-import qualified CloTT.AST.Parsed as E
+import           CloTT.AST (Expr, Prog, Pat, Type, TySort(..), Datatype(..))
+import qualified CloTT.AST as E
 
 runtimeErr :: String -> Value a
 runtimeErr = Prim . RuntimeErr

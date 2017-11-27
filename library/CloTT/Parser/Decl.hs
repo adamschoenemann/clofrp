@@ -3,7 +3,7 @@ module CloTT.Parser.Decl where
 import Text.Parsec.Pos
 import Text.Parsec
 
-import qualified CloTT.AST.Parsed as E
+import qualified CloTT.AST as E
 import           CloTT.Parser.Lang
 import qualified CloTT.Parser.Type as P
 import qualified CloTT.Parser.Expr as P

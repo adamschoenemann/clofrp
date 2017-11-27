@@ -40,7 +40,7 @@ import CloTT.AST.Name
 import qualified CloTT.AST.Helpers as H
 import CloTT.Context
 import CloTT.Annotated
-import CloTT.AST.Parsed hiding (exists)
+import CloTT.AST hiding (exists)
 import CloTT.Pretty
 import CloTT.Check.Destr
 import CloTT.Check.Contexts

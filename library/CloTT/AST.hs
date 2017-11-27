@@ -16,8 +16,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module CloTT.AST.Parsed
-  ( module CloTT.AST.Parsed
+module CloTT.AST
+  ( module CloTT.AST
   , module CloTT.AST.Name
   , module CloTT.AST.Type
   , module CloTT.AST.Pat

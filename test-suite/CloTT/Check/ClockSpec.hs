@@ -17,7 +17,7 @@ import CloTT.Context
 import CloTT.TestUtils
 import CloTT.Pretty
 
-import qualified CloTT.AST.Parsed as E
+import qualified CloTT.AST as E
 import qualified CloTT.Annotated  as A
 
 clockSpec :: Spec 
@@ -354,7 +354,7 @@ clockSpec = do
         maapfix = \f r xs ->
           let h = hd xs in
           let t = tl xs in
-          let h' = hd t in nameToVar
+          let h' = hd t in 
           let t' = tl t in
           let inner = \r' -> cos (f h') (pure (r' t'))
           in  cos (f h) (map inner r).

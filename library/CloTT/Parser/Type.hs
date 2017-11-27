@@ -7,7 +7,7 @@ import Text.Parsec
 import Data.Foldable (foldrM)
 
 import qualified CloTT.Annotated  as A
-import qualified CloTT.AST.Parsed as E
+import qualified CloTT.AST as E
 import           CloTT.Parser.Lang
 import           CloTT.AST.Name
 

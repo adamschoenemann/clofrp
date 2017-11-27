@@ -6,7 +6,7 @@ import Data.Text (Text, unpack)
 import Text.Parsec
 import CloTT.Parser.Prog (parseProg)
 import CloTT.Parser.Expr (parseExpr)
-import CloTT.AST.Parsed
+import CloTT.AST
 import qualified CloTT.Eval.Value as V
 
 success :: Expectation
