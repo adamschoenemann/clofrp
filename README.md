@@ -1,6 +1,49 @@
 # [Simply Typed Clocked Type Theory][clott]
 
-For my master's thesis at ITU
+An implementation of the Simply Typed Clocked Type Theory [clocks] For my master's thesis at ITU.
+CloTT (Clocked Type Theory) is a language that enables safe co-inductive programming. Specifically, it
+uses guarded recursion to ensure that co-recursive definitions are productive and causal. The novel idea
+compared to ordinary nakano-style guarded recursion is that it introduces the notion of clocks and ticks
+on these clocks, which are used to unfold guarded-recursive definitions. One can quantify over clocks to
+express truly coinductive definitions (as opposed to guarded-recursive) that maintain the productivity
+guarantees, but relax the causality constraint. As such, we can bridge the gap between co-recursive
+and guarded-recursive definitions. On top of that, the "guardedness" of a recursive function is explicit
+in its type signature.
+
+Aside from these ideas, CloTT resembles an ordinary Haskell-inspired language. As such it features:
+- Datatype declarations alá vanilla Haskell
+- Type aliases 
+- Automatic derivation of fmap (functor map) for strictly-positive types
+- Bi-directional type higher-rank inference - polymorphic functions must be annotated, but everything else should
+  be inferrable
+- Higher-kinded types
+- Guarded recursion
+- Structured and well-founded primitive recursion
+- A limited form of impredicativity via explicit type applications
+
+Notable differences between Haskell:
+- No type-classes (functors are special-case built-in pseudo-typeclass that can only be derived)
+- Basically no language extensions (except for `TypeApplications` and `ScopedTypeVariables`)
+- Strict evaluation
+- Clocks, ticks on clocks and clock-abstraction
+- Not white-space aware syntax.
+- `(:)` for type-annotations
+- No kind-inference of type-variables -- they must be annotated if they're not of kind `*`
+
+## Project Structure
+The `library` directory contains all the interesting code. `test-suite` contains the test suite (unsurprisingly) - the test suite
+consists of nearly 300 hand-written scenario tests.
+The code is split into several folders and modules:
+- `AST` contains the abstract syntax tree of programs written in CloTT - expressions, types, patterns, names, primitives, declarations and programs
+- `Check.hs` contains code to type-check (and elaborate, which should be refactored out) programs written in CloTT. The meat of the implementation
+  lies within this namespace.
+- `Eval.hs` contains code that evaluates CloTT programs
+- `Parser` contains parsers for various CloTT terms
+- `Derive.hs` contains code to derive functors from data-type declarations
+- `Interop.hs` defines how to combine CloTT programs with Haskell programs in a somewhat typesafe manner
+- `QuasiQuoter.hs` defines quasi-quoters that allow Haskell programmers to write programs in CloTT easily
+- `Annotated.hs, Context.hs, Pretty.hs` and `Utils.hs` contain mostly un-interesting helper functions to work with annotated AST's, different contexts,
+  pretty-printing ASTs and assorted utility functions.
 
 ## TODO
 - Support higher-kinded types (should be not that hard)
@@ -13,16 +56,16 @@ For my master's thesis at ITU
   - units?
   - lists?
 - Optimize type-checking in general
-- Make sure everything is sane by checking context-wellformedness more and checking that no impredicativeness takes place
-  - Note: Assigning an existential to a partially-applied type-constructor is fine
+- Make sure everything is sane by checking context-wellformedness more and checking that no impredicativeness takes place ✓
+  - Note: Assigning an existential to a partially-applied type-constructor is fine  ✓
 - Add the actual CloTT primitives and rules ✓
-- Support (co)-inductive and guarded types
-  - no syntax sugar yet but otherwise
+- Support (co)-inductive and guarded types ✓
+  - no syntax sugar yet but otherwise ✓
 - Implement primitive recursion and guarded recursion
   - typechecking ✓
-  - evaluation
+  - evaluation ✓
 - Think of a module strategy
-- Integrate with Haskell
+- Integrate with Haskell ✓
 - Write a demo (Pong or Pacman if crazy)
 - Expand type-aliases in type annotations ✓
 - Parse (:) syntax for type annotations instead of `the (A) e` ✓
@@ -40,6 +83,8 @@ For my master's thesis at ITU
   - should never happen now since we maintain optimally-solved contexts
 - Improve inference for "unfold"
 - Derive functor for Recursive types and tuples
+  - rec types
+  - tuples ✓
 
 ## Type Aliases
 - Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:
@@ -107,3 +152,4 @@ fmap (+2) [1,2,3] <= [Int]
 Manually annotate primRec and fmap with the types :(
 
 [clott]: https://github.com/adamschoenemann/clott
+[clocks]: http://cs.au.dk/~hbugge/pdfs/lics17-preprint.pdf
