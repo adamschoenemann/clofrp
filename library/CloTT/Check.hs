@@ -1,4 +1,9 @@
-{-| Implementation of Complete and Easy Bidirectional Typechecking for Higher-Rank Polymorphism 
+{-| 
+Module      : CloTT.Check
+Description : Type-checking and inference algorithm for CloTT.
+
+Based on Complete and Easy Bidirectional Typechecking for Higher-Rank Polymorphism by Joshua Dunfeld
+and Neel Krishnaswami
 -}
 
 {-# LANGUAGE DataKinds #-}
@@ -47,22 +52,28 @@ import CloTT.Check.Contexts
 import CloTT.Check.TypingM
 
 
+-- | For testing
 runSubtypeOf0 :: Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runSubtypeOf0 t1 t2 = runSubtypeOf initRead t1 t2
 
+-- | For testing
 runSubtypeOf :: TypingRead a -> Type a 'Poly -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runSubtypeOf rd t1 t2 = runTypingM (t1 `subtypeOf` t2) rd initState
 
+-- | Run a type-checking computation in an empty context
 runCheck0 :: Expr a -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runCheck0 e t = runCheck initRead e t
 
+-- | Run a type-checking computation in a given context
 runCheck :: TypingRead a -> Expr a -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runCheck rd e t = runTypingM (check e t) rd initState
 
+-- | Run a type-synthesizing computation in a given context
 runSynth :: TypingRead a -> Expr a -> TypingMRes a (Type a Poly, TyCtx a)
 runSynth rd e = runTypingM (synthesize e) rd initState
 
-
+-- | Substitute a type using a context. As defined in the paper Θ[τ]. Will substitute
+-- | zero or more existential type variables for something "more-solved"
 substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
 substCtx ctx (A a ty) = 
   case ty of
@@ -103,6 +114,8 @@ substCtx ctx (A a ty) =
 
   `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
 
+-- | Apply a context to itself, substituting away all solved existentials.
+-- Only used for debugging to make large contexts easier to reason about.
 selfapp :: TyCtx a -> TypingM a (TyCtx a)
 selfapp (Gamma []) = pure $ mempty
 selfapp ctx@(Gamma ((ahat := ty) : xs)) = do
@@ -113,28 +126,29 @@ selfapp (Gamma (x : xs)) = do
   Gamma xs' <- selfapp (Gamma xs)
   pure $ Gamma (x : xs')
 
+-- | Checks that a context is κ-stable - that is, the context contains no
+-- lambda-bound names that mention κ in their type
 mustBeStableUnder :: TyCtx a -> Name -> TypingM a ()
 mustBeStableUnder ctx@(Gamma xs) k = traverse traversal xs *> pure () where 
   traversal ce = case ce of
     (LamB, nm) `HasType` ty 
       | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty ce
-    -- nm := ty
-    --   | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty ce
     _                     -> pure ()
-
-
       
+-- | Split a context at an element, yield the context before the element,
+-- the element itself, and the context after the element
 splitCtx :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a, CtxElem a, TyCtx a)
 splitCtx el ctx =
   case splitCtx' el ctx of
     Nothing -> root "splitCtx" *> cannotSplit el ctx
-    Just x  -> do 
-      -- traceM $ "splitCtx " ++ show el ++ ":  " ++ show ctx ++ " ---> " ++ show x
-      pure x
+    Just x  -> pure x
 
+-- | Check if a context element occurs before another
+-- context element in the current context
 before :: CtxElem a -> CtxElem a -> TypingM a Bool
 before alpha beta = before' alpha beta <$> getCtx
 
+-- | Query the kind of a name in the current context
 queryKind :: Name -> TypingM a Kind
 queryKind nm = do
   ctx <- getCtx
@@ -149,6 +163,8 @@ queryKind nm = do
       p (x := _)     = x == nm
       p _             = False
 
+-- | Insert another context (a list of ctx-elems) into the current context at a specific element.
+-- It will replace the element with the new inserted context
 insertAt :: CtxElem a -> TyCtx a -> TypingM a (TyCtx a)
 insertAt at insertee = do
   ctx <- getCtx
@@ -191,6 +207,7 @@ insertAt at insertee = do
 --     noInfo = Left $ "Cannot infer kind of type-variable " ++ show nm
 
 
+-- | Get the kind of a type in the cufrent context
 kindOf :: Type a Poly -> TypingM a Kind
 kindOf ty = go ty `decorateErr` decorate where 
   go (A _ t) = do
@@ -246,8 +263,8 @@ kindOf ty = go ty `decorateErr` decorate where
 
   decorate = Other $ show $ "kindOf" <+> (pretty ty)
 
--- A type is wellformed
--- this one, validType and kindOf should probably be merged somehow...
+-- | Check that a type is well-formed.
+-- TODO: This, validType and kindOf should probably be merged somehow...
 checkWfType :: Type a Poly -> TypingM a ()
 checkWfType ty@(A ann ty') = do
   kctx <- getKCtx
