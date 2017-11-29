@@ -207,7 +207,7 @@ insertAt at insertee = do
 --     noInfo = Left $ "Cannot infer kind of type-variable " ++ show nm
 
 
--- | Get the kind of a type in the cufrent context
+-- | Get the kind of a type in the current context
 kindOf :: Type a Poly -> TypingM a Kind
 kindOf ty = go ty `decorateErr` decorate where 
   go (A _ t) = do
@@ -239,7 +239,9 @@ kindOf ty = go ty `decorateErr` decorate where
           (k1', k2')   -> otherErr $ "Both operands in arrow types must have kind *, but had " 
                       ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
       
-      Forall v k tau -> withCtx (\g -> g <+ Uni v k) $ go tau 
+      Forall v k tau -> do
+        errIf (isInContext (Uni v k) <$> getCtx) (/= False) (\v' -> Other $ show $ pretty v' <+> "is already universally quantified")
+        withCtx (\g -> g <+ Uni v k) $ go tau 
 
       RecTy tau -> do 
         k <- go tau
@@ -264,79 +266,10 @@ kindOf ty = go ty `decorateErr` decorate where
   decorate = Other $ show $ "kindOf" <+> (pretty ty)
 
 -- | Check that a type is well-formed.
--- TODO: This, validType and kindOf should probably be merged somehow...
 checkWfType :: Type a Poly -> TypingM a ()
-checkWfType ty@(A ann ty') = do
-  kctx <- getKCtx
-  ctx <- getCtx
-  case ty' of
-    TFree (UName "K0") -> pure () -- FIXME: K0 Hack
-    -- UFreeWF
-    TFree x
-      | x `isMemberOf` kctx -> pure ()
-      | otherwise           -> notWfType ty
+checkWfType ty = kindOf ty *> pure ()
 
-    -- UVarWF
-    TVar x 
-      | Just _ <- ctxFind (varPred x) ctx -> pure ()
-      | otherwise                         -> notWfType ty
-
-    -- EvarWF and SolvedEvarWF
-    TExists alpha 
-      | Just _ <- ctxFind (expred $ alpha) ctx -> pure ()
-      | otherwise                              -> notWfType ty
-
-    -- ArrowWF
-    t1 :->: t2 -> do 
-      errIf (kindOf t1) (/= Star) (\k -> Other $ show $ pretty t1 <+> "must have kind * but had kind" <+> pretty k)
-      errIf (kindOf t2) (/= Star) (\k -> Other $ show $ pretty t2 <+> "must have kind * but had kind" <+> pretty k)
-      checkWfType t1 *> checkWfType t2
-
-    -- ForallWF
-    Forall x k t 
-      | Just _ <- ctxFind (varPred x) ctx -> otherErr $ show $ pretty x <+> "is already in context" <+> pretty ctx
-      | otherwise                         -> withCtx (\g -> g <+ Uni x k) $ checkWfType t 
-
-    -- TAppWF
-    TApp t1 t2 -> do
-      k1 <- kindOf t1
-      k2 <- kindOf t2 
-      case k1 of
-        k11 :->*: k12  
-          | k11 == k2 -> checkWfType t1 *> checkWfType t2
-          | otherwise -> otherErr $ show $ pretty t2 <+> "must have kind" <+> pretty k1 <+> "at" <+> pretty ty
-        _             -> do 
-          otherErr $ show $ pretty t1 <+> "must be a type-constructor" <+> "in kctx" <+> pretty kctx
-
-    -- RecTyWF
-    RecTy t -> kindOf t >>= \case
-      Star :->*: k' -> checkWfType t
-      k             -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but must be a type constructor"
-    
-    -- TupleWF
-    TTuple ts -> traverse fn ts *> pure () where
-      fn tt = do
-        errIf (kindOf tt) (/= Star) (\tt' -> Other $ show $ pretty tt' <+> "must have kind *")
-        checkWfType tt
-    
-    -- \|>WF
-    Later t1 t2 -> 
-      kindOf t1 >>= \case
-        ClockK -> checkWfType t2
-        k      -> otherErr $ show $ pretty t1 <+> "has kind" <+> pretty k <+> "but should be a clock variable, at" <+> pretty ty
-
-  where 
-    expred alpha = \case
-      Exists alpha' _ -> alpha == alpha'
-      alpha' := _   -> alpha == alpha' 
-      _         -> False
-
-    varPred x = \case
-      Uni x' _ -> x == x'
-      _        -> False
-
--- Check if a context is well-formed
--- will completely ignore trCtx in the TypingM monad
+-- | Check if a given context is well-formed
 -- TODO: Also fail ctx such as [a := tau, a] or [a, a := tau]
 wfContext :: forall a. TyCtx a -> TypingM a ()
 wfContext (Gamma elems) = (foldrM fn [] elems *> pure ())  where
@@ -372,14 +305,16 @@ wfContext (Gamma elems) = (foldrM fn [] elems *> pure ())  where
       p (x := _)     = x == nm
       p _            = False
 
+-- | Check if a type has kind * in a context
 validType :: KindCtx a -> Type a Poly -> TypingM a ()
 validType kctx t = do
   k <- withKCtx (const kctx) $ kindOf t
   case k of
     Star -> pure ()
-    _    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k <+> "but expected *"
+    _    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k 
+        <+> "but expected *"
 
--- assign an unsolved variable to a type in a context
+-- | Assign an unsolved variable to a type in a context
 -- TODO: Optimize 
 assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
 assign nm ty = do
@@ -387,11 +322,14 @@ assign nm ty = do
   case findAssigned nm ctx of
     Just ty' 
       | ty =%= ty' -> pure ctx
-      | otherwise -> otherErr $ show $ pretty nm <+> "is already assigned to" <+> pretty ty'
+      | otherwise  -> otherErr $ show $ pretty nm 
+                  <+> "is already assigned to" <+> pretty ty'
     Nothing ->
       case foldr fn ([], False) xs of
         (xs', True) -> do
-          _ <- wfContext (Gamma xs') `decorateErr` (Other $ show $ "Assigning" <+> pretty nm <+> "to" <+> pretty ty)
+          let asserr = Other $ show $ "Assigning" <+> pretty nm <+> "to" 
+                    <+> pretty ty
+          _ <- wfContext (Gamma xs') `decorateErr` asserr
           pure (Gamma xs')
         (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything" 
       where
@@ -399,20 +337,24 @@ assign nm ty = do
         fn (Exists nm' k) (xs', _) | nm == nm' = (nm := ty : xs', True)
         fn x (xs', b)                          = (x : xs', b)
 
+-- | Attempt to convert a type to a monotype and lift it to the TypingM monad
 asMonotypeTM :: Type a s -> TypingM a (Type a Mono)
 asMonotypeTM t = maybe (otherErr $ show $ pretty t <+> "is not a monotype") pure . asMonotype $ t
 
+-- | Lookup a type in a given context (lifted to TypingM monad)
 lookupTyTM :: Name -> TyCtx a -> TypingM a (Type a Poly)
 lookupTyTM nm c =
   case lookupTy nm c of
     Just t -> pure t
     Nothing -> nameNotFound nm
 
+-- | Log that a rule of some name with some info was triggered
 rule :: Doc () -> Doc () -> TypingM a ()
 rule name info = do
   ctx <- selfapp =<< getCtx
   root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
+-- | Assert that a type is functorial, namely that there is an instance of Functor for that type
 assertFunctor :: Type a Poly -> TypingM a ()
 assertFunctor ty = findInstanceOf "Functor" ty >>= \case
   Just _ -> pure ()

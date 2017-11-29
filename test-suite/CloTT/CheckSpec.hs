@@ -633,7 +633,7 @@ typecheckSpec = do
     it "rejects invalid foralls" $ do
       let mk = rd' ["Bool" |-> Star, "Nat" |-> Star]
       do let ctx = nil 
-         shouldFail $ runCheck (mk ctx) ("x" @-> "x") (E.forAll ["a","a"] $ "a" @->: "a") --  `shouldYield` (ctx)
+         shouldFail $ runCheck (mk ctx) ("x" @-> "x") (E.forAll ["a","a"] $ "a" @->: "a") 
 
 
   describe "kindOf" $ do
@@ -678,5 +678,5 @@ typecheckSpec = do
     it "infers foralls" $ do
       runKindOf kinds mempty (E.forAll ["a"] $ "List" @@: "a") `shouldBe` Right Star
       runKindOf kinds mempty (E.forAll ["a", "b"] $ "Tuple" @@: "a" @@: "b") `shouldBe` Right Star
-      runKindOf kinds mempty (E.forAll ["a"] $ "a" @->: E.forAll ["a"] "a") `shouldBe` Right Star
+      runKindOf kinds mempty ((E.forAll ["a"] $ "a") @->: E.forAll ["a"] "a") `shouldBe` Right Star
       runKindOf kinds mempty (E.forAll ["a"] $ "List" @@: "a" @->: "a") `shouldBe` Right Star
