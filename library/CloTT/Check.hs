@@ -712,11 +712,14 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
 check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
 check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
 
-  -- 1I (PrimI)
-  check' (Prim p) _ = do
-    (pty, theta) <- inferPrim eann p
-    root $ "[PrimI]" <+> pretty e <+> "<=" <+> pretty ty
-    withCtx (const theta) $ branch $ pty `subtypeOf` ty
+  -- 1I
+  check' (Prim Unit) (TFree "Unit") = getCtx
+  check' (Prim (Integer _)) (TFree "Int") = getCtx
+  -- PrimI
+  -- check' (Prim p) _ = do
+  --   (pty, theta) <- inferPrim eann p
+  --   root $ "[PrimI]" <+> pretty e <+> "<=" <+> pretty ty
+  --   withCtx (const theta) $ branch $ pty `subtypeOf` ty
   
   -- ∀I
   check' _ (Forall alpha k aty) = do
@@ -760,14 +763,12 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     (theta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 t2)
     pure theta
   
-
-  
-  -- FoldApp (optimization)
+  -- -- FoldApp (optimization)
   -- check' (A fann (Prim Fold) `App` e2) (RecTy fty) = do
   --   root $ "[FoldApp]" <+> pretty e <+> "<=" <+> pretty ty
   --   branch $ check e2 (A tann $ fty `TApp` ty)
 
-  -- UnfoldApp (optimization)
+  -- -- UnfoldApp (optimization)
   -- check' (A ufann (Prim Unfold) `App` e2) (ftor `TApp` unfty) = do
   --   root "[UnfoldApp]"
     -- branch $ check e2 $ unfty
