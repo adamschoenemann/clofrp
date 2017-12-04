@@ -1213,7 +1213,6 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     let atysubst = subst (A tann $ TExists alpha') alpha aty
     withCtx (\g -> g <+ Exists alpha' k) $ branch $ applysynth atysubst e
   
-  -- TODO: Abstract the common stuff in these two
   applysynth' (TExists alpha) = do
     case e of 
       (A _ (TickVar tv)) -> 
