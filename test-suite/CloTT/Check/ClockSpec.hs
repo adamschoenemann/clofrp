@@ -64,6 +64,17 @@ clockSpec = do
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ (mname 0) `CannotSubtype` (mname 1))
     
+    it "acceps application of tick to polymorphic def" $ do
+      let Right prog = pprog [text|
+        data Unit = MkUnit.
+        foo : forall a (k : Clock). |>k a.
+        foo = undefined.
+
+        bar : Unit.
+        bar = foo [<>].
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
     it "checks program with data-decl and clocks" $ do
       let Right prog = pprog [text|
         data NowOrNext (k : Clock) a = Now a | Next (|>k a).

@@ -1214,39 +1214,19 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     withCtx (\g -> g <+ Exists alpha' k) $ branch $ applysynth atysubst e
   
   -- TODO: Abstract the common stuff in these two
-  applysynth' (TExists alpha) = 
-    case e of
-      -- α^ TickApp
-      (A _ (TickVar tv)) -> do
-        ctx <- getCtx
-        rule "αTickApp" (pretty ty <+> "•" <+> pretty e)
-        if ctx `containsEVar` alpha
-          then do
-            a1 <- freshName
-            a2 <- freshName
-            let a1toa2 = A tann $ Later (A tann (TExists a1)) (A tann (TExists a2))
-            alphak <- queryKind alpha
-            ctx' <- insertAt (Exists alpha alphak) (mempty <+ Exists a2 Star <+ Exists a1 ClockK <+ alpha := a1toa2)
-            delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
-            pure (A tann $ TExists a2, delta)
-          else
-            nameNotFound alpha
+  applysynth' (TExists alpha) = do
+    case e of 
+      (A _ (TickVar tv)) -> 
+        let articulated a1 a2 = 
+              let a1toa2 = A tann $ Later (A tann (TExists a1)) (A tann (TExists a2))
+              in  mempty <+ Exists a2 Star <+ Exists a1 ClockK <+ alpha := a1toa2
+        in  appsynthforall alpha "αTickApp" articulated
 
-    -- α^ App
-      _  -> do 
-        ctx <- getCtx
-        rule "αApp" (pretty ty <+> "•" <+> pretty e)
-        if ctx `containsEVar` alpha
-          then do
-            a1 <- freshName
-            a2 <- freshName
-            let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
-            alphak <- queryKind alpha
-            ctx' <- insertAt (Exists alpha alphak) (mempty <+ Exists a2 Star <+ Exists a1 Star <+ alpha := a1toa2)
-            delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
-            pure (A tann $ TExists a2, delta)
-          else
-            nameNotFound alpha
+      _                  -> 
+        let articulated a1 a2 = 
+              let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
+              in  mempty <+ Exists a2 Star <+ Exists a1 Star <+ alpha := a1toa2
+        in  appsynthforall alpha "αApp" articulated
 
   -- ->TickVarApp
   applysynth' (Later kappa cty) = do
@@ -1255,13 +1235,6 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     delta <- branch $ check e kappa
     pure (cty, delta)
 
-    -- (ty1, delta) <- branch $ synthesize e1
-    -- kappa <- lookupTyTM alpha ctx
-    -- (kappa', cty, theta) <- withCtx (const delta) $ assertLater ty1
-    -- omega <- withCtx (const theta) $ branch $ kappa `subtypeOf` kappa' 
-    -- ctysubst <- substCtx omega cty
-    -- pure (ctysubst, omega)
-  
   -- ->App
   applysynth' (aty :->: cty) = do
     ctx <- getCtx
@@ -1270,4 +1243,18 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
     pure (cty, delta)
 
   applysynth' _ = root "[CannotAppSynthesize]" *> cannotAppSynthesize ty e
+
+  appsynthforall alpha ruleName toInsert = do
+    ctx <- getCtx
+    rule ruleName (pretty ty <+> "•" <+> pretty e)
+    if ctx `containsEVar` alpha
+      then do
+        a1 <- freshName
+        a2 <- freshName
+        alphak <- queryKind alpha
+        ctx' <- insertAt (Exists alpha alphak) (toInsert a1 a2)
+        delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
+        pure (A tann $ TExists a2, delta)
+      else
+        nameNotFound alpha
 

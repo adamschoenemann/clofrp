@@ -1127,20 +1127,20 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
     
-    -- it "type-checks higher-order unification" $ do
-    --   let Right prog = pprog [text|
-    --     data Bot = .
-    --     data Top = .
-    --     k1 : forall (p : * -> *). p Bot -> p Top.
-    --     k1 = undefined.
-    --     k2 : forall (p : * -> *). p Top -> p Top.
-    --     k2 = undefined.
-    --     a1 : Bot -> Top.
-    --     a1 = k1.
-    --     a2 : Top -> Top.
-    --     a2 = k2.
-    --   |]
-    --   runCheckProg mempty prog `shouldYield` ()
+    it "cannot do higher-order unification" $ do
+      let Right prog = pprog [text|
+        data Bot = .
+        data Top = .
+        k1 : forall (p : * -> *). p Bot -> p Top.
+        k1 = undefined.
+        k2 : forall (p : * -> *). p Top -> p Top.
+        k2 = undefined.
+        a1 : Bot -> Top.
+        a1 = k1.
+        a2 : Top -> Top.
+        a2 = k2.
+      |]
+      shouldFail $ runCheckProg mempty prog 
     
     -- it "accepts tricky higher-order stuff (not sure if we should)" $ do
     --   let Right prog = pprog [text|
