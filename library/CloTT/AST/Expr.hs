@@ -35,8 +35,8 @@ import CloTT.AST.Utils
 type Expr a = Annotated a (Expr' a)
 
 data Expr' a
-  = Var Name -- a
-  | TickVar Name -- [a]
+  = Var Name -- x
+  | TickVar Name -- [x]
   | Ann (Expr a) (Type a Poly) -- the τ a
   | App (Expr a) (Expr a) -- e1 e2
   | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx -> e OR λ(x : A) -> e
