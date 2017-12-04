@@ -910,7 +910,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     _ <- branch $ check e ty'
     (ty, ) <$> getCtx
   
-  -- ->I=>
+  -- ->I=> (with generalization)
   synthesize' (Lam x Nothing e) = do
     root $ "[->I=>]" <+> pretty expr
     markerName <- freshName
@@ -931,6 +931,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     root $ "[Info] generalized" <+> pretty tau <+> "to" <+> pretty quanted
     pure (quanted, delta)
 
+  -- -- ->I=> (without generalization)
   -- synthesize' (Lam x Nothing e) = do
   --   root $ "[->I=>]" <+> pretty expr
   --   alpha <- freshName
@@ -943,9 +944,9 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   --   (delta, _, theta) <- splitCtx ((LamB, x) `HasType` alphat) ctx'
   --   pure (A ann $ alphat :->: betat, delta)
 
-  -- ->(Anno)I=>
+  -- ->AnnoI=>
   synthesize' (Lam x (Just argty) e) = do
-    root $ "[->(Anno)I=>]" <+> pretty expr
+    root $ "[->AnnoI=>]" <+> pretty expr
     beta <- freshName
     let betac  = Exists beta Star
         betat  = A ann $ TExists beta
@@ -1068,6 +1069,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   synthesize' _ = cannotSynthesize expr
   
   assertLater t = do
+    rule "AssertLater" (pretty t)
     kappa <- freshName
     alpha <- freshName
     let kappat = A ann $ TExists kappa
