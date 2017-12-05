@@ -955,35 +955,6 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     (delta, _, theta) <- splitCtx ce ctx'
     pure (A ann $ argty :->: betat, delta)
   
-  -- TickE=>
-  -- TODO: Move to applysynth
-  -- synthesize' (e1 `App` A _ (Prim Tick)) = do
-  --   ctx <- getCtx
-  --   rule "TickE=>" (pretty expr)
-  --   (ty1, delta) <- branch $ synthesize e1
-  --   ty1' <- substCtx delta ty1
-  --   (kappat, cty, theta) <- withCtx (const delta) $ assertLater ty1'
-  --   kappa <- extractKappa kappat
-  --   theta `mustBeStableUnder` kappa
-  --   ctysubst <- substCtx theta cty
-  --   pure (ctysubst, theta)
-  --   where 
-  --     extractKappa (A _ kv) = 
-  --       case kv of
-  --         TExists k -> pure k
-  --         TVar    k -> pure k
-  --         TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
-  --         _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
-
-  -- ->UnfoldE=>
-  -- synthesize' (A uann (Prim Unfold) `App` e2) = do
-  --   root "[->UnfoldE=>]"
-  --   (e2ty, theta) <- branch $ synthesize e2 
-  --   e2ty' <- substCtx theta e2ty 
-  --   case e2ty' of
-  --     A ann2 (RecTy fty) -> pure (A ann2 $ fty `TApp` e2ty', theta)
-  --     _                  -> otherErr $ show $ pretty e2ty' <+> "cannot be unfolded"
-
   -- PrimRec=>
   synthesize' (PrimRec prty) = do
     rule "PrimRec=>" (pretty expr)
@@ -1040,7 +1011,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         (t', acc') <- branch $ withCtx (const acc) $ synthesize e
         pure (t' : ts', acc')
 
-  -- [TickAbs=>]
+  -- TickAbs=>
   synthesize' (TickAbs nm k e) = do
     root $ "[TickAbs=>]" <+> pretty expr
     let kt = A ann $ TVar k
@@ -1193,9 +1164,7 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
              <+> "arguments to" <> pretty name <+> "but got" <+> pretty (length pats)
   | otherwise                  = do
       (delta, Destr {typ = etyp, args = eargs}) <- existentialize ann d
-      -- traceM $ show $ pretty name <> ":" <+> pretty typ <+> "with args" <+> pretty args
       ctx' <- withCtx (const delta) $ branch $ etyp `subtypeOf` expected
-      -- traceM (show $ pretty ctx')
       foldlM folder ctx' $ zip pats eargs
       where 
         folder acc (p, t) = do 
