@@ -139,6 +139,13 @@ clockSpec = do
         good2 = \x -> 
           let x' = (\\(af : k) -> x)
           in  x' [<>].
+
+        data Wrap a = Wrap a.
+        -- let bindings are ignored in terms of the kappa-stable context judgment
+        good3 : forall (k : Clock) a. a -> a.
+        good3 = \x -> 
+          case Wrap (\\(af : k) -> x) of
+            | Wrap x' -> x' [<>].
       |]
       runCheckProg mempty prog `shouldYield` ()
       

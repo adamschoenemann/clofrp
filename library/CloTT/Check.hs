@@ -957,23 +957,23 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   
   -- TickE=>
   -- TODO: Move to applysynth
-  synthesize' (e1 `App` A _ (Prim Tick)) = do
-    ctx <- getCtx
-    rule "TickE=>" (pretty expr)
-    (ty1, delta) <- branch $ synthesize e1
-    ty1' <- substCtx delta ty1
-    (kappat, cty, theta) <- withCtx (const delta) $ assertLater ty1'
-    kappa <- extractKappa kappat
-    theta `mustBeStableUnder` kappa
-    ctysubst <- substCtx theta cty
-    pure (ctysubst, theta)
-    where 
-      extractKappa (A _ kv) = 
-        case kv of
-          TExists k -> pure k
-          TVar    k -> pure k
-          TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
-          _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
+  -- synthesize' (e1 `App` A _ (Prim Tick)) = do
+  --   ctx <- getCtx
+  --   rule "TickE=>" (pretty expr)
+  --   (ty1, delta) <- branch $ synthesize e1
+  --   ty1' <- substCtx delta ty1
+  --   (kappat, cty, theta) <- withCtx (const delta) $ assertLater ty1'
+  --   kappa <- extractKappa kappat
+  --   theta `mustBeStableUnder` kappa
+  --   ctysubst <- substCtx theta cty
+  --   pure (ctysubst, theta)
+  --   where 
+  --     extractKappa (A _ kv) = 
+  --       case kv of
+  --         TExists k -> pure k
+  --         TVar    k -> pure k
+  --         TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
+  --         _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
 
   -- ->UnfoldE=>
   -- synthesize' (A uann (Prim Unfold) `App` e2) = do
@@ -1173,8 +1173,6 @@ existentialize :: forall a. a -> Destr a -> TypingM a (TyCtx a, Destr a)
 existentialize ann destr = do
   (nms, destr') <- foldrM folder ([], destr) (bound destr)
   ctx <- getCtx
-  -- TODO: Maintain information about kind of args when elaborating
-  -- for now, we hardcode *
   let ctx' = foldr (\(n,k) g -> g <+ Exists n k) ctx nms
   pure (ctx', destr')
   where
@@ -1229,12 +1227,30 @@ applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
               in  mempty <+ Exists a2 Star <+ Exists a1 Star <+ alpha := a1toa2
         in  appsynthforall alpha "αApp" articulated
 
-  -- ->TickVarApp
-  applysynth' (Later kappa cty) = do
-    ctx <- getCtx
-    rule "TickVarApp" (pretty ty <+> "•" <+> pretty e)
-    delta <- branch $ check e kappa
-    pure (cty, delta)
+  applysynth' (Later kappat cty) = do
+    case e of 
+      -- ->TickApp
+      A _ (Prim Tick) -> do
+        rule "TickApp" (pretty ty <+> "•" <+> pretty e)
+        kappa <- extractKappa kappat
+        ctx <- getCtx
+        ctx `mustBeStableUnder` kappa
+        pure (cty, ctx)
+        where 
+          extractKappa (A _ kv) = 
+            case kv of
+              TExists k -> pure k
+              TVar    k -> pure k
+              TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
+              _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
+      
+      -- ->TickVarApp
+      _ -> do
+        rule "TickVarApp" (pretty ty <+> "•" <+> pretty e)
+        ctx <- getCtx
+        delta <- branch $ check e kappat
+        pure (cty, delta)
+  
 
   -- ->App
   applysynth' (aty :->: cty) = do
