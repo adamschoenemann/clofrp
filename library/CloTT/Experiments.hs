@@ -129,3 +129,14 @@ type SP i o = Fix (SPF i o)
 idsp :: SP i i 
 idsp = fix (\f -> Into $ Get (\x -> Into (Put x f)))
   
+
+data A = A
+data B = B
+
+gen :: Bool -> Either A B
+gen b = 
+  case (\b' x -> x) :: Bool -> forall a. a -> a of 
+    f -> case f b b of
+        True -> Left (f b A)
+        False -> Right (f b B)
+

@@ -221,10 +221,27 @@ progSpec = do
         foo = \b ->
           case the (forall a. a -> a) (\x -> x) of
             | id -> case id b of
-              | True -> Right (id MkA)
-              | False -> Left (id MkB).
+              | True  -> Left (id MkA)
+              | False -> Right (id MkB).
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "A" `CannotSubtype` "Bool")
+
+    it "does not generalize functions in case stmts (2)" $ do
+      let Right prog = pprog [text|
+        data Either a b = Left a | Right b.
+        data A = MkA.
+        data B = MkB.
+        data Bool = True | False.
+
+        foo : Bool -> Either A B.
+        foo = \b ->
+          case the (Bool -> forall a. a -> a) (\b' x -> x) of
+            | id -> case id b b of
+              | True  -> Left (id b MkA)
+              | False -> Right (id b MkB).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+      -- runCheckProg mempty prog `shouldFailWith` (errs $ "A" `CannotSubtype` "Bool")
 
     it "succeeds for monomorphic patterns (1)" $ do
       let Right prog = pprog [text|
@@ -460,6 +477,23 @@ progSpec = do
             | Right x -> Just x.
       |]
       shouldFail $ runCheckProg mempty prog 
+
+    it "pattern matches on polymorphic defs correctly" $ do
+      let Right prog = pprog [text|
+        data Const a = Const (forall b. a).
+
+        unconst : forall a. Const a -> a.
+        unconst = \x ->
+          case x of
+          | Const c -> c.
+
+        unconst2 : forall a. Const (Const a) -> a.
+        unconst2 = \x ->
+          case x of
+          | Const (Const c) -> c.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog 
 
     it "fails for wrong patterns" $ do
       let Right prog = pprog [text|
@@ -1127,6 +1161,17 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
     
+    it "does not support pattern matching on impredicative types" $ do
+      let Right prog = pprog [text|
+        data Wrap a = MkWrap a.
+        data A = A.
+        foo : Wrap (forall a. a -> a) -> A.
+        foo = \w ->
+          case w of
+          | MkWrap id -> A.
+      |]
+      shouldFail $ runCheckProg mempty prog 
+
     it "cannot do higher-order unification" $ do
       let Right prog = pprog [text|
         data Bot = .

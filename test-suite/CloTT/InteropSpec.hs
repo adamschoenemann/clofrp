@@ -108,241 +108,242 @@ instance (ToHask c1 h1, ToHask c2 h2, ToHask c3 h3) => ToHask ('CTTuple '[c1,c2,
 type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTNat = 'CTFree "Nat"
 
-clott_add :: CloTT (CTStream :@: CTTuple [CTNat, CTNat] :->: CTStream :@: CTNat) SourcePos
-clott_add = [clott|
-  data NatF f = Z | S f deriving Functor.
-  type Nat = Fix (NatF).
-  s : Nat -> Nat.
-  s = \x -> fold (S x).
-  z : Nat.
-  z = fold Z.
+-- clott_add :: CloTT (CTStream :@: CTTuple [CTNat, CTNat] :->: CTStream :@: CTNat) SourcePos
+-- clott_add = [clott|
+--   data NatF f = Z | S f deriving Functor.
+--   type Nat = Fix (NatF).
+--   s : Nat -> Nat.
+--   s = \x -> fold (S x).
+--   z : Nat.
+--   z = fold Z.
 
-  data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
-  type Stream (k : Clock) a = Fix (StreamF k a).
+--   data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+--   type Stream (k : Clock) a = Fix (StreamF k a).
 
-  plus : Nat -> Nat -> Nat.
-  plus = \m n -> 
-    let body = \x ->
-      case x of
-        | Z -> n
-        | S (m', r) -> s r
-    in  primRec {NatF} body m.
+--   plus : Nat -> Nat -> Nat.
+--   plus = \m n -> 
+--     let body = \x ->
+--       case x of
+--         | Z -> n
+--         | S (m', r) -> s r
+--     in  primRec {NatF} body m.
 
-  app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
-  app = \lf la -> \\(af : k) -> 
-    let f = lf [af] in
-    let a = la [af] in
-    f a.
+--   app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
+--   app = \lf la -> \\(af : k) -> 
+--     let f = lf [af] in
+--     let a = la [af] in
+--     f a.
 
-  main : Stream K0 (Nat, Nat) -> Stream K0 Nat.
-  main = 
-    fix (\g pairs -> 
-      case unfold pairs of   
-        | Cons pair xs -> 
-          case pair of
-          | (x1, x2) -> fold (Cons (plus x1 x2) (app g xs))
-    ).
-|]
+--   main : Stream K0 (Nat, Nat) -> Stream K0 Nat.
+--   main = 
+--     fix (\g pairs -> 
+--       case unfold pairs of   
+--         | Cons pair xs -> 
+--           case pair of
+--           | (x1, x2) -> fold (Cons (plus x1 x2) (app g xs))
+--     ).
+-- |]
 
-addition_ex :: IO ()
-addition_ex = interact (unlines . process . lines) where
-  process = map (("result: " ++) . (show :: Int -> String)) . transform clott_add .
-            map (read :: String -> (Int,Int))
+-- addition_ex :: IO ()
+-- addition_ex = interact (unlines . process . lines) where
+--   process = map (("result: " ++) . (show :: Int -> String)) . transform clott_add .
+--             map (read :: String -> (Int,Int))
 
 
 interopSpec :: Spec
 interopSpec = do
-  describe "execute" $ do
-    it "works with bool" $ do
-      let prog = [clott|
-        data Bool = True | False.
-        main : Bool.
-        main = True.
-      |]
-      execute prog `shouldBe` True
+  describe "pending" $ it "pends" $ pending
+  -- describe "execute" $ do
+  --   it "works with bool" $ do
+  --     let prog = [clott|
+  --       data Bool = True | False.
+  --       main : Bool.
+  --       main = True.
+  --     |]
+  --     execute prog `shouldBe` True
 
-    it "works with nats" $ do
-      let prog = [clott|
-        data NatF f = Z | S f deriving Functor.
-        type Nat = Fix (NatF).
+  --   it "works with nats" $ do
+  --     let prog = [clott|
+  --       data NatF f = Z | S f deriving Functor.
+  --       type Nat = Fix (NatF).
 
-        s : Nat -> Nat.
-        s = \x -> fold (S x).
+  --       s : Nat -> Nat.
+  --       s = \x -> fold (S x).
 
-        z : Nat.
-        z = fold Z.
+  --       z : Nat.
+  --       z = fold Z.
 
-        main : Nat.
-        main = s (s (s (s (s z)))).
-      |]
-      execute prog `shouldBe` 5
+  --       main : Nat.
+  --       main = s (s (s (s (s z)))).
+  --     |]
+  --     execute prog `shouldBe` 5
     
-    it "it works for every-other" $ do
-      let prog = [clott|
-        data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
-        type Stream (k : Clock) a = Fix (StreamF k a).
-        data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+  --   it "it works for every-other" $ do
+  --     let prog = [clott|
+  --       data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+  --       type Stream (k : Clock) a = Fix (StreamF k a).
+  --       data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-        cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
+  --       cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+  --       cos = \x xs -> 
+  --         Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
 
-        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+  --       uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+  --       uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-        cons = \x xs -> fold (Cons x xs).
+  --       cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+  --       cons = \x xs -> fold (Cons x xs).
 
-        hdk : forall (k : Clock) a. Stream k a -> a.
-        hdk = \xs ->
-          case unfold xs of
-          | Cons x xs' -> x.
+  --       hdk : forall (k : Clock) a. Stream k a -> a.
+  --       hdk = \xs ->
+  --         case unfold xs of
+  --         | Cons x xs' -> x.
 
-        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
-        tlk = \xs ->
-          case unfold xs of
-          | Cons x xs' -> xs'.
+  --       tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+  --       tlk = \xs ->
+  --         case unfold xs of
+  --         | Cons x xs' -> xs'.
 
-        hd : forall a. CoStream a -> a.
-        hd = \xs -> hdk {K0} (uncos xs).
+  --       hd : forall a. CoStream a -> a.
+  --       hd = \xs -> hdk {K0} (uncos xs).
         
-        tl : forall a. CoStream a -> CoStream a.
-        tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+  --       tl : forall a. CoStream a -> CoStream a.
+  --       tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
 
-        eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
-        eof = \f xs -> 
-          let tl2 = tl (tl xs) in
-          let dtl = (\\(af : k) -> (f [af]) tl2) in
-          cos (hd xs) dtl.
+  --       eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
+  --       eof = \f xs -> 
+  --         let tl2 = tl (tl xs) in
+  --         let dtl = (\\(af : k) -> (f [af]) tl2) in
+  --         cos (hd xs) dtl.
 
-        eo : forall a. CoStream a -> CoStream a.
-        eo = fix eof.
+  --       eo : forall a. CoStream a -> CoStream a.
+  --       eo = fix eof.
 
-        data Bool = True | False.        
-        truefalse : forall (k : Clock). Stream k Bool.
-        truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
+  --       data Bool = True | False.        
+  --       truefalse : forall (k : Clock). Stream k Bool.
+  --       truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
 
-        main : Stream K0 Bool.
-        main = 
-          let Cos xs = eo (Cos truefalse) in
-          xs.
-      |]
-      take 10 (execute prog) `shouldBe` replicate 10 True
+  --       main : Stream K0 Bool.
+  --       main = 
+  --         let Cos xs = eo (Cos truefalse) in
+  --         xs.
+  --     |]
+  --     take 10 (execute prog) `shouldBe` replicate 10 True
 
-  describe "transform" $ do
-    it "works with Bool -> Bool" $ do
-      let prog = [clott|
-        data Bool = True | False.
-        main : Bool -> Bool.
-        main = \x -> 
-          case x of
-          | True -> False
-          | False -> True.
-      |]
-      transform prog False `shouldBe` True
+  -- describe "transform" $ do
+  --   it "works with Bool -> Bool" $ do
+  --     let prog = [clott|
+  --       data Bool = True | False.
+  --       main : Bool -> Bool.
+  --       main = \x -> 
+  --         case x of
+  --         | True -> False
+  --         | False -> True.
+  --     |]
+  --     transform prog False `shouldBe` True
 
-    it "works with double (Nat)" $ do
-      let prog = [clott|
-        data NatF f = Z | S f deriving Functor.
-        type Nat = Fix (NatF).
+  --   it "works with double (Nat)" $ do
+  --     let prog = [clott|
+  --       data NatF f = Z | S f deriving Functor.
+  --       type Nat = Fix (NatF).
 
-        s : Nat -> Nat.
-        s = \x -> fold (S x).
+  --       s : Nat -> Nat.
+  --       s = \x -> fold (S x).
 
-        z : Nat.
-        z = fold Z.
+  --       z : Nat.
+  --       z = fold Z.
 
-        plus : Nat -> Nat -> Nat.
-        plus = \m n -> 
-          let body = \x ->
-            case x of
-              | Z -> n
-              | S (m', r) -> s r
-          in  primRec {NatF} body m.
+  --       plus : Nat -> Nat -> Nat.
+  --       plus = \m n -> 
+  --         let body = \x ->
+  --           case x of
+  --             | Z -> n
+  --             | S (m', r) -> s r
+  --         in  primRec {NatF} body m.
 
-        main : Nat -> Nat.
-        main = \x -> plus x x.
-      |]
-      transform prog 5 `shouldBe` 10
+  --       main : Nat -> Nat.
+  --       main = \x -> plus x x.
+  --     |]
+  --     transform prog 5 `shouldBe` 10
     
-    it "works with wrapped types" $ do
-      let prog = [clott|
-        data Wrap a = Wrap a deriving Functor.
-        data Foo a = Foo (Wrap a) deriving Functor.
-        data Bool = True | False.
-        main : Foo Bool -> Bool.
-        main = \x ->
-          case x of
-          | Foo (Wrap b) -> b.
-      |]
-      transform prog (Foo (Wrap True)) `shouldBe` True
+  --   it "works with wrapped types" $ do
+  --     let prog = [clott|
+  --       data Wrap a = Wrap a deriving Functor.
+  --       data Foo a = Foo (Wrap a) deriving Functor.
+  --       data Bool = True | False.
+  --       main : Foo Bool -> Bool.
+  --       main = \x ->
+  --         case x of
+  --         | Foo (Wrap b) -> b.
+  --     |]
+  --     transform prog (Foo (Wrap True)) `shouldBe` True
     
-    it "works with tuples (1)" $ do
-      let prog = [clott|
-        data Bool = True | False.
-        main : Bool -> (Bool, Bool).
-        main = \x -> (x, x).
-      |]
-      transform prog True `shouldBe` (True, True)
+  --   it "works with tuples (1)" $ do
+  --     let prog = [clott|
+  --       data Bool = True | False.
+  --       main : Bool -> (Bool, Bool).
+  --       main = \x -> (x, x).
+  --     |]
+  --     transform prog True `shouldBe` (True, True)
 
-    it "works with tuples (2)" $ do
-      let prog = [clott|
-        data Bool = True | False.
-        main : Bool -> (Bool, Bool, Bool).
-        main = \x -> (x, x, x).
-      |]
-      transform prog True `shouldBe` (True, True, True)
+  --   it "works with tuples (2)" $ do
+  --     let prog = [clott|
+  --       data Bool = True | False.
+  --       main : Bool -> (Bool, Bool, Bool).
+  --       main = \x -> (x, x, x).
+  --     |]
+  --     transform prog True `shouldBe` (True, True, True)
 
-    it "it works for every-other" $ do
-      let prog = [clott|
-        data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
-        type Stream (k : Clock) a = Fix (StreamF k a).
-        data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+  --   it "it works for every-other" $ do
+  --     let prog = [clott|
+  --       data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+  --       type Stream (k : Clock) a = Fix (StreamF k a).
+  --       data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-        cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
+  --       cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+  --       cos = \x xs -> 
+  --         Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
 
-        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+  --       uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+  --       uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-        cons = \x xs -> fold (Cons x xs).
+  --       cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+  --       cons = \x xs -> fold (Cons x xs).
 
-        hdk : forall (k : Clock) a. Stream k a -> a.
-        hdk = \xs ->
-          case unfold xs of
-          | Cons x xs' -> x.
+  --       hdk : forall (k : Clock) a. Stream k a -> a.
+  --       hdk = \xs ->
+  --         case unfold xs of
+  --         | Cons x xs' -> x.
 
-        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
-        tlk = \xs ->
-          case unfold xs of
-          | Cons x xs' -> xs'.
+  --       tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+  --       tlk = \xs ->
+  --         case unfold xs of
+  --         | Cons x xs' -> xs'.
 
-        hd : forall a. CoStream a -> a.
-        hd = \xs -> hdk {K0} (uncos xs).
+  --       hd : forall a. CoStream a -> a.
+  --       hd = \xs -> hdk {K0} (uncos xs).
         
-        tl : forall a. CoStream a -> CoStream a.
-        tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+  --       tl : forall a. CoStream a -> CoStream a.
+  --       tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
 
-        eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
-        eof = \f xs -> 
-          let tl2 = tl (tl xs) in
-          let dtl = (\\(af : k) -> (f [af]) tl2) in
-          cos (hd xs) dtl.
+  --       eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
+  --       eof = \f xs -> 
+  --         let tl2 = tl (tl xs) in
+  --         let dtl = (\\(af : k) -> (f [af]) tl2) in
+  --         cos (hd xs) dtl.
 
-        eo : forall a. CoStream a -> CoStream a.
-        eo = fix eof.
+  --       eo : forall a. CoStream a -> CoStream a.
+  --       eo = fix eof.
 
-        data Bool = True | False.        
+  --       data Bool = True | False.        
 
-        main : CoStream Bool -> Stream K0 Bool.
-        main = \input ->
-          let Cos xs = eo input in
-          xs.
-      |]
-      let truefalse = True : False : truefalse :: [Bool]
-      let n = 2000
-      -- putStrLn . show $ take n (transform prog truefalse :: [Bool])
-      -- putStrLn . show $ take n (repeat True)
-      take n (transform prog truefalse) `shouldBe` replicate n True
+  --       main : CoStream Bool -> Stream K0 Bool.
+  --       main = \input ->
+  --         let Cos xs = eo input in
+  --         xs.
+  --     |]
+  --     let truefalse = True : False : truefalse :: [Bool]
+  --     let n = 2000
+  --     -- putStrLn . show $ take n (transform prog truefalse :: [Bool])
+  --     -- putStrLn . show $ take n (repeat True)
+  --     take n (transform prog truefalse) `shouldBe` replicate n True
