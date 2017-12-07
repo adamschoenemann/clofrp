@@ -437,7 +437,7 @@ instL ahat ty@(A a ty') =
           let ahat2 = Exists af2 t2k
           let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
           ctx' <- insertAt (Exists ahat tyk) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
-          omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
+          omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
           substed <- substCtx omega t2
           r <- withCtx (const omega) $ branch (af2 `instL` substed)
           pure r
@@ -466,7 +466,7 @@ instL ahat ty@(A a ty') =
           let ahat2 = Exists af2 Star
           let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
           ctx' <- insertAt (Exists ahat Star) (mempty <+ ahat1 <+ ahat2 <+ ahat := ltr)
-          omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
+          omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
           substed <- substCtx omega t2
           r <- withCtx (const omega) $ branch (af2 `instL` substed)
           pure r
@@ -544,7 +544,7 @@ instR ty@(A a ty') ahat =
             let ahat2 = Exists af2 t2k
             let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
             ctx' <- insertAt (Exists ahat tyk) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
-            omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
+            omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
             substed <- substCtx omega t2
             r <- withCtx (const omega) $ branch (substed `instR` af2)
             pure r
@@ -582,7 +582,7 @@ instR ty@(A a ty') ahat =
             let ahat2 = Exists af2 Star
             let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
             ctx' <- insertAt (Exists ahat Star) (mempty <+ ahat1 <+ ahat2 <+ ahat := ltr)
-            omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
+            omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
             substed <- substCtx omega t2
             r <- withCtx (const omega) $ branch (substed `instR` af2)
             pure r
