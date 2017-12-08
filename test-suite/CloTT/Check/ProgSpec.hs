@@ -303,6 +303,30 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
+    it "suceeds for nested match on type with foralls" $ do
+      let Right prog = pprog [text|
+        data Poly = MkPoly (forall a. a -> a).
+        data MorePoly = MorePoly Poly.
+        data Forall a = MkForall (forall b. a).
+        data Wrap a = MkWrap a.
+
+        mono1 : Poly -> forall a. a -> a.
+        mono1 = \x ->
+          case x of
+          | MkPoly id -> id.
+        
+        mono2 : MorePoly -> forall a. a -> a.
+        mono2 = \x ->
+          case x of
+          | MorePoly (MkPoly id) -> id.
+        
+        mono3 : forall a. Forall (Wrap a) -> a.
+        mono3 = \x ->
+          case x of
+          | MkForall (MkWrap y) -> y.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
     it "fails for not-deep-enough pattern matches" $ do
       let Right prog = pprog [text|
         data Wrap t = MkWrap t.

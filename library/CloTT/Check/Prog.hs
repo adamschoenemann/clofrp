@@ -323,8 +323,8 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
     -- we have explicit recursion allowed here. In the future, we should probably disallow this
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor
-        resetNameState
-        -- local (const ctx) $ check expr ty
+        -- resetNameState
+        local (const ctx) $ check expr ty
         censor (const []) $ local (const ctx) $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
