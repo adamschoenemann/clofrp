@@ -742,6 +742,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     pure delta
 
   -- Case<=
+  -- TODO: move all the marker insertion logic into checkCaseClauses instead
   check' (Case on clauses) _ = do
     root $ "[Case<=]" <+> pretty e <+> "<=" <+> pretty ty
     (pty, delta) <- branch $ synthesize on
@@ -854,6 +855,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- The marker is to make sure that the clauses can assign types to existentials
   -- that are in scope at the case-expr, but does not pollute the scope with new
   -- type variables that came into the context during the branch and body.
+  -- TODO: move all the marker insertion logic here instead of in Case<=
   checkCaseClauses :: Name -> Type a Poly -> [(Pat a, Expr a)] -> Type a Poly -> TypingM a (TyCtx a)
   checkCaseClauses markerName pty clauses expected = 
     case clauses of
