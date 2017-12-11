@@ -80,3 +80,9 @@ fmapE = A ?annotation . Fmap
 
 fixE :: (?annotation :: a) => Expr a
 fixE = A ?annotation $ Prim P.Fix
+
+foldE :: (?annotation :: a) => Expr a
+foldE = A ?annotation $ Prim P.Fold
+
+unfoldE :: (?annotation :: a) => Expr a
+unfoldE = A ?annotation $ Prim P.Unfold

@@ -56,17 +56,17 @@ instance ToCloTT Bool ('CTFree "Bool") where
 -- plus (S m) n = S (plus m n)
 
 instance ToHask ('CTFree "Nat") Int where
-  toHask (SFree px) (Constr "Z" [])  = 0
-  toHask (SFree px) (Constr "S" [r]) = succ (toHask (SFree px) r)
+  toHask (SFree px) (Fold (Constr "Z" []))  = 0
+  toHask (SFree px) (Fold (Constr "S" [r])) = succ (toHask (SFree px) r)
   toHask (SFree px) _                = undefined
 
 instance ToCloTT Int ('CTFree "Nat") where
-  toCloTT (SFree px) 0 = Constr "Z" [] 
-  toCloTT (SFree px) n = Constr "S" [toCloTT (SFree px) (n-1)] 
+  toCloTT (SFree px) 0 = Fold (Constr "Z" [])
+  toCloTT (SFree px) n = Fold (Constr "S" [toCloTT (SFree px) (n-1)])
   -- toCloTT (SFree px) _                = undefined
 
 instance ToHask t r => ToHask ('CTFree "Stream" :@: u :@: t) [r] where
-  toHask s@((s1 `SApp` s2) `SApp` s3) (Constr "Cons" [v, c]) = toHask s3 v : toHask s c
+  toHask s@((s1 `SApp` s2) `SApp` s3) (Fold (Constr "Cons" [v, c])) = toHask s3 v : toHask s c
   toHask s@((s1 `SApp` s2) `SApp` s3) v = error ("Expected Cons but got " ++ pps (takeConstr 2 v))
 
 data Wrap a = Wrap a
@@ -81,7 +81,7 @@ instance ToCloTT h c => ToCloTT (Foo h) ('CTFree "Foo" :@: c) where
 -- haskell lists to clott streams over k₀
 instance ToCloTT hask clott => ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) where
   toCloTT s@(s1 `SApp` s2) xs = clottStream xs where
-    clottStream (x : xs') = Constr "Cons" [toCloTT s2 x, clottStream xs']
+    clottStream (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, clottStream xs'])
     clottStream []        = runtimeErr "End of stream"
 
 -- haskell lists to clott coinductive streams 
@@ -341,8 +341,8 @@ interopSpec = do
           let Cos xs = eo input in
           xs.
       |]
-      let truefalse = True : False : truefalse :: [Bool]
-      let n = 2000
+      let n = 10
+      let truefalse = take n (True : False : truefalse :: [Bool]) -- TODO: remove take when non-strict
       -- putStrLn . show $ take n (transform prog truefalse :: [Bool])
       -- putStrLn . show $ take n (repeat True)
       take n (transform prog truefalse) `shouldBe` replicate n True

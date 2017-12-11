@@ -30,12 +30,16 @@ data PrimVal
   = IntVal Integer
   | Tick
   | RuntimeErr String
+  | FoldP
+  | UnfoldP
   deriving (Eq, Generic, NFData, Show, Data, Typeable)
 
 instance Pretty PrimVal where
   pretty = \case
     IntVal i -> pretty i
     Tick     -> "[<>]"
+    FoldP     -> "foldP"
+    UnfoldP     -> "unfoldP"
     RuntimeErr s -> fromString s
 
 -- instance Show PrimVal where show = show . pretty
@@ -49,7 +53,7 @@ data Value a
   | TickClosure (Env a) Name (Expr a)
   | Tuple [Value a]
   | Constr Name [Value a]
-  -- | Fold (Value a)
+  | Fold (Value a)
   deriving (Show, Eq, Generic, NFData, Data, Typeable)
 
 -- takes n levels down in a tree of constructors
@@ -64,16 +68,30 @@ takeConstr n v
         _            -> v
 
 instance Pretty (Value a) where
-  pretty value = case (takeConstr 10 value) of
-    Prim p -> pretty p
-    Var nm  -> pretty nm
-    TickVar nm  -> pretty nm
-    Closure env n e -> parens $ group $ "\\" <> pretty e <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pretty env)
-    TickClosure env n e -> parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> line <> indent 4 ("closed over" <+> pretty env)
-    Tuple vs -> tupled (map pretty vs)
-    Constr nm [] -> pretty nm
-    Constr nm vs -> parens $ pretty nm <+> fillSep (map pretty vs)
-    -- Fold v       -> parens $ "fold" <+> pretty v
+  pretty = prettyVal 2
+
+prettyVal :: Int -> Value a -> Doc ann
+prettyVal = pret where
+  pret :: Int -> Value a -> Doc ann
+  pret 0 _ = "..."
+  pret i value = 
+    case (takeConstr 10 value) of
+      Prim p -> pretty p
+      Var nm  -> pretty nm
+      TickVar nm  -> pretty nm
+      Closure env n e -> parens $ group $ "\\" <> pretty n <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pret i env)
+      TickClosure env n e -> 
+        let penv = if i > 0 then line <> indent 4 ("closed over" <+> prettyEnv i env)
+                            else ""
+        in  parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> penv
+      Tuple vs -> tupled (map (pret i) vs)
+      Constr nm [] -> pretty nm
+      Constr nm vs -> parens $ pretty nm <+> fillSep (map (pret i) vs)
+      Fold v       -> parens $ "fold" <+> (pret i v)
+    
+prettyEnv :: Int -> Env a -> Doc ann
+prettyEnv 0 _ = "..."
+prettyEnv i (Env e) = list $ M.elems $ M.mapWithKey (\k v -> pretty k <+> "↦" <+> align (prettyVal (i-1) v)) e
 
 newtype Env a = Env {unEnv :: Map Name (Value a)}
   deriving newtype (Eq, Monoid)
@@ -82,7 +100,7 @@ newtype Env a = Env {unEnv :: Map Name (Value a)}
 
 
 instance Pretty (Env a) where
-  pretty (Env e) = list $ M.elems $ M.mapWithKey (\k v -> pretty k <+> "↦" <+> align (pretty v)) e
+  pretty = prettyEnv 10 
 
 instance Show (Env a) where
   show = show . pretty

@@ -142,8 +142,8 @@ evalPrim :: (?annotation :: a) => P.Prim -> EvalM a (Value a)
 evalPrim = \case
   P.Unit             -> pure $ Constr "Unit" []
   P.Integer i        -> pure . Prim . IntVal $ i
-  P.Fold             -> pure (Closure mempty "x" (var "x"))
-  P.Unfold           -> pure (Closure mempty "x" (var "x"))
+  P.Fold             -> pure . Prim $ FoldP
+  P.Unfold           -> pure . Prim $ UnfoldP
   P.Tick             -> pure . Prim $ Tick
 
   -- fix ~> \f -> f (dfix f)
@@ -193,9 +193,8 @@ evalExprStep (A ann expr') =
       let conte = (primRec t `app` bdvar) `app` ivar
       let etup = tuple [ivar, conte]
       let fmaplam = lam iname Nothing etup
-      let fmape = (fmapE t `app` fmaplam) `app` ovar
+      let fmape = (fmapE t `app` fmaplam) `app` (unfoldE `app` ovar)
       evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
-    
       
     E.App e1 e2 -> do
       v1 <- evalExprStep e1
@@ -212,6 +211,12 @@ evalExprStep (A ann expr') =
 
         (Constr nm args, _) -> do
           pure $ Constr nm (args ++ [v2])
+        
+        (Prim FoldP, _) -> pure $ Fold v2
+        (Prim UnfoldP, _) -> 
+          case v2 of 
+            Fold v -> pure v
+            _      -> otherErr $ show $ "Expected (fold _) but got" <+> pretty v2
         
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim (RuntimeErr _)) -> pure v2
@@ -261,11 +266,12 @@ force = \case
   => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
 -}
 evalExprCorec :: Expr a -> EvalM a (Value a)
-evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
+evalExprCorec expr = go (100000 :: Int) =<< evalExprStep expr where 
   go n v | n <= 0 = pure v
   go n v = do
     case v of
       Constr nm vs -> Constr nm <$> evalMany n vs
+      Fold v -> Fold <$> (go (n-1) =<< force v)
       _ -> pure v
 
   evalMany _ [] = pure []

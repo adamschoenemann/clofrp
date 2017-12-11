@@ -120,7 +120,13 @@ evalSpec = do
 
       it "evals case expressions (5)" $ do
         eval m (p3 (E.tup [E.int 1, E.int 2])) `shouldBe` (int 10)
-    
+
+      it "evals fold" $ do
+        eval m (unann [unsafeExpr| fold Z |]) `shouldBe` (Fold (Constr "Z" []))
+
+      it "evals unfold" $ do
+        eval m (unann [unsafeExpr| unfold (fold Z) |]) `shouldBe` (Constr "Z" [])
+
     describe "fixpoints" $ do
       it "evals first iter of const stream correctly" $ do
         {-
@@ -141,7 +147,7 @@ evalSpec = do
         |]
         let m = [cons]
         case eval m p of 
-          (Constr "Cons" [Prim (IntVal 1), TickClosure _ "#alpha" b]) -> 
+          (Fold (Constr "Cons" [Prim (IntVal 1), TickClosure _ "#alpha" b])) -> 
             b `shouldBe` (E.fixp @@ "#f")
           e  -> failure ("did not expect " ++ show (pretty e))
 
@@ -164,13 +170,13 @@ evalSpec = do
                   in  cons (f x) ys 
             in fix mapfix in
           let const = \x ->
-             let body = \xs -> Cons x xs
+             let body = \xs -> cons x xs
              in  fix body
-          in strmap S (const Z)
+          in strmap (\x -> fold (S x)) (const (fold Z))
         |]
         let m = [s,z,cons]
         case eval m p of 
-          (Constr "Cons" [Constr "S" [Constr "Z" []], TickClosure _ _ e]) ->
+          (Fold (Constr "Cons" [Fold (Constr "S" [Fold (Constr "Z" [])]), TickClosure _ _ e])) ->
             e `shouldBe` "g" @@ "[af]" @@ ("xs'" @@ "[af]")
           e  -> failure ("did not expect " ++ show (pretty e))
     
@@ -179,11 +185,11 @@ evalSpec = do
           runEvalM (evalExprCorec x) (mempty { erEnv = environ })
 
     let evcorec0 x = evcorec mempty x
-    it "forever terminates with primitives" $ do
+    it "terminates with primitives" $ do
       evcorec0 (E.int 10) `shouldBe` (int 10)
       evcorec [just] ("Just" @@ E.int 10) `shouldBe` (Constr "Just" [int 10])
 
-    it "forever terminates with 2-step comp" $ do
+    it "terminates with 2-step comp" $ do
       let e = "Cons" @@ E.int 1 @@ (("af", "k") `E.tAbs` ("Cons" @@ E.int 2 @@ "Nil"))
       evcorec [cons, nil] e `shouldBe` (Constr "Cons" [int 1, Constr "Cons" [int 2, Constr "Nil" []]])
     
@@ -192,7 +198,7 @@ evalSpec = do
         let const = \x ->
             let body = \xs -> fold (Cons x xs)
             in  fix body
-        in const Z
+        in const (fold Z)
       |]
       let m = [s,z,cons]
 
@@ -312,7 +318,7 @@ evalSpec = do
 
         cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
+          Cos (cons x (\\(af : k) -> uncos (xs [af]))). -- won't work with map :(
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
@@ -349,7 +355,7 @@ evalSpec = do
           let Cos xs = eo (Cos truefalse) in
           xs.
       |]
-      takeValueList vboolToBool 1000 (evalProg "trues" prog) `shouldBe` (replicate 1000 True)
+      takeValueList vboolToBool 10 (evalProg "trues" prog) `shouldBe` (replicate 10 True)
     
     it "evals fmap" $ do
       let Right prog = pprog [text|
@@ -422,8 +428,8 @@ evalSpec = do
       => body (S (S Z))
       -} 
       let v = evalProg "main" prog
-      let n 0 = Constr "Z" []
-          n k = Constr "S" [n (k-1)]
+      let n 0 = Fold (Constr "Z" [])
+          n k = Fold (Constr "S" [n (k-1)])
       v `shouldBe` n (10 :: Int)
       -- putStrLn (replicate 80 '-')
       -- putStrLn (pps v)
@@ -444,7 +450,8 @@ evalSpec = do
         
 data Tree a = Leaf a | Br (Tree a) (Tree a) deriving (Eq, Show)
 takeTree :: Value a -> Tree String
-takeTree (Constr "Leaf" [Constr "Z" []]) = Leaf "Z"
+takeTree (Fold v) = takeTree v
+takeTree (Constr "Leaf" [Fold (Constr "Z" [])]) = Leaf "Z"
 takeTree (Constr "Br" [t1, t2]) = Br (takeTree t1) (takeTree t2)
 takeTree v = error $ pps v
 
@@ -452,10 +459,10 @@ ofHeight :: a -> Int -> Tree a
 ofHeight x 0 = Leaf x 
 ofHeight x n = Br (ofHeight x (n-1)) (ofHeight x (n-1))
 
-
 vnatToInt :: Value a -> Int
 vnatToInt (Constr "Z" _) = 0
 vnatToInt (Constr "S" [v]) = succ (vnatToInt v)
+vnatToInt (Fold v) = vnatToInt v
 vnatToInt v = error $ "vnatToInt: " ++ pps (takeConstr 10 v)
 
 vboolToBool :: Value a -> Bool
@@ -470,6 +477,7 @@ takeValueList f n v
   | n <= 0    = []
   | otherwise = 
       case v of
+        Fold v' -> takeValueList f n v'
         Constr "Cons" [] -> []
         Constr "Cons" (v':vs) -> f v' : concatMap (takeValueList f (n-1)) vs
         _            -> [f v]
