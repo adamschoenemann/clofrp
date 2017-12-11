@@ -138,14 +138,18 @@ evalClause val (p, e) = do
     Right env' -> Right <$> (withEnv (const env') $ evalExprStep e)
     Left err -> pure $ Left err
 
-evalPrim :: P.Prim -> EvalM a (Value a)
+evalPrim :: (?annotation :: a) => P.Prim -> EvalM a (Value a)
 evalPrim = \case
   P.Unit             -> pure $ Constr "Unit" []
   P.Integer i        -> pure . Prim . IntVal $ i
-  P.Fold             -> pure . Prim $ Fold
-  P.Unfold           -> pure . Prim $ Unfold
+  P.Fold             -> pure (Closure mempty "x" (var "x"))
+  P.Unfold           -> pure (Closure mempty "x" (var "x"))
   P.Tick             -> pure . Prim $ Tick
-  P.Fix              -> pure . Prim $ Fix
+
+  -- fix ~> \f -> f (dfix f)
+  -- fix ~> \f -> f (\\(af). fix f)
+  P.Fix              -> 
+    evalExprStep (lam' "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f"))
   P.Undefined        -> otherErr $ "Undefined!"
 
 evalExprStep :: Expr a -> EvalM a (Value a)
@@ -166,6 +170,18 @@ evalExprStep (A ann expr') =
       pure (TickClosure env x e)
     
     E.Fmap t -> fmapFromType t
+
+    {-
+    E |- (\body outer -> body (fmap_F (\inner -> <inner, primRec_F body inner>) outer)) \\ v
+    ---------------
+    E |- primRec_F \\ v
+
+    primRec body x
+    => body (fmap (\x -> (x, primRec body x)) x) 
+
+    primRec body
+    => \x -> body (fmap (\x -> (x, primRec body x)) x)
+    -}
     E.PrimRec t -> do
       let oname = UName "__outer__"
       let ovar = var oname
@@ -179,6 +195,7 @@ evalExprStep (A ann expr') =
       let fmaplam = lam iname Nothing etup
       let fmape = (fmapE t `app` fmaplam) `app` ovar
       evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
+    
       
     E.App e1 e2 -> do
       v1 <- evalExprStep e1
@@ -196,46 +213,7 @@ evalExprStep (A ann expr') =
         (Constr nm args, _) -> do
           pure $ Constr nm (args ++ [v2])
         
-        (Prim Unfold, _) -> pure v2
-        (Prim Fold, _)   -> pure v2
-
-        -- fix f ~> f (dfix f)
-        -- fix f ~> f (\\(af). fix f)
-
-        --    f =>σ (\x. e1', σ')       e1' =>(σ, x ↦ \\af. fix f, σ') v
-        --  ----------------------------------------------------------------
-        --                      fix f =>σ v
-        (Prim Fix, Closure cenv nm e2') -> do
-          let fixe = prim P.Fix
-          env <- getEnv
-          let cenv' = extendEnv nm (TickClosure env (DeBruijn 0) $ fixe `app` e2) cenv
-          withEnv (combine cenv') $ evalExprStep e2'
         
-        -- (GetFmap f, v) -> do
-        --   fm <- lookupFmap ann v
-        --   evalExprStep ((fm `app` f `app`) e2)
-        
-        {-
-        primRec body x
-        => body (fmap (\x -> (x, primRec body x)) x) 
-
-        primRec body
-        => \x -> body (fmap (\x -> (x, primRec body x)) x)
-        -}
-        -- (Prim PrimRec, _) -> do
-        --   let oname = UName "__outer__"
-        --   let ovar = var oname
-        --   let iname = UName "__inner__"
-        --   let ivar = var iname
-
-        --   let conte = (prim P.PrimRec `app` e2) `app` ivar
-        --   let etup = tuple [ivar, conte]
-        --   let fmaplam = lam iname Nothing etup
-        --   let fmape = (prim E.Fmap `app` fmaplam) `app` ovar
-        --   let bdeapp = e2 `app` fmape 
-        --   env <- getEnv
-        --   let r = Closure env oname bdeapp
-        --   pure $ r
         
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim (RuntimeErr _)) -> pure v2

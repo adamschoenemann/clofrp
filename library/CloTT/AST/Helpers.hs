@@ -77,3 +77,6 @@ primRec = A ?annotation . PrimRec
 
 fmapE :: (?annotation :: a) => Type a Poly -> Expr a
 fmapE = A ?annotation . Fmap
+
+fixE :: (?annotation :: a) => Expr a
+fixE = A ?annotation $ Prim P.Fix

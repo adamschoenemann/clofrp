@@ -141,8 +141,8 @@ evalSpec = do
         |]
         let m = [cons]
         case eval m p of 
-          (Constr "Cons" [Prim (IntVal 1), TickClosure _ (E.DeBruijn 0) b]) -> 
-            b `shouldBe` (E.fixp @@ "body")
+          (Constr "Cons" [Prim (IntVal 1), TickClosure _ "#alpha" b]) -> 
+            b `shouldBe` (E.fixp @@ "#f")
           e  -> failure ("did not expect " ++ show (pretty e))
 
       it "evals first iter of strmap correctly" $ do

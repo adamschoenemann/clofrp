@@ -29,10 +29,8 @@ import qualified CloTT.AST.Expr as E
 data PrimVal
   = IntVal Integer
   | Tick
-  | Fold
-  | Unfold
   | PrimRec
-  | Fix 
+  -- | Fix 
   | RuntimeErr String
   -- | Fmap
   deriving (Eq, Generic, NFData, Show, Data, Typeable)
@@ -41,10 +39,8 @@ instance Pretty PrimVal where
   pretty = \case
     IntVal i -> pretty i
     Tick     -> "[<>]"
-    Fold     -> "fold"
-    Unfold   -> "unfold"
     PrimRec  -> "primRec"
-    Fix      -> "fix"
+    -- Fix      -> "fix"
     -- Fmap     -> "__fmap__"
     RuntimeErr s -> fromString s
 
