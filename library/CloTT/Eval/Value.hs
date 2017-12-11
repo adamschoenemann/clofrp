@@ -49,6 +49,7 @@ data Value a
   | TickClosure (Env a) Name (Expr a)
   | Tuple [Value a]
   | Constr Name [Value a]
+  -- | Fold (Value a)
   deriving (Show, Eq, Generic, NFData, Data, Typeable)
 
 -- takes n levels down in a tree of constructors
@@ -72,7 +73,7 @@ instance Pretty (Value a) where
     Tuple vs -> tupled (map pretty vs)
     Constr nm [] -> pretty nm
     Constr nm vs -> parens $ pretty nm <+> fillSep (map pretty vs)
-    -- GetFmap e -> "__getfmap__" <+> parens (pretty e)
+    -- Fold v       -> parens $ "fold" <+> pretty v
 
 newtype Env a = Env {unEnv :: Map Name (Value a)}
   deriving newtype (Eq, Monoid)

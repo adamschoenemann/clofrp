@@ -35,19 +35,32 @@ import CloTT.AST.Utils
 type Expr a = Annotated a (Expr' a)
 
 data Expr' a
-  = Var Name -- x
-  | TickVar Name -- [x]
-  | Ann (Expr a) (Type a Poly) -- the τ a
-  | App (Expr a) (Expr a) -- e1 e2
-  | Lam Name (Maybe (Type a Poly)) (Expr a) -- λx -> e OR λ(x : A) -> e
-  | TickAbs Name Name (Expr a) -- λ(α : κ) -> e
-  | Tuple [Expr a] -- n-ary tuples
-  | Let (Pat a) (Expr a) (Expr a) -- let p = e1 in e2
-  | Case (Expr a) [(Pat a, Expr a)] -- case e of | p -> e | p1 -> e1 | pn -> en
-  | TypeApp (Expr a) (Type a Poly) -- e {τ}
-  | Fmap (Type a Poly) -- fmap τ
-  | PrimRec (Type a Poly) -- primRec τ
-  | Prim P.Prim -- primitive (will probably just include ints in the end)
+  -- | x
+  = Var Name 
+  -- | [x]
+  | TickVar Name 
+  -- | e : A
+  | Ann (Expr a) (Type a Poly) 
+  -- | e1 e2
+  | App (Expr a) (Expr a) 
+  -- | \x -> e OR \(x : A) -> e
+  | Lam Name (Maybe (Type a Poly)) (Expr a) 
+  -- | \\(α : κ) -> e
+  | TickAbs Name Name (Expr a) 
+  -- | n-ary tuples  
+  | Tuple [Expr a] 
+  -- | let p = e1 in e2  
+  | Let (Pat a) (Expr a) (Expr a) 
+  -- | case e of | p -> e | p1 -> e1 | pn -> en  
+  | Case (Expr a) [(Pat a, Expr a)] 
+  -- | e {A}  
+  | TypeApp (Expr a) (Type a Poly) 
+  -- | fmap A  
+  | Fmap (Type a Poly) 
+  -- | primRec A  
+  | PrimRec (Type a Poly) 
+  -- | primitive (will probably just include ints in the end)  
+  | Prim P.Prim 
   deriving (Eq, Data, Typeable, Generic, NFData)
 
 

@@ -35,11 +35,16 @@ import CloTT.Utils (findMap)
 data Binding = LamB | LetB deriving (Eq, Show)
 
 data CtxElem a
-  = Uni Name Kind -- ^ Universal
-  | Exists Name Kind -- ^ Existential
-  | (Binding, Name) `HasType` Type a Poly -- ^ (λ?)x : A
-  | Name := Type a Mono -- ^ a = t
-  | Marker Name -- ^ |>a
+  -- | Universal  
+  = Uni Name Kind 
+  -- | Existential  
+  | Exists Name Kind 
+  -- | (λ?)x : A  
+  | (Binding, Name) `HasType` Type a Poly 
+  -- | a = t  
+  | Name := Type a Mono 
+  -- | |>a  
+  | Marker Name 
   deriving Eq
 
 instance Unann (CtxElem a) (CtxElem ()) where
