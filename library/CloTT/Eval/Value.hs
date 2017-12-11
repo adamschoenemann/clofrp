@@ -29,19 +29,13 @@ import qualified CloTT.AST.Expr as E
 data PrimVal
   = IntVal Integer
   | Tick
-  | PrimRec
-  -- | Fix 
   | RuntimeErr String
-  -- | Fmap
   deriving (Eq, Generic, NFData, Show, Data, Typeable)
 
 instance Pretty PrimVal where
   pretty = \case
     IntVal i -> pretty i
     Tick     -> "[<>]"
-    PrimRec  -> "primRec"
-    -- Fix      -> "fix"
-    -- Fmap     -> "__fmap__"
     RuntimeErr s -> fromString s
 
 -- instance Show PrimVal where show = show . pretty
@@ -55,7 +49,6 @@ data Value a
   | TickClosure (Env a) Name (Expr a)
   | Tuple [Value a]
   | Constr Name [Value a]
-  -- | GetFmap (Expr a)
   deriving (Show, Eq, Generic, NFData, Data, Typeable)
 
 -- takes n levels down in a tree of constructors

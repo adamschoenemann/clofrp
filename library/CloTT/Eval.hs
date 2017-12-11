@@ -213,8 +213,6 @@ evalExprStep (A ann expr') =
         (Constr nm args, _) -> do
           pure $ Constr nm (args ++ [v2])
         
-        
-        
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim (RuntimeErr _)) -> pure v2
 
