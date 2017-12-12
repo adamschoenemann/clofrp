@@ -61,11 +61,11 @@ data CloTy
 -- |Singleton representation to lift Ty into types
 -- using kind-promotion
 data Sing :: CloTy -> * where
-  SFree   :: KnownSymbol s => Proxy s -> Sing (CTFree s)
-  SPair   :: Sing t1 -> Sing t2           -> Sing (CTTuple '[t1, t2])
-  STup    :: Sing t  -> Sing (CTTuple ts) -> Sing (CTTuple (t ': ts))
-  SApp    :: Sing t1 -> Sing t2           -> Sing (t1 :@:  t2)
-  SArr    :: Sing t1 -> Sing t2           -> Sing (t1 :->: t2)
+  SFree   :: KnownSymbol s => Proxy s -> Sing ('CTFree s)
+  SPair   :: Sing t1 -> Sing t2           -> Sing ('CTTuple '[t1, t2])
+  STup    :: Sing t  -> Sing ('CTTuple ts) -> Sing ('CTTuple (t ': ts))
+  SApp    :: Sing t1 -> Sing t2           -> Sing (t1 ':@:  t2)
+  SArr    :: Sing t1 -> Sing t2           -> Sing (t1 ':->: t2)
 
 instance Show (Sing ct) where
   show x = case x of
@@ -76,7 +76,7 @@ instance Show (Sing ct) where
     STup t ts -> 
       "(" ++ show t ++ ", " ++ tupShow ts
       where
-        tupShow :: Sing (CTTuple ts') -> String
+        tupShow :: Sing ('CTTuple ts') -> String
         tupShow (SPair x y) = show x ++ ", " ++ show y ++ ")"
         tupShow (STup t' ts') = show t' ++ ", " ++ tupShow ts'
 
@@ -149,10 +149,10 @@ class ToHask (t :: CloTy) (r :: *) | t -> r where
 class ToCloTT (r :: *) (t :: CloTy) | t -> r where
   toCloTT :: Sing t -> r -> Value a
 
-execute :: ToHask t r => CloTT t a -> r
+execute :: (Pretty a, ToHask t r) => CloTT t a -> r
 execute (CloTT er st expr sing) = toHask sing $ runEvalMState (evalExprCorec expr) er st
 
-transform :: (ToCloTT hask1 clott1, ToHask clott2 hask2)
+transform :: (Pretty a, ToCloTT hask1 clott1, ToHask clott2 hask2)
           => CloTT (clott1 :->: clott2) a -> hask1 -> hask2
 transform (CloTT er st expr (SArr s1 s2)) input = toHask s2 $ runEvalMState (evl expr) er st where
   evl e = do 

@@ -42,7 +42,7 @@ import qualified CloTT.AST as E
 runtimeErr :: String -> Value a
 runtimeErr = Prim . RuntimeErr
 
-globalLookup :: Name -> EvalM a (Maybe (Value a))
+globalLookup :: Pretty a => Name -> EvalM a (Maybe (Value a))
 globalLookup nm = do
   globals <- getGlobals
   case M.lookup nm globals of
@@ -50,7 +50,7 @@ globalLookup nm = do
     Just (Right v) -> pure . Just $ v
     Just (Left e) -> Just <$> evalExprStep e
     
-lookupVar :: Name -> EvalM a (Value a)
+lookupVar :: Pretty a => Name -> EvalM a (Value a)
 lookupVar nm = do
   inEnv <- envLookup nm <$> getEnv 
   inGlob <- globalLookup nm 
@@ -75,7 +75,7 @@ fmapNat ann =
       ]
      ) 
 
-fmapFromType :: Type a 'Poly -> EvalM a (Value a)
+fmapFromType :: Pretty a => Type a 'Poly -> EvalM a (Value a)
 fmapFromType ty = findInstanceOf "Functor" ty >>= \case
   Just (ClassInstance {ciDictionary = dict}) -> 
     maybe (pure $ runtimeErr "Functor without fmap!!") (evalExprStep . snd) (M.lookup "fmap" dict)
@@ -120,7 +120,7 @@ evalPat pat@(A _ p) v =
         folder (p', v') (Right acc) = withEnv (const acc) $ evalPat p' v'
         folder _  (Left err)  = pure (Left err)
 
-evalClauses :: Value a -> [(Pat a, Expr a)] -> EvalM a (Value a)
+evalClauses :: Pretty a => Value a -> [(Pat a, Expr a)] -> EvalM a (Value a)
 evalClauses (Prim (RuntimeErr e)) _ = pure (runtimeErr e)
 evalClauses value clauses = helper value clauses where
   helper val [] = 
@@ -131,14 +131,14 @@ evalClauses value clauses = helper value clauses where
       Right v -> pure v
       Left  e -> helper val cs
 
-evalClause :: Value a -> (Pat a, Expr a) -> EvalM a (Either String (Value a))
+evalClause :: Pretty a => Value a -> (Pat a, Expr a) -> EvalM a (Either String (Value a))
 evalClause val (p, e) = do
   envE <- evalPat p val
   case envE of
     Right env' -> Right <$> (withEnv (const env') $ evalExprStep e)
     Left err -> pure $ Left err
 
-evalPrim :: (?annotation :: a) => P.Prim -> EvalM a (Value a)
+evalPrim :: (Pretty a, ?annotation :: a) => P.Prim -> EvalM a (Value a)
 evalPrim = \case
   P.Unit             -> pure $ Constr "Unit" []
   P.Integer i        -> pure . Prim . IntVal $ i
@@ -152,7 +152,7 @@ evalPrim = \case
     evalExprStep (lam' "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f"))
   P.Undefined        -> otherErr $ "Undefined!"
 
-evalExprStep :: Expr a -> EvalM a (Value a)
+evalExprStep :: Pretty a => Expr a -> EvalM a (Value a)
 evalExprStep (A ann expr') = 
   let ?annotation = ann
   in  case expr' of
@@ -196,7 +196,6 @@ evalExprStep (A ann expr') =
       let fmape = (fmapE t `app` fmaplam) `app` (unfoldE `app` ovar)
       evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
       
-      
     E.App e1 e2 -> do
       v1 <- evalExprStep e1
       v2 <- evalExprStep e2
@@ -219,10 +218,11 @@ evalExprStep (A ann expr') =
             Fold v -> pure v
             _      -> otherErr $ show $ "Expected (fold _) but got" <+> pretty v2
         
+        (_, Prim Tick) -> pure v1
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim (RuntimeErr _)) -> pure v2
 
-        _ -> otherErr $ show $ "Expected" <+> pretty v1 <+> "to be a lambda or something"
+        _ -> otherErr $ show $  pretty v1 <+> pretty v2 <+> "is not a legal application at" <+> pretty ann
 
           
     
@@ -256,17 +256,17 @@ coindplz = let Right x = runTestM loop in x where
   runTestM :: TestM r -> Either () r
   runTestM x = runExcept (runReaderT x ())
 
-force :: Value a -> EvalM a (Value a)
+force :: Pretty a => Value a -> EvalM a (Value a)
 force = \case
-  TickClosure cenv nm e -> 
-    withEnv (\e -> combine e (extendEnv nm (Prim Tick) cenv)) $ evalExprStep e
+  TickClosure cenv nm expr -> 
+    withEnv (\e -> combine e (extendEnv nm (Prim Tick) cenv)) $ evalExprStep expr
   v -> pure v
 
 {- evalExprCorec (fix (\g -> cons z g))
   => Constr "Cons" [Constr "Z" [], TickClosure _ _ e]
   => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
 -}
-evalExprCorec :: Expr a -> EvalM a (Value a)
+evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
 evalExprCorec expr = go (100000 :: Int) =<< evalExprStep expr where 
   go n v | n <= 0 = pure v
   go n v = do
@@ -295,7 +295,7 @@ progToEval mainnm pr = do
       in  Right (maindef, mainty, initRead, initState)
     Nothing -> Left $ "No main definition of name " ++ pps mainnm ++ " found"
 
-evalProg :: Name -> Prog a -> Value a
+evalProg :: Pretty a => Name -> Prog a -> Value a
 evalProg mainnm pr =
   case progToEval mainnm pr of
     Right (expr, _ty, er, es) -> runEvalMState (evalExprCorec expr) er es

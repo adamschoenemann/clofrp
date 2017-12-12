@@ -40,7 +40,7 @@ instance Pretty PrimVal where
     Tick     -> "[<>]"
     FoldP     -> "foldP"
     UnfoldP     -> "unfoldP"
-    RuntimeErr s -> fromString s
+    RuntimeErr s -> "RUNTIMEERR:" <+> fromString s
 
 -- instance Show PrimVal where show = show . pretty
 

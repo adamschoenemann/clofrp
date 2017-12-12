@@ -67,7 +67,7 @@ instance ToCloTT Int ('CTFree "Nat") where
 
 instance ToHask t r => ToHask ('CTFree "Stream" :@: u :@: t) [r] where
   toHask s@((s1 `SApp` s2) `SApp` s3) (Fold (Constr "Cons" [v, c])) = toHask s3 v : toHask s c
-  toHask s@((s1 `SApp` s2) `SApp` s3) v = error ("Expected Cons but got " ++ pps (takeConstr 2 v))
+  toHask s@((s1 `SApp` s2) `SApp` s3) v = error ("Expected fold (Cons x ..) but got " ++ pps (takeConstr 2 v))
 
 data Wrap a = Wrap a
 data Foo a = Foo (Wrap a)
@@ -334,7 +334,7 @@ interopSpec = do
         eo : forall a. CoStream a -> CoStream a.
         eo = fix eof.
 
-        data Bool = True | False.        
+        data Bool = True | False.
 
         main : CoStream Bool -> Stream K0 Bool.
         main = \input ->
@@ -342,7 +342,7 @@ interopSpec = do
           xs.
       |]
       let n = 10
-      let truefalse = take n (True : False : truefalse :: [Bool]) -- TODO: remove take when non-strict
+      let truefalse = (True : False : truefalse :: [Bool])
       -- putStrLn . show $ take n (transform prog truefalse :: [Bool])
       -- putStrLn . show $ take n (repeat True)
       take n (transform prog truefalse) `shouldBe` replicate n True
