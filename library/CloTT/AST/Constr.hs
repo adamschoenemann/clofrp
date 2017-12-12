@@ -20,7 +20,7 @@ import CloTT.AST.Type
 
 type Constr a = Annotated a (Constr' a)
 data Constr' a
-  = Constr Name [Type a Poly]
+  = Constr Name [Type a 'Poly]
 
 instance Pretty (Constr a) where
   pretty (A _ c) = prettyC c where

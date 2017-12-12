@@ -49,7 +49,7 @@ type Decl a = Annotated a (Decl' a)
 data Decl' a
   = FunD Name (Expr a)
   | DataD (Datatype a)
-  | SigD Name (Type a Poly)
+  | SigD Name (Type a 'Poly)
   | AliasD (Alias a)
 
 instance Pretty (Decl a) where
@@ -129,7 +129,7 @@ sum = \xs ->
 var :: Name -> Expr ()
 var = A () . Var 
 
-free :: Name -> Type () Poly
+free :: Name -> Type () 'Poly
 free nm = A () $ TFree nm
 
 unit :: Expr ()
@@ -153,10 +153,10 @@ foldf = A () . Prim $ P.Fold
 unfoldf :: Expr ()
 unfoldf = A () . Prim $ P.Unfold
 
-the :: Type () Poly -> Expr () -> Expr ()
+the :: Type () 'Poly -> Expr () -> Expr ()
 the t e = A () $ Ann e t
 
-constr :: Name -> [Type () Poly] -> Constr ()
+constr :: Name -> [Type () 'Poly] -> Constr ()
 constr nm ts = A () $ Constr nm ts
 
 datad :: Name -> [(Name, Kind)] -> [Constr ()] -> Decl ()
@@ -165,30 +165,30 @@ datad nm bs cs = A () $ DataD (Datatype nm bs cs [])
 fund :: Name -> Expr () -> Decl ()
 fund nm e =  A () $ FunD nm e
 
-sigd :: Name -> Type () Poly -> Decl ()
+sigd :: Name -> Type () 'Poly -> Decl ()
 sigd nm t =  A () $ SigD nm t
 
-aliasd :: Name -> [Name] -> Type () Poly -> Decl ()
+aliasd :: Name -> [Name] -> Type () 'Poly -> Decl ()
 aliasd nm bs t = A () $ AliasD (Alias nm (map (,Star) bs) t)
 
 prog :: [Decl ()] -> Prog ()
 prog = Prog
 
-forAll :: [String] -> Type () Poly -> Type () Poly
+forAll :: [String] -> Type () 'Poly -> Type () 'Poly
 forAll nms t = foldr fn t $ map UName nms where
   fn nm acc = A () $ Forall nm Star acc
 
-forAll' :: [(Name, Kind)] -> Type () Poly -> Type () Poly
+forAll' :: [(Name, Kind)] -> Type () 'Poly -> Type () 'Poly
 forAll' nms t = foldr fn t $ nms where
   fn (nm,k) acc = A () $ Forall nm k acc
 
-clocks :: [String] -> Type () Poly -> Type () Poly
+clocks :: [String] -> Type () 'Poly -> Type () 'Poly
 clocks nms t = forAll' (map (\x -> (UName x, ClockK)) nms) t
 
-recTy :: Type () Poly -> Type () Poly
+recTy :: Type () 'Poly -> Type () 'Poly
 recTy t = A () $ RecTy t
 
-tTup :: [Type () Poly] -> Type () Poly
+tTup :: [Type () 'Poly] -> Type () 'Poly
 tTup = A () . TTuple
 
 exists :: Name -> Type () a
@@ -215,10 +215,10 @@ tAbs (a, k) e = A () $ TickAbs a k e
 lete :: Pat () -> Expr () -> Expr () -> Expr ()
 lete p e1 e2 = A () $ Let p e1 e2
 
-later :: Name -> Type () Poly -> Type () Poly
+later :: Name -> Type () 'Poly -> Type () 'Poly
 later n t = A () $ Later (A () $ TVar n) t
 
-typeapp :: Expr () -> Type () Poly -> Expr ()
+typeapp :: Expr () -> Type () 'Poly -> Expr ()
 typeapp e t = A () $ TypeApp e t
 
 tick :: Expr () 
@@ -240,7 +240,7 @@ class IsString a => LamCalc a t | a -> t where
   (@::) :: a -> t -> a
 
 
-instance LamCalc (Expr ()) (Type () Poly) where
+instance LamCalc (Expr ()) (Type () 'Poly) where
   nm @-> e = A () $ Lam (UName nm) Nothing e
   (nm, t) @:-> e = A () $ Lam (UName nm) (Just t) e
 
@@ -274,10 +274,10 @@ unannP :: Prog a -> Prog ()
 unannP (Prog ds) = Prog (map unannD ds)
 
 -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
-quantify :: [(Name, Kind)] -> Type a Poly -> Type a Poly
+quantify :: [(Name, Kind)] -> Type a 'Poly -> Type a 'Poly
 quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\(nm,k) t' -> A ann $ Forall nm k t') (A ann t) bound) else id
 
-traverseAnnos :: Monad m => (Type a Poly -> m (Type a Poly)) -> Expr a -> m (Expr a)
+traverseAnnos :: Monad m => (Type a 'Poly -> m (Type a 'Poly)) -> Expr a -> m (Expr a)
 traverseAnnos fn = go where
   go (A a expr') = go' expr' where
     go' e' = case e' of
@@ -308,5 +308,5 @@ traverseAnnos fn = go where
 
 
 -- substitute type for name in expr (traverses and substitutes in annotations and type applications)
-substTVarInExpr :: Type a Poly -> Name -> Expr a -> Expr a 
+substTVarInExpr :: Type a 'Poly -> Name -> Expr a -> Expr a 
 substTVarInExpr new nm = runIdentity . traverseAnnos (Identity . subst new nm)

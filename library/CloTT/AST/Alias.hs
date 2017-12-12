@@ -19,7 +19,7 @@ data Alias a =
   Alias
     { alName :: Name
     , alBound :: [(Name, Kind)]
-    , alExpansion :: Type a Poly
+    , alExpansion :: Type a 'Poly
     } deriving (Show, Eq, Data, Typeable)
 
 

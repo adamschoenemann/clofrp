@@ -92,9 +92,9 @@ data ElabProg a = ElabProg
 
 -- is this just a free monad?
 data ElabAlias a
-  = Done (Type a Poly) -- a fully expanded alias
+  = Done (Type a 'Poly) -- a fully expanded alias
   -- | the Name is the name of the alias
-  | Ex Name (Type a Poly -> ElabAlias a) -- an alias that still needs at least one application
+  | Ex Name (Type a 'Poly -> ElabAlias a) -- an alias that still needs at least one application
 
 instance Eq (ElabAlias a) where
   Done t1 == Done t2 = t1 =%= t2
@@ -128,7 +128,7 @@ elabAlias ann = go 0 . deb where
 -- Change type-variables to use debruijn indices based on the order induced
 -- by the second argument. Type-variables that do not appear in the list are
 -- not changed
-deBruijnify :: a -> [Name] -> Type a Poly -> Type a Poly
+deBruijnify :: a -> [Name] -> Type a 'Poly -> Type a 'Poly
 deBruijnify ann = go 0 where
   go i []     ty = ty
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
@@ -169,7 +169,7 @@ checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (a
   = (Either _ a, Either b c)
   = (Either (Either b c) a)
 -}
-expandAliases :: forall a. Aliases a -> Type a Poly -> TypingM a (Type a Poly)
+expandAliases :: forall a. Aliases a -> Type a 'Poly -> TypingM a (Type a 'Poly)
 expandAliases als t = 
   -- fixpoint it! for recursive alias expansion
   -- recursive type aliases will probably make this non-terminating
@@ -178,7 +178,7 @@ expandAliases als t =
             | otherwise -> expandAliases als t'
     Ex nm _ -> wrong nm
   where
-    go :: Type a Poly -> TypingM a (ElabAlias a)
+    go :: Type a 'Poly -> TypingM a (ElabAlias a)
     go (A ann ty') = 
       case ty' of
         TFree n 
@@ -295,7 +295,7 @@ elabProg program = do
 elabCs :: forall a. Name -> [(Name,Kind)] -> [Constr a] -> (FreeCtx a, DestrCtx a)
 elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) where
   -- | The fully applied type e.g. Maybe a
-  fullyApplied :: a -> Type a Poly
+  fullyApplied :: a -> Type a 'Poly
   fullyApplied ann = foldl (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType' . fst) bound
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
   toFn    (A ann (Constr nm args)) = (nm, quantify bound $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)

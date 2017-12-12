@@ -101,13 +101,13 @@ prettyTree = vcat . map fn where
   fn (i, doc) = indent (fromInteger $ i * 2) doc
 
 data TyExcept a
-  = Type a Poly `CannotSubtype` Type a Poly
-  | Name `OccursIn` Type a Poly
+  = Type a 'Poly `CannotSubtype` Type a 'Poly
+  | Name `OccursIn` Type a 'Poly
   | NameNotFound Name
   | CannotSplit (CtxElem a) (TyCtx a)
   | CannotSynthesize (Expr a)
-  | CannotAppSynthesize (Type a Poly) (Expr a)
-  | NotWfType (Type a Poly)
+  | CannotAppSynthesize (Type a 'Poly) (Expr a)
+  | NotWfType (Type a 'Poly)
   | NotWfContext (CtxElem a)
   | PartialAliasApp (Alias a)
   | Other String
@@ -147,22 +147,22 @@ tyExcept err = do
   ctx <- getCtx 
   throwError (err, ctx)
 
-cannotSubtype :: Type a Poly -> Type a Poly -> TypingM a r
+cannotSubtype :: Type a 'Poly -> Type a 'Poly -> TypingM a r
 cannotSubtype t1 t2 = tyExcept $ CannotSubtype t1 t2
 
 cannotSynthesize :: Expr a -> TypingM a r
 cannotSynthesize e = tyExcept $ CannotSynthesize e
 
-cannotAppSynthesize :: Type a Poly -> Expr a -> TypingM a r
+cannotAppSynthesize :: Type a 'Poly -> Expr a -> TypingM a r
 cannotAppSynthesize t e = tyExcept $ CannotAppSynthesize t e
 
-occursIn :: Name -> Type a Poly -> TypingM a r
+occursIn :: Name -> Type a 'Poly -> TypingM a r
 occursIn nm t = tyExcept $ OccursIn nm t
 
 nameNotFound :: Name -> TypingM a r
 nameNotFound nm = tyExcept $ NameNotFound nm
 
-notWfType :: Type a Poly -> TypingM a r
+notWfType :: Type a 'Poly -> TypingM a r
 notWfType ty = tyExcept $ NotWfType ty
 
 notWfContext :: CtxElem a -> TypingM a r

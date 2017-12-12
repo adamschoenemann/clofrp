@@ -40,9 +40,9 @@ data CtxElem a
   -- | Existential  
   | Exists Name Kind 
   -- | (λ?)x : A  
-  | (Binding, Name) `HasType` Type a Poly 
+  | (Binding, Name) `HasType` Type a 'Poly 
   -- | a = t  
-  | Name := Type a Mono 
+  | Name := Type a 'Mono 
   -- | |>a  
   | Marker Name 
   deriving Eq
@@ -84,27 +84,27 @@ marker = Marker
 uni :: Name -> CtxElem a
 uni nm = Uni nm Star
 
-(<\:) :: Name -> Type a Poly -> CtxElem a
+(<\:) :: Name -> Type a 'Poly -> CtxElem a
 x <\: t = (LamB, x) `HasType` t
 
-(.:) :: Name -> Type a Poly -> CtxElem a
+(.:) :: Name -> Type a 'Poly -> CtxElem a
 x .: t = (LetB, x) `HasType` t
 
 -- Free contexts contains "global" mappings from names to types
-newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a Poly) }
+newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a 'Poly) }
   deriving (Show, Eq, Monoid, Data)
 
 
-mapFreeCtx :: (Type a Poly -> Type b Poly) -> FreeCtx a -> FreeCtx b
+mapFreeCtx :: (Type a 'Poly -> Type b 'Poly) -> FreeCtx a -> FreeCtx b
 mapFreeCtx fn (FreeCtx m) = FreeCtx $ M.map fn m
 
 instance (IsList (FreeCtx a)) where
-  type Item (FreeCtx a) = (Name, Type a Poly)
+  type Item (FreeCtx a) = (Name, Type a 'Poly)
   fromList xs = FreeCtx $ M.fromList xs
   toList (FreeCtx m) = M.toList m
 
 instance Context (FreeCtx a) where
-  type Elem (FreeCtx a) = Type a Poly
+  type Elem (FreeCtx a) = Type a 'Poly
   type Key (FreeCtx a)  = Name
   extend nm ty (FreeCtx m) = FreeCtx $ M.insert nm ty m
   isMemberOf nm (FreeCtx m) = M.member nm m
@@ -151,7 +151,7 @@ data ClassInstance a = ClassInstance
   { ciClassName :: Name
   , ciInstanceTypeName :: Name
   , ciParams :: [Name]
-  , ciDictionary :: M.Map Name (Type a Poly, Expr a)
+  , ciDictionary :: M.Map Name (Type a 'Poly, Expr a)
   } deriving (Eq, Data, Typeable)
 
 instance Pretty (ClassInstance a) where
@@ -174,7 +174,7 @@ getInstancesOf name = do
     Just is' -> pure is'
     Nothing  -> pure []
 
-findInstanceOf :: (Monad m, HasInstances m a) => Name -> Type a Poly -> m (Maybe (ClassInstance a))
+findInstanceOf :: (Monad m, HasInstances m a) => Name -> Type a 'Poly -> m (Maybe (ClassInstance a))
 findInstanceOf className ty = do
   instances <- getInstancesOf className
   pure (listToMaybe . catMaybes $ map hasInstance instances)
@@ -263,7 +263,7 @@ isInKContext = isMemberOf
 ctxFind :: (CtxElem a -> Bool) -> TyCtx a -> Maybe (CtxElem a)
 ctxFind p (Gamma xs) = find p xs
 
-lookupTy :: Name -> TyCtx a -> Maybe (Type a Poly)
+lookupTy :: Name -> TyCtx a -> Maybe (Type a 'Poly)
 lookupTy nm (Gamma xs) = findMap p xs where
   p ((_,nm') `HasType` ty) | nm' == nm = Just ty
   p _                  = Nothing
@@ -271,7 +271,7 @@ lookupTy nm (Gamma xs) = findMap p xs where
 elemBy :: (a -> Bool) -> [a] -> Bool
 elemBy fn = isJust . find fn
 
-findAssigned :: Name -> TyCtx a -> Maybe (Type a Mono)
+findAssigned :: Name -> TyCtx a -> Maybe (Type a 'Mono)
 findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
   fn (nm' := ty) | nm == nm' = pure ty
   fn _                       = Nothing
@@ -280,12 +280,12 @@ isAssigned :: Name -> TyCtx a -> Bool
 isAssigned = isJust .*. findAssigned where
   (.*.) = (.) . (.)
 
-hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a Poly)
+hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a 'Poly)
 hasTypeInCtx nm (Gamma xs) = findMap fn xs where
   fn ((_,nm') `HasType` ty) | nm == nm' = pure ty
   fn _                             = Nothing
 
-hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a Poly)
+hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a 'Poly)
 hasTypeInFCtx nm (FreeCtx m) = M.lookup nm m
 
 -- | drop until an element `el` is encountered in the context. Also drops `el`

@@ -175,20 +175,20 @@ freeVars (A _ ty) =
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
-as'Polytype :: Type a s -> Type a 'Poly
-as'Polytype (A a ty) = A a $
+asPolytype :: Type a s -> Type a 'Poly
+asPolytype (A a ty) = A a $
   case ty of
     TFree x      -> TFree x
     TVar x       -> TVar x
     TExists x    -> TExists x
-    t1 `TApp` t2 -> as'Polytype t1 `TApp` as'Polytype t2
-    t1 :->:    t2 -> as'Polytype t1 :->: as'Polytype t2
-    Forall x k t  -> Forall x k (as'Polytype t)
-    RecTy  t     -> RecTy (as'Polytype t)
-    TTuple ts    -> TTuple (map as'Polytype ts)
-    Later t1 t2  -> Later (as'Polytype t1) (as'Polytype t2)
+    t1 `TApp` t2 -> asPolytype t1 `TApp` asPolytype t2
+    t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
+    Forall x k t  -> Forall x k (asPolytype t)
+    RecTy  t     -> RecTy (asPolytype t)
+    TTuple ts    -> TTuple (map asPolytype ts)
+    Later t1 t2  -> Later (asPolytype t1) (asPolytype t2)
 
-asMonotype :: Type a s -> Maybe (Type a Mono)
+asMonotype :: Type a s -> Maybe (Type a 'Mono)
 asMonotype (A a ty) =
   case ty of
     TFree x -> pure (A a $ TFree x)

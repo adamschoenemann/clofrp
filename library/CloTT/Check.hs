@@ -2,7 +2,7 @@
 Module      : CloTT.Check
 Description : Type-checking and inference algorithm for CloTT.
 
-Based on Complete and Easy Bidirectional Typechecking for Higher-Rank Polymorphism by Joshua Dunfeld
+Based on Complete and Easy Bidirectional Typechecking for Higher-Rank 'Polymorphism by Joshua Dunfeld
 and Neel Krishnaswami
 -}
 
@@ -69,12 +69,12 @@ runCheck :: TypingRead a -> Expr a -> Type a 'Poly -> TypingMRes a (TyCtx a)
 runCheck rd e t = runTypingM (check e t) rd initState
 
 -- | Run a type-synthesizing computation in a given context
-runSynth :: TypingRead a -> Expr a -> TypingMRes a (Type a Poly, TyCtx a)
+runSynth :: TypingRead a -> Expr a -> TypingMRes a (Type a 'Poly, TyCtx a)
 runSynth rd e = runTypingM (synthesize e) rd initState
 
 -- | Substitute a type using a context. As defined in the paper Θ[τ]. Will substitute
 -- | zero or more existential type variables for something "more-solved"
-substCtx :: TyCtx a -> Type a Poly -> TypingM a (Type a Poly)
+substCtx :: TyCtx a -> Type a 'Poly -> TypingM a (Type a 'Poly)
 substCtx ctx (A a ty) = 
   case ty of
     TFree x -> pure $ A a $ TFree x
@@ -175,7 +175,7 @@ insertAt at insertee = do
 -- Infer the kind of a type variable from how it is used in a type
 -- Its not gonna work, I think though... Instead, "spine-ify" first and
 -- then filter
--- inferVarKind :: KindCtx a -> Name -> Type a Poly -> Either String Kind
+-- inferVarKind :: KindCtx a -> Name -> Type a 'Poly -> Either String Kind
 -- inferVarKind kctx nm (A _ ty) =
 --   case ty of
 --     TFree v -> noInfo
@@ -208,7 +208,7 @@ insertAt at insertee = do
 
 
 -- | Get the kind of a type in the current context
-kindOf :: Type a Poly -> TypingM a Kind
+kindOf :: Type a 'Poly -> TypingM a Kind
 kindOf ty = go ty `decorateErr` decorate where 
   go (A _ t) = do
     kctx <- getKCtx
@@ -266,7 +266,7 @@ kindOf ty = go ty `decorateErr` decorate where
   decorate = Other $ show $ "kindOf" <+> (pretty ty)
 
 -- | Check that a type is well-formed.
-checkWfType :: Type a Poly -> TypingM a ()
+checkWfType :: Type a 'Poly -> TypingM a ()
 checkWfType ty = kindOf ty *> pure ()
 
 -- | Check if a given context is well-formed
@@ -306,7 +306,7 @@ wfContext (Gamma elems) = (foldrM fn [] elems *> pure ())  where
       p _            = False
 
 -- | Check if a type has kind * in a context
-validType :: KindCtx a -> Type a Poly -> TypingM a ()
+validType :: KindCtx a -> Type a 'Poly -> TypingM a ()
 validType kctx t = do
   k <- withKCtx (const kctx) $ kindOf t
   case k of
@@ -316,7 +316,7 @@ validType kctx t = do
 
 -- | Assign an unsolved variable to a type in a context
 -- TODO: Optimize 
-assign :: Name -> Type a Mono -> TypingM a (TyCtx a)
+assign :: Name -> Type a 'Mono -> TypingM a (TyCtx a)
 assign nm ty = do
   ctx@(Gamma xs) <- getCtx
   case findAssigned nm ctx of
@@ -338,11 +338,11 @@ assign nm ty = do
         fn x (xs', b)                          = (x : xs', b)
 
 -- | Attempt to convert a type to a monotype and lift it to the TypingM monad
-asMonotypeTM :: Type a s -> TypingM a (Type a Mono)
+asMonotypeTM :: Type a s -> TypingM a (Type a 'Mono)
 asMonotypeTM t = maybe (otherErr $ show $ pretty t <+> "is not a monotype") pure . asMonotype $ t
 
 -- | Lookup a type in a given context (lifted to TypingM monad)
-lookupTyTM :: Name -> TyCtx a -> TypingM a (Type a Poly)
+lookupTyTM :: Name -> TyCtx a -> TypingM a (Type a 'Poly)
 lookupTyTM nm c =
   case lookupTy nm c of
     Just t -> pure t
@@ -355,7 +355,7 @@ rule name info = do
   root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
 -- | Assert that a type is functorial, namely that there is an instance of Functor for that type
-assertFunctor :: Type a Poly -> TypingM a ()
+assertFunctor :: Type a 'Poly -> TypingM a ()
 assertFunctor ty = findInstanceOf "Functor" ty >>= \case
   Just _ -> pure ()
   Nothing -> otherErr $ show $ "Cannot resolve functor instance of" <+> pretty ty
@@ -364,7 +364,7 @@ assertFunctor ty = findInstanceOf "Functor" ty >>= \case
 -- at least implement them both in terms of a more general combinator
 
 -- Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
-instL :: Name -> Type a Poly -> TypingM a (TyCtx a)
+instL :: Name -> Type a 'Poly -> TypingM a (TyCtx a)
 -- InstLSolve
 instL ahat ty@(A a ty') = 
   let solve = do
@@ -487,7 +487,7 @@ instL ahat ty@(A a ty') =
 
 
 
-instR :: Type a Poly -> Name -> TypingM a (TyCtx a)
+instR :: Type a 'Poly -> Name -> TypingM a (TyCtx a)
 -- InstRSolve
 instR ty@(A a ty') ahat = 
   let solve = do
@@ -595,7 +595,7 @@ instR ty@(A a ty') ahat =
 
 -- Under input context Γ, type A is a subtype of B, with output context ∆
 -- A is a subtype of B iff A is more polymorphic than B
-subtypeOf :: Type a Poly -> Type a Poly -> TypingM a (TyCtx a)
+subtypeOf :: Type a 'Poly -> Type a 'Poly -> TypingM a (TyCtx a)
 subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:Free
   subtypeOf' (TFree x) (TFree x') = do
@@ -709,7 +709,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     root $ "[SubtypeError!]" <+> pretty t1 <+> "<:" <+> pretty t2
     cannotSubtype ty1 ty2
 
-check :: Expr a -> Type a Poly -> TypingM a (TyCtx a)
+check :: Expr a -> Type a 'Poly -> TypingM a (TyCtx a)
 check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
 
   -- 1I
@@ -839,7 +839,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   
   -- just introduce forall-quantified variables as existentials
   -- in the current context
-  intros :: Type a Poly -> TypingM a (Type a Poly, TyCtx a)
+  intros :: Type a 'Poly -> TypingM a (Type a 'Poly, TyCtx a)
   intros ty0@(A ann (Forall nm k t)) = do
     root $ "[Intros]" <+> pretty ty0
     ahat <- freshName
@@ -856,7 +856,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   -- that are in scope at the case-expr, but does not pollute the scope with new
   -- type variables that came into the context during the branch and body.
   -- TODO: move all the marker insertion logic here instead of in Case<=
-  checkCaseClauses :: Name -> Type a Poly -> [(Pat a, Expr a)] -> Type a Poly -> TypingM a (TyCtx a)
+  checkCaseClauses :: Name -> Type a 'Poly -> [(Pat a, Expr a)] -> Type a 'Poly -> TypingM a (TyCtx a)
   checkCaseClauses markerName pty clauses expected = 
     case clauses of
       (pat, expr) : clauses' -> do
@@ -871,7 +871,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   
   -- using substCtx alot improves inference. If the first clause infers that the pat is type P and
   -- body is type A, then subsequent patterns must also check against this more refined type.
-  checkClause :: Type a Poly -> (Pat a, Expr a) -> Type a Poly -> TypingM a (Type a Poly, TyCtx a)
+  checkClause :: Type a 'Poly -> (Pat a, Expr a) -> Type a 'Poly -> TypingM a (Type a 'Poly, TyCtx a)
   checkClause pty (pat, expr) expected = do
     ctx' <- branch $ checkPat pat pty
     expected' <- substCtx ctx' expected
@@ -880,13 +880,13 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     pure (expected'', ctx'')
 
   -- here with no substCtx
-  -- checkClause :: Type a Poly -> (Pat a, Expr a) -> Type a Poly -> TypingM a (TyCtx a)
+  -- checkClause :: Type a 'Poly -> (Pat a, Expr a) -> Type a 'Poly -> TypingM a (TyCtx a)
   -- checkClause pty (pat, expr) expected = do
   --   ctx' <- branch $ checkPat pat pty
   --   ctx'' <- withCtx (const ctx') $ branch $ check expr expected
   --   pure ctx''
 
-synthesize :: Expr a -> TypingM a (Type a Poly, TyCtx a)
+synthesize :: Expr a -> TypingM a (Type a 'Poly, TyCtx a)
 synthesize expr@(A ann expr') = synthesize' expr' where
   -- Var
   synthesize' (Var nm) = do
@@ -1053,7 +1053,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     alphat' <- substCtx theta alphat
     pure (kappat', alphat', theta)
 
-inferPrim :: a -> Prim -> TypingM a (Type a Poly, TyCtx a)
+inferPrim :: a -> Prim -> TypingM a (Type a 'Poly, TyCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
   Integer _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
@@ -1116,7 +1116,7 @@ inferPrim ann p = case p of
 
 
 -- check that patterns type-check and return a new ctx extended with bound variables
-checkPat :: Pat a -> Type a Poly -> TypingM a (TyCtx a)
+checkPat :: Pat a -> Type a 'Poly -> TypingM a (TyCtx a)
 checkPat pat@(A ann p) ty = do
   ctx <- getCtx
   rule "CheckPat" (pretty pat <+> "<=" <+> pretty ty)
@@ -1159,7 +1159,7 @@ existentialize ann destr = do
 
 -- in a context, check a list of patterns against a destructor and an expected type.
 -- if it succeeds, it binds the names listed in the pattern match to the input context
-checkPats :: [Pat a] -> Destr a -> Type a Poly -> TypingM a (TyCtx a)
+checkPats :: [Pat a] -> Destr a -> Type a 'Poly -> TypingM a (TyCtx a)
 checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
   | length pats /= length args = 
       otherErr $ show $ "Expected" <+> pretty (length args) 
@@ -1173,7 +1173,7 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
           t' <- substCtx acc t `decorateErr` (Other $ show $ "substCtx" <+> pretty acc <+> pretty t)
           withCtx (const acc) $ checkPat p t'
   
-applysynth :: Type a Poly -> Expr a -> TypingM a (Type a Poly, TyCtx a)
+applysynth :: Type a 'Poly -> Expr a -> TypingM a (Type a 'Poly, TyCtx a)
 applysynth ty@(A tann ty') e@(A eann e') = applysynth' ty' where
   -- ∀App
   applysynth' (Forall alpha k aty) = do

@@ -87,7 +87,7 @@ deriving instance Eq (Sing a)
 deriving instance Typeable (Sing a)
 
 -- -- |Reify a singleton back into an FRP type
-reifySing :: Sing t -> Type () Poly
+reifySing :: Sing t -> Type () 'Poly
 reifySing = \case
   SFree px -> A () $ P.TFree (P.UName $ symbolVal px)
   t1 `SArr` t2 -> A () $ reifySing t1 P.:->: reifySing t2
@@ -96,7 +96,7 @@ reifySing = \case
   STup t ts ->
     A () $ P.TTuple (reifySing t : tupleSing ts)
     where
-        tupleSing :: Sing (CTTuple ts') -> [Type () Poly]
+        tupleSing :: Sing (CTTuple ts') -> [Type () 'Poly]
         tupleSing (SPair x y) = [reifySing x, reifySing y]
         tupleSing (STup t' ts') = reifySing t' : tupleSing ts' 
 
@@ -119,7 +119,7 @@ instance Show (CloTT t a) where
 
 -- -- |Use template haskell to generate a singleton value that represents
 -- -- an FRP type
-typeToSingExp :: Type a Poly -> ExpQ
+typeToSingExp :: Type a 'Poly -> ExpQ
 typeToSingExp (A _ typ') = case typ' of
   P.TFree (P.UName nm) -> 
     let nmQ = pure (S.LitT (S.StrTyLit nm))

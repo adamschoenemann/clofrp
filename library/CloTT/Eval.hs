@@ -75,7 +75,7 @@ fmapNat ann =
       ]
      ) 
 
-fmapFromType :: Type a Poly -> EvalM a (Value a)
+fmapFromType :: Type a 'Poly -> EvalM a (Value a)
 fmapFromType ty = findInstanceOf "Functor" ty >>= \case
   Just (ClassInstance {ciDictionary = dict}) -> 
     maybe (pure $ runtimeErr "Functor without fmap!!") (evalExprStep . snd) (M.lookup "fmap" dict)
@@ -282,7 +282,7 @@ evalExprCorec expr = go (100000 :: Int) =<< evalExprStep expr where
     pure (v' : vs')
 
 
-progToEval :: Name -> Prog a -> Either String (Expr a, Type a Poly, EvalRead a, EvalState a)
+progToEval :: Name -> Prog a -> Either String (Expr a, Type a 'Poly, EvalRead a, EvalState a)
 progToEval mainnm pr = do
   let er@(ElabRes {erDefs, erConstrs, erDeriving, erSigs}) = collectDecls pr
       vconstrs = M.mapWithKey (\k v -> Right (Constr k [])) . unFreeCtx $ erConstrs
