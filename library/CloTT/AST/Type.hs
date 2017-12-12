@@ -44,18 +44,18 @@ data Type' :: * -> TySort -> * where
   TExists :: Name                        -> Type' a s
   TApp    :: Type a s     -> Type a s    -> Type' a s
   (:->:)  :: Type a s     -> Type a s    -> Type' a s
-  Forall  :: Name -> Kind -> Type a Poly -> Type' a Poly
+  Forall  :: Name -> Kind -> Type a 'Poly -> Type' a 'Poly
   RecTy   :: Type a s                    -> Type' a s
   TTuple  :: [Type a s]                  -> Type' a s
   Later   :: Type a s     -> Type a s    -> Type' a s
 
 
 deriving instance Eq a       => Eq (Type' a s)
-deriving instance Data a     => Data (Type' a Poly)
-deriving instance Typeable a => Typeable (Type' a Poly)
+deriving instance Data a     => Data (Type' a 'Poly)
+deriving instance Typeable a => Typeable (Type' a 'Poly)
 -- deriving instance Show a => Show (Type' a s)
 
-instance NFData a => NFData (Type' a Poly) where
+instance NFData a => NFData (Type' a 'Poly) where
   rnf a = seq a ()
 
 prettyBound :: Bool -> Name -> Kind -> Doc ann
@@ -136,7 +136,7 @@ instance IsString (Type () s) where
   fromString s = nameToType () (UName s)
 
 infixl 9 @@:
-(@@:) :: Type () Poly -> Type () Poly -> Type () Poly
+(@@:) :: Type () 'Poly -> Type () 'Poly -> Type () 'Poly
 a @@: b = A () $ a `TApp` b
 
 infixr 2 @->:
@@ -175,18 +175,18 @@ freeVars (A _ ty) =
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
-asPolytype :: Type a s -> Type a Poly
-asPolytype (A a ty) = A a $
+as'Polytype :: Type a s -> Type a 'Poly
+as'Polytype (A a ty) = A a $
   case ty of
     TFree x      -> TFree x
     TVar x       -> TVar x
     TExists x    -> TExists x
-    t1 `TApp` t2 -> asPolytype t1 `TApp` asPolytype t2
-    t1 :->:    t2 -> asPolytype t1 :->: asPolytype t2
-    Forall x k t  -> Forall x k (asPolytype t)
-    RecTy  t     -> RecTy (asPolytype t)
-    TTuple ts    -> TTuple (map asPolytype ts)
-    Later t1 t2  -> Later (asPolytype t1) (asPolytype t2)
+    t1 `TApp` t2 -> as'Polytype t1 `TApp` as'Polytype t2
+    t1 :->:    t2 -> as'Polytype t1 :->: as'Polytype t2
+    Forall x k t  -> Forall x k (as'Polytype t)
+    RecTy  t     -> RecTy (as'Polytype t)
+    TTuple ts    -> TTuple (map as'Polytype ts)
+    Later t1 t2  -> Later (as'Polytype t1) (as'Polytype t2)
 
 asMonotype :: Type a s -> Maybe (Type a Mono)
 asMonotype (A a ty) =
@@ -208,7 +208,7 @@ asMonotype (A a ty) =
 
     Later t1 t2 -> (\x y -> A a $ Later x y) <$> asMonotype t1 <*> asMonotype t2
 
-subst :: Type a Poly -> Name -> Type a Poly -> Type a Poly
+subst :: Type a 'Poly -> Name -> Type a 'Poly -> Type a 'Poly
 subst x forY (A a inTy) =
   case inTy of
     TFree y     | y == forY  -> x

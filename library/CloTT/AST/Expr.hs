@@ -40,11 +40,11 @@ data Expr' a
   -- | [x]
   | TickVar Name 
   -- | e : A
-  | Ann (Expr a) (Type a Poly) 
+  | Ann (Expr a) (Type a 'Poly) 
   -- | e1 e2
   | App (Expr a) (Expr a) 
   -- | \x -> e OR \(x : A) -> e
-  | Lam Name (Maybe (Type a Poly)) (Expr a) 
+  | Lam Name (Maybe (Type a 'Poly)) (Expr a) 
   -- | \\(α : κ) -> e
   | TickAbs Name Name (Expr a) 
   -- | n-ary tuples  
@@ -54,11 +54,11 @@ data Expr' a
   -- | case e of | p -> e | p1 -> e1 | pn -> en  
   | Case (Expr a) [(Pat a, Expr a)] 
   -- | e {A}  
-  | TypeApp (Expr a) (Type a Poly) 
+  | TypeApp (Expr a) (Type a 'Poly) 
   -- | fmap A  
-  | Fmap (Type a Poly) 
+  | Fmap (Type a 'Poly) 
   -- | primRec A  
-  | PrimRec (Type a Poly) 
+  | PrimRec (Type a 'Poly) 
   -- | primitive (will probably just include ints in the end)  
   | Prim P.Prim 
   deriving (Eq, Data, Typeable, Generic, NFData)

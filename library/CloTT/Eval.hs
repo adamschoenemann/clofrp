@@ -196,6 +196,7 @@ evalExprStep (A ann expr') =
       let fmape = (fmapE t `app` fmaplam) `app` (unfoldE `app` ovar)
       evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
       
+      
     E.App e1 e2 -> do
       v1 <- evalExprStep e1
       v2 <- evalExprStep e2
