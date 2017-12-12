@@ -6,10 +6,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module CloTT.Eval.Value where
@@ -32,7 +30,7 @@ data PrimVal
   | RuntimeErr String
   | FoldP
   | UnfoldP
-  deriving (Eq, Generic, NFData, Show, Data, Typeable)
+  deriving (Eq, Generic, Show, Data, Typeable)
 
 instance Pretty PrimVal where
   pretty = \case
@@ -54,7 +52,7 @@ data Value a
   | Tuple [Value a]
   | Constr Name [Value a]
   | Fold (Value a)
-  deriving (Show, Eq, Generic, NFData, Data, Typeable)
+  deriving (Show, Eq, Generic, Data, Typeable)
 
 -- takes n levels down in a tree of constructors
 takeConstr :: Int -> Value a -> Value a
@@ -68,7 +66,7 @@ takeConstr n v
         _            -> v
 
 instance Pretty (Value a) where
-  pretty = prettyVal 2
+  pretty = prettyVal 4
 
 prettyVal :: Int -> Value a -> Doc ann
 prettyVal = pret where
@@ -86,7 +84,7 @@ prettyVal = pret where
         in  parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> penv
       Tuple vs -> tupled (map (pret i) vs)
       Constr nm [] -> pretty nm
-      Constr nm vs -> parens $ pretty nm <+> fillSep (map (pret i) vs)
+      Constr nm vs -> parens $ pretty nm <+> fillSep (map (pret (i-1)) vs)
       Fold v       -> parens $ "fold" <+> (pret i v)
     
 prettyEnv :: Int -> Env a -> Doc ann
@@ -94,9 +92,7 @@ prettyEnv 0 _ = "..."
 prettyEnv i (Env e) = list $ M.elems $ M.mapWithKey (\k v -> pretty k <+> "↦" <+> align (prettyVal (i-1) v)) e
 
 newtype Env a = Env {unEnv :: Map Name (Value a)}
-  deriving newtype (Eq, Monoid)
-  deriving stock (Generic, Data, Typeable)
-  deriving anyclass NFData
+  deriving (Eq, Monoid, Generic, Data, Typeable)
 
 
 instance Pretty (Env a) where

@@ -90,21 +90,6 @@ instance ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) => ToCloTT
     let strsing = SFree (Proxy @"Stream") `SApp` SFree (Proxy @"K0") `SApp` s2
     in  Constr "Cos" [toCloTT strsing xs] where
 
-instance (ToCloTT h1 c1, ToCloTT h2 c2) => ToCloTT (h1, h2) ('CTTuple [c1, c2]) where
-  toCloTT (SPair s1 s2) (x1, x2) = Tuple [toCloTT s1 x1, toCloTT s2 x2]
-  toCloTT (STup ss s)   (x1, x2) = error "impossible" -- Tuple [toCloTT s1 x1, toCloTT s2 x2]
-
-instance (ToHask c1 h1, ToHask c2 h2) => ToHask ('CTTuple [c1, c2]) (h1, h2) where
-  toHask (SPair s1 s2) (Tuple [x1, x2]) = (toHask s1 x1, toHask s2 x2)
-  toHask (SPair s1 s2) v = error $ show $ "Expected tuple but got" <+> pretty v
-
--- cant make this inductive, since tuples are not inductive in haskell.
--- alternatively, one could marshall to HList instead which would allow it
-instance (ToHask c1 h1, ToHask c2 h2, ToHask c3 h3) => ToHask ('CTTuple '[c1,c2,c3]) (h1,h2,h3) where
-  toHask (s1 `STup` (s2 `SPair` s3)) (Tuple [x1,x2,x3]) = (toHask s1 x1, toHask s2 x2, toHask s3 x3)
-  toHask (s1 `STup` (s2 `SPair` s3)) v = error $ show $ "Expected tuple but got" <+> pretty v
-
-
 type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTNat = 'CTFree "Nat"
 

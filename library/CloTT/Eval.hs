@@ -219,6 +219,7 @@ evalExprStep (A ann expr') =
             _      -> otherErr $ show $ "Expected (fold _) but got" <+> pretty v2
         
         (_, Prim Tick) -> pure v1
+        (_, TickVar _) -> pure v1
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim (RuntimeErr _)) -> pure v2
 
@@ -267,12 +268,13 @@ force = \case
   => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
 -}
 evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
-evalExprCorec expr = go (100000 :: Int) =<< evalExprStep expr where 
+evalExprCorec expr = go (10000000 :: Int) =<< evalExprStep expr where 
   go n v | n <= 0 = pure v
   go n v = do
     case v of
       Constr nm vs -> Constr nm <$> evalMany n vs
       Fold v -> Fold <$> (go (n-1) =<< force v)
+      Tuple vs -> Tuple <$> evalMany n vs
       _ -> pure v
 
   evalMany _ [] = pure []

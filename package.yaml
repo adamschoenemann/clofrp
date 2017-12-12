@@ -10,7 +10,9 @@ benchmarks:
     ghc-options:
     - -rtsopts
     - -threaded
-    - -with-rtsopts=-N
+    - -fprof-auto
+    - -fprof-cafs
+    - "\"-with-rtsopts=-p -s\""
     main: Main.hs
     source-dirs: benchmark
 category: Other

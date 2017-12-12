@@ -21,6 +21,8 @@ Description : Reflecting CloTT-Types into the Haskell type-system
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE FunctionalDependencies  #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module CloTT.Interop where
 
@@ -30,6 +32,8 @@ import           Language.Haskell.TH ( Exp (..), ExpQ, Lit (..), Pat (..), Q
 import qualified Language.Haskell.TH.Syntax as S
 import qualified Language.Haskell.TH as T
 import           Data.Data
+import           Data.String (fromString)
+import           Text.Parsec.Pos
 
 import qualified CloTT.AST as P
 import           CloTT.AST (Type, TySort(..))
@@ -37,6 +41,9 @@ import           CloTT.Annotated
 import           CloTT.AST.Helpers
 import           CloTT.Eval
 import           CloTT.Pretty
+
+instance Pretty (SourcePos) where
+  pretty = fromString . show
 
 -- -----------------------------------------------------------------------------
 -- CloTy
@@ -123,7 +130,7 @@ typeToSingExp :: Type a 'Poly -> ExpQ
 typeToSingExp (A _ typ') = case typ' of
   P.TFree (P.UName nm) -> 
     let nmQ = pure (S.LitT (S.StrTyLit nm))
-    in  [| SFree (Proxy @($(nmQ))) |]
+    in  [| SFree (Proxy :: (Proxy $(nmQ))) |]
   t1 P.:->: t2         -> 
     let s1 = typeToSingExp t1
         s2 = typeToSingExp t2
@@ -148,6 +155,20 @@ class ToHask (t :: CloTy) (r :: *) | t -> r where
 
 class ToCloTT (r :: *) (t :: CloTy) | t -> r where
   toCloTT :: Sing t -> r -> Value a
+
+instance (ToCloTT h1 c1, ToCloTT h2 c2) => ToCloTT (h1, h2) ('CTTuple [c1, c2]) where
+  toCloTT (SPair s1 s2) (x1, x2) = Tuple [toCloTT s1 x1, toCloTT s2 x2]
+  toCloTT (STup ss s)   (x1, x2) = error "impossible" -- Tuple [toCloTT s1 x1, toCloTT s2 x2]
+
+instance (ToHask c1 h1, ToHask c2 h2) => ToHask ('CTTuple [c1, c2]) (h1, h2) where
+  toHask (SPair s1 s2) (Tuple [x1, x2]) = (toHask s1 x1, toHask s2 x2)
+  toHask (SPair s1 s2) v = error $ show $ "Expected tuple but got" <+> pretty v
+
+-- cant make this inductive, since tuples are not inductive in haskell.
+-- alternatively, one could marshall to HList instead which would allow it
+instance (ToHask c1 h1, ToHask c2 h2, ToHask c3 h3) => ToHask ('CTTuple '[c1,c2,c3]) (h1,h2,h3) where
+  toHask (s1 `STup` (s2 `SPair` s3)) (Tuple [x1,x2,x3]) = (toHask s1 x1, toHask s2 x2, toHask s3 x3)
+  toHask (s1 `STup` (s2 `SPair` s3)) v = error $ show $ "Expected tuple but got" <+> pretty v
 
 execute :: (Pretty a, ToHask t r) => CloTT t a -> r
 execute (CloTT er st expr sing) = toHask sing $ runEvalMState (evalExprCorec expr) er st

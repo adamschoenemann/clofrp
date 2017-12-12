@@ -1,0 +1,348 @@
+	Tue Dec 12 15:33 2017 Time and Allocation Profiling Report  (Final)
+
+	   clott-benchmarks.exe +RTS -p -s -hc -i0.5 -L50 -RTS
+
+	total time  =        0.50 secs   (503 ticks @ 1000 us, 1 processor)
+	total alloc = 3,858,670,728 bytes  (excludes profiling overheads)
+
+COST CENTRE            MODULE           SRC                                     %time %alloc
+
+combine                CloTT.Eval.Value library\CloTT\Eval\Value.hs:108:1-43     18.3    7.4
+evalExprStep           CloTT.Eval       library\CloTT\Eval.hs:(156,1)-(245,35)   15.7   21.3
+lookupVar              CloTT.Eval       library\CloTT\Eval.hs:(54,1)-(61,81)     12.3   20.5
+evalClause             CloTT.Eval       library\CloTT\Eval.hs:(135,1)-(139,31)    8.9   12.5
+globalLookup           CloTT.Eval       library\CloTT\Eval.hs:(46,1)-(51,44)      5.2    7.6
+compare                CloTT.AST.Name   library\CloTT\AST\Name.hs:19:13-15        4.6    0.0
+>=                     CloTT.AST.Name   library\CloTT\AST\Name.hs:19:13-15        4.2    0.0
+extendEnv              CloTT.Eval.Value library\CloTT\Eval\Value.hs:105:1-42      4.2    2.9
+evalExprCorec.evalMany CloTT.Eval       library\CloTT\Eval.hs:(280,3)-(284,19)    4.0    8.0
+<=                     CloTT.AST.Name   library\CloTT\AST\Name.hs:19:13-15        3.6    0.0
+evalPat                CloTT.Eval       library\CloTT\Eval.hs:(97,1)-(121,47)     3.0    5.4
+main                   Main             benchmark\Main.hs:(187,1)-(192,56)        2.0    1.1
+evalPat.folder         CloTT.Eval       library\CloTT\Eval.hs:(120,9)-(121,47)    2.0    1.7
+evalClauses.helper     CloTT.Eval       library\CloTT\Eval.hs:(126,3)-(132,30)    1.8    1.3
+envLookup              CloTT.Eval.Value library\CloTT\Eval\Value.hs:114:1-34      1.8    0.3
+force.\                CloTT.Eval       library\CloTT\Eval.hs:263:5-81            1.2    0.3
+withEnv.\              CloTT.Eval.EvalM library\CloTT\Eval\EvalM.hs:72:26-50      0.8    1.0
+evalPrim.\             CloTT.Eval       library\CloTT\Eval.hs:152:5-92            0.6    1.0
+getEnv                 CloTT.Eval.EvalM library\CloTT\Eval\EvalM.hs:69:1-19       0.6    3.0
+evalExprCorec.go       CloTT.Eval       library\CloTT\Eval.hs:(272,3)-(278,17)    0.4    1.1
+withEnv                CloTT.Eval.EvalM library\CloTT\Eval\EvalM.hs:72:1-51       0.4    1.2
+
+
+                                                                                                                               individual      inherited
+COST CENTRE                           MODULE                     SRC                                       no.      entries  %time %alloc   %time %alloc
+
+MAIN                                  MAIN                       <built-in>                                2592          0    0.0    0.0   100.0  100.0
+ CAF                                  GHC.IO.Encoding.CodePage   <entire-module>                           5173          0    0.0    0.0     0.0    0.0
+ CAF                                  GHC.IO.Encoding            <entire-module>                           5166          0    0.0    0.0     0.0    0.0
+ CAF                                  GHC.Conc.Windows           <entire-module>                           5163          0    0.0    0.0     0.0    0.0
+ CAF                                  GHC.IO.Handle.Text         <entire-module>                           5157          0    0.0    0.0     0.0    0.0
+ CAF                                  GHC.Show                   <entire-module>                           5154          0    0.0    0.0     0.0    0.0
+ CAF                                  GHC.IO.Handle.FD           <entire-module>                           5150          0    0.0    0.0     0.0    0.0
+ CAF:$fApplicativeEvalM4              CloTT.Eval.EvalM           <no location info>                        3227          0    0.0    0.0     0.0    0.0
+  pure                                CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:49:14-24      5200          1    0.0    0.0     0.0    0.0
+ CAF:$fFunctorEvalM2                  CloTT.Eval.EvalM           <no location info>                        3225          0    0.0    0.0     0.0    0.0
+  fmap                                CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:48:14-20      5212          1    0.0    0.0     0.0    0.0
+ CAF:$fHasInstancesEvalMa2            CloTT.Eval.EvalM           <no location info>                        3253          0    0.0    0.0     0.0    0.0
+  reader                              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:53:14-37      5216          1    0.0    0.0     0.0    0.0
+   reader                             Control.Monad.Reader.Class Control\Monad\Reader\Class.hs:114:5-27    5217          1    0.0    0.0     0.0    0.0
+ CAF:$fIsStringName_$cfromString      CloTT.AST.Name             library\CloTT\AST\Name.hs:39:3-12         2786          0    0.0    0.0     0.0    0.0
+  fromString                          CloTT.AST.Name             library\CloTT\AST\Name.hs:39:3-20         5234          1    0.0    0.0     0.0    0.0
+ CAF:$fMonadEvalM2                    CloTT.Eval.EvalM           <no location info>                        3211          0    0.0    0.0     0.0    0.0
+  return                              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:50:14-18      5236          1    0.0    0.0     0.0    0.0
+ CAF:$fMonadEvalM4                    CloTT.Eval.EvalM           <no location info>                        3233          0    0.0    0.0     0.0    0.0
+  >>=                                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:50:14-18      5197          1    0.0    0.0     0.0    0.0
+ CAF:$fMonadReaderEvalM1              CloTT.Eval.EvalM           <no location info>                        3219          0    0.0    0.0     0.0    0.0
+  local                               CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:53:14-37      5202          1    0.0    0.0     0.0    0.0
+ CAF:$fMonadReaderrRWST2              Control.Monad.Reader.Class <no location info>                        5137          0    0.0    0.0     0.0    0.0
+  local                               Control.Monad.Reader.Class Control\Monad\Reader\Class.hs:113:5-25    5203          1    0.0    0.0     0.0    0.0
+ CAF:$fMonadStateEvalM3               CloTT.Eval.EvalM           <no location info>                        3213          0    0.0    0.0     0.0    0.0
+  get                                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:51:14-38      5255          1    0.0    0.0     0.0    0.0
+   get                                Control.Monad.State.Class  Control\Monad\State\Class.hs:110:5-21     5256          1    0.0    0.0     0.0    0.0
+ CAF:$fToCloTTBoolCTFree2             Main                       <no location info>                        2627          0    0.0    0.0     0.0    0.0
+  toCloTT                             Main                       benchmark\Main.hs:(29,3)-(30,48)          5337          0    0.0    0.0     0.0    0.0
+ CAF:$fToCloTTBoolCTFree3             Main                       <no location info>                        2626          0    0.0    0.0     0.0    0.0
+  toCloTT                             Main                       benchmark\Main.hs:(29,3)-(30,48)          5338          0    0.0    0.0     0.0    0.0
+ CAF:$fToCloTT[]:@:6                  Main                       <no location info>                        2623          0    0.0    0.0     0.0    0.0
+  toCloTT                             Main                       benchmark\Main.hs:(51,3)-(53,47)          5233          0    0.0    0.0     0.0    0.0
+ CAF:$fToCloTT[]:@:7                  Main                       <no location info>                        2622          0    0.0    0.0     0.0    0.0
+  toCloTT                             Main                       benchmark\Main.hs:(51,3)-(53,47)          5235          0    0.0    0.0     0.0    0.0
+ CAF:$fToCloTT[]:@:8                  Main                       <no location info>                        2621          0    0.0    0.0     0.0    0.0
+  toCloTT                             Main                       benchmark\Main.hs:43:3-49                 5305          0    0.0    0.0     0.0    0.0
+   clottStream                        Main                       benchmark\Main.hs:(46,1)-(47,53)          5306          0    0.0    0.0     0.0    0.0
+ CAF:$fToCloTT[]:@:9                  Main                       <no location info>                        2620          0    0.0    0.0     0.0    0.0
+  toCloTT                             Main                       benchmark\Main.hs:43:3-49                 5307          0    0.0    0.0     0.0    0.0
+   clottStream                        Main                       benchmark\Main.hs:(46,1)-(47,53)          5308          0    0.0    0.0     0.0    0.0
+ CAF:$fToHaskCTFreeBool1              Main                       <no location info>                        2617          0    0.0    0.0     0.0    0.0
+  toHask                              Main                       benchmark\Main.hs:(33,3)-(35,100)         5360          0    0.0    0.0     0.0    0.0
+ CAF:$fToHaskCTFreeBool2              Main                       <no location info>                        2616          0    0.0    0.0     0.0    0.0
+  toHask                              Main                       benchmark\Main.hs:(33,3)-(35,100)         5361          0    0.0    0.0     0.0    0.0
+ CAF:$fToHaskCTFreeBool3              Main                       <no location info>                        2615          0    0.0    0.0     0.0    0.0
+  toHask                              Main                       benchmark\Main.hs:(33,3)-(35,100)         5362          0    0.0    0.0     0.0    0.0
+ CAF:$fToHaskCTFreeBool4              Main                       <no location info>                        2614          0    0.0    0.0     0.0    0.0
+  toHask                              Main                       benchmark\Main.hs:(33,3)-(35,100)         5363          0    0.0    0.0     0.0    0.0
+ CAF:evalPrim10                       CloTT.Eval                 <no location info>                        3187          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5311          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:145:25-43           5312          1    0.0    0.0     0.0    0.0
+ CAF:evalPrim11                       CloTT.Eval                 <no location info>                        3133          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5313          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:145:25-43           5314          0    0.0    0.0     0.0    0.0
+ CAF:evalPrim20                       CloTT.Eval                 <no location info>                        3139          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5402          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:152:5-92            5403          0    0.0    0.0     0.0    0.0
+ CAF:evalPrim21                       CloTT.Eval                 <no location info>                        3138          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5405          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:152:5-92            5406          0    0.0    0.0     0.0    0.0
+ CAF:evalPrim23                       CloTT.Eval                 <no location info>                        3137          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5268          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:152:5-92            5269          0    0.0    0.0     0.0    0.0
+ CAF:evalPrim24                       CloTT.Eval                 <no location info>                        3136          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5279          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:152:5-92            5280          0    0.0    0.0     0.0    0.0
+ CAF:evalPrim7                        CloTT.Eval                 <no location info>                        3186          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5286          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:146:25-45           5287          1    0.0    0.0     0.0    0.0
+ CAF:evalPrim8                        CloTT.Eval                 <no location info>                        3134          0    0.0    0.0     0.0    0.0
+  evalPrim                            CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5288          0    0.0    0.0     0.0    0.0
+   evalPrim.\                         CloTT.Eval                 library\CloTT\Eval.hs:146:25-45           5289          0    0.0    0.0     0.0    0.0
+ CAF:getEnv1                          CloTT.Eval.EvalM           <no location info>                        3258          0    0.0    0.0     0.0    0.0
+  getEnv                              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5214          1    0.0    0.0     0.0    0.0
+   asks                               Control.Monad.Reader.Class Control\Monad\Reader\Class.hs:96:1-13     5215          1    0.0    0.0     0.0    0.0
+ CAF:getGlobals1                      CloTT.Eval.EvalM           <no location info>                        3215          0    0.0    0.0     0.0    0.0
+  getGlobals                          CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:78:1-16       5254          1    0.0    0.0     0.0    0.0
+ CAF:globalLookup2                    CloTT.Eval                 <no location info>                        3109          0    0.0    0.0     0.0    0.0
+  globalLookup                        CloTT.Eval                 library\CloTT\Eval.hs:(46,1)-(51,44)      5261          0    0.0    0.0     0.0    0.0
+ CAF:lvl11_riVH                       Main                       <no location info>                        2608          0    0.0    0.0     0.0    0.0
+  toHask                              Main                       benchmark\Main.hs:(38,3)-(39,110)         5347          0    0.0    0.0     0.0    0.0
+ CAF:lvl12_riVI                       Main                       <no location info>                        2609          0    0.0    0.0     0.0    0.0
+  toHask                              Main                       benchmark\Main.hs:(38,3)-(39,110)         5346          0    0.0    0.0     0.0    0.0
+ CAF:lvl2_recY                        CloTT.Eval                 <no location info>                        3108          0    0.0    0.0     0.0    0.0
+  evalExprCorec                       CloTT.Eval                 library\CloTT\Eval.hs:(271,1)-(284,19)    5350          0    0.0    0.0     0.0    0.0
+   evalExprCorec.evalMany             CloTT.Eval                 library\CloTT\Eval.hs:(280,3)-(284,19)    5351          0    0.0    0.0     0.0    0.0
+ CAF:main1                            Main                       <no location info>                        2636          0    0.0    0.0     0.0    0.0
+  main                                Main                       benchmark\Main.hs:(187,1)-(192,56)        5184          1    0.0    0.0     0.0    0.0
+ CAF:main2                            Main                       <no location info>                        2635          0    0.0    0.0     0.6    1.0
+  main                                Main                       benchmark\Main.hs:(187,1)-(192,56)        5186          0    0.6    1.0     0.6    1.0
+ CAF:main3                            Main                       <no location info>                        2634          0    0.0    0.0     0.6    0.1
+  main                                Main                       benchmark\Main.hs:(187,1)-(192,56)        5187          0    0.6    0.1     0.6    0.1
+   main.n                             Main                       benchmark\Main.hs:188:7-16                5188          1    0.0    0.0     0.0    0.0
+ CAF:main4                            Main                       <no location info>                        2633          0    0.0    0.0    98.0   98.9
+  main                                Main                       benchmark\Main.hs:(187,1)-(192,56)        5189          0    0.0    0.0    98.0   98.9
+   main.trues                         Main                       benchmark\Main.hs:190:7-25                5245          1    0.0    0.0     0.0    0.0
+   transform                          CloTT.Interop              library\CloTT\Interop.hs:(178,1)-(183,45) 5191          1    0.0    0.0    98.0   98.9
+    toHask                            Main                       benchmark\Main.hs:(38,3)-(39,110)         5192     100000    0.2    0.3     0.6    0.3
+     ==                               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:18-19        5345     100000    0.0    0.0     0.0    0.0
+     toHask                           Main                       benchmark\Main.hs:(33,3)-(35,100)         5352     100000    0.2    0.0     0.4    0.0
+      ==                              CloTT.AST.Name             library\CloTT\AST\Name.hs:19:18-19        5359     200000    0.2    0.0     0.2    0.0
+    runEvalMState                     CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:66:1-69       5193          1    0.0    0.0    97.4   98.6
+     runEvalMState.(...)              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:66:29-64      5194          1    0.0    0.0    97.4   98.6
+      transform.evl                   CloTT.Interop              library\CloTT\Interop.hs:(179,3)-(183,45) 5196          1    0.0    0.0    97.4   98.6
+       withEnv                        CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:1-51       5201    1000001    0.4    1.2    96.8   98.2
+        withEnv.\                     CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5220          1    0.0    0.0     0.0    0.0
+         combine                      CloTT.Eval.Value           library\CloTT\Eval\Value.hs:108:1-43      5222          1    0.0    0.0     0.0    0.0
+         erEnv                        CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5221          1    0.0    0.0     0.0    0.0
+        evalExprCorec                 CloTT.Eval                 library\CloTT\Eval.hs:(271,1)-(284,19)    5205          0    0.0    0.0    96.4   96.9
+         evalExprCorec.evalMany       CloTT.Eval                 library\CloTT\Eval.hs:(280,3)-(284,19)    5348     400000    0.6    1.8     4.6    5.6
+          force                       CloTT.Eval                 library\CloTT\Eval.hs:(261,1)-(264,13)    5355          0    0.4    0.1     4.0    3.8
+           force.\                    CloTT.Eval                 library\CloTT\Eval.hs:264:8-13            5356     100000    0.0    0.1     0.0    0.1
+           force.\                    CloTT.Eval                 library\CloTT\Eval.hs:263:5-81            5364      99999    0.8    0.2     3.6    3.6
+            evalExprStep              CloTT.Eval                 library\CloTT\Eval.hs:(156,1)-(245,35)    5366     699993    1.4    1.8     2.2    2.9
+             lookupVar                CloTT.Eval                 library\CloTT\Eval.hs:(54,1)-(61,81)      5368     199998    0.6    0.7     0.8    1.1
+              globalLookup            CloTT.Eval                 library\CloTT\Eval.hs:(46,1)-(51,44)      5445     199998    0.2    0.3     0.2    0.3
+            force.\.\                 CloTT.Eval                 library\CloTT\Eval.hs:263:20-60           5377          0    0.0    0.0     0.6    0.5
+             extendEnv                CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5378      99999    0.4    0.5     0.6    0.5
+              compare                 CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5382     399995    0.2    0.0     0.2    0.0
+              unEnv                   CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5379      99999    0.0    0.0     0.0    0.0
+         evalExprCorec.go             CloTT.Eval                 library\CloTT\Eval.hs:(272,3)-(278,17)    5206     300000    0.4    1.1    91.8   91.4
+          evalExprCorec.evalMany      CloTT.Eval                 library\CloTT\Eval.hs:(280,3)-(284,19)    5349          0    3.4    6.2    91.5   90.2
+           force                      CloTT.Eval                 library\CloTT\Eval.hs:(261,1)-(264,13)    5357          0    0.0    0.0    88.1   84.0
+            force.\                   CloTT.Eval                 library\CloTT\Eval.hs:263:5-81            5365          0    0.4    0.1    87.9   83.9
+             evalExprStep             CloTT.Eval                 library\CloTT\Eval.hs:(156,1)-(245,35)    5367    2399975   14.3   19.4    85.1   82.3
+              lookupVar               CloTT.Eval                 library\CloTT\Eval.hs:(54,1)-(61,81)      5369     699993    6.0   12.1    12.9   18.0
+               globalLookup           CloTT.Eval                 library\CloTT\Eval.hs:(46,1)-(51,44)      5441     699992    3.6    4.4     4.0    4.8
+                compare               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5446    1599984    0.4    0.0     0.4    0.0
+                get                   CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:51:14-38      5444          0    0.0    0.4     0.0    0.4
+               envLookup              CloTT.Eval.Value           library\CloTT\Eval\Value.hs:114:1-34      5370     499995    1.4    0.2     2.2    0.2
+                compare               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5386    1299986    0.8    0.0     0.8    0.0
+               getEnv                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5371          0    0.4    0.8     0.8    0.8
+                erEnv                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5372     499995    0.4    0.0     0.4    0.0
+              withEnv.\               CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5393     399996    0.2    0.6    24.9    6.6
+               combine                CloTT.Eval.Value           library\CloTT\Eval\Value.hs:108:1-43      5395     399996   16.3    6.1    24.7    6.1
+                <=                    CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5407    5399939    3.4    0.0     3.4    0.0
+                >=                    CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5408    3899958    4.0    0.0     4.0    0.0
+                compare               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5409    1399984    1.0    0.0     1.0    0.0
+               erEnv                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5394     399996    0.0    0.0     0.0    0.0
+              evalExprStep.cenv'      CloTT.Eval                 library\CloTT\Eval.hs:205:15-42           5396     299997    0.0    0.0     1.2    0.7
+               extendEnv              CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5397     299997    1.2    0.7     1.2    0.7
+                compare               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5412     499995    0.0    0.0     0.0    0.0
+                unEnv                 CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5398     299997    0.0    0.0     0.0    0.0
+              evalPrim                CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5388     299997    0.4    0.0     1.0    1.1
+               evalPrim.\             CloTT.Eval                 library\CloTT\Eval.hs:152:5-92            5389      99999    0.6    1.0     0.6    1.0
+                app                   CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:16:1-35      5391     199997    0.0    0.0     0.0    0.0
+                var                   CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:25:1-25      5392     199997    0.0    0.0     0.0    0.0
+                lam'                  CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:37:1-42      5390      99999    0.0    0.0     0.0    0.0
+                tAbs                  CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:61:1-40      5415      99999    0.0    0.0     0.0    0.0
+                fixE                  CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:82:1-33      5451      99998    0.0    0.0     0.0    0.0
+               evalPrim.\             CloTT.Eval                 library\CloTT\Eval.hs:146:25-45           5414          0    0.0    0.1     0.0    0.1
+              evalClauses             CloTT.Eval                 library\CloTT\Eval.hs:(124,1)-(132,30)    5413     199998    0.2    0.1    29.4   35.5
+               evalClauses.helper     CloTT.Eval                 library\CloTT\Eval.hs:(126,3)-(132,30)    5416     199998    1.8    1.3    29.2   35.4
+                evalClause            CloTT.Eval                 library\CloTT\Eval.hs:(135,1)-(139,31)    5417     199998    8.9   12.5    27.0   34.0
+                 evalPat              CloTT.Eval                 library\CloTT\Eval.hs:(97,1)-(121,47)     5418     499995    3.0    5.4     8.5    9.3
+                  extendEnv           CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5429     299997    0.2    0.4     0.4    0.4
+                   compare            CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5448     299997    0.2    0.0     0.2    0.0
+                   unEnv              CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5430      99999    0.0    0.0     0.0    0.0
+                  ==                  CloTT.AST.Name             library\CloTT\AST\Name.hs:19:18-19        5419     199998    0.6    0.0     0.6    0.0
+                  evalPat.folder      CloTT.Eval                 library\CloTT\Eval.hs:(120,9)-(121,47)    5420     199998    2.0    1.7     4.2    3.0
+                   withEnv.\          CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5435     199998    0.0    0.1     0.0    0.1
+                   extendEnv          CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5431          0    1.6    0.9     2.2    0.9
+                    compare           CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5438     699993    0.6    0.0     0.6    0.0
+                    unEnv             CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5432     199998    0.0    0.0     0.0    0.0
+                   getEnv             CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5433          0    0.0    0.3     0.0    0.3
+                    erEnv             CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5434     199998    0.0    0.0     0.0    0.0
+                  getEnv              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5436          0    0.0    0.5     0.4    0.5
+                   erEnv              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5437     299997    0.4    0.0     0.4    0.0
+                 withEnv.\            CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5428     299997    0.6    0.2     0.6    0.2
+                 evalClauses.helper.\ CloTT.Eval                 library\CloTT\Eval.hs:131:18-23           5440      99999    0.4    0.2     0.4    0.2
+                 evalPrim             CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5422          0    0.0    0.0     0.0    0.1
+                  evalPrim.\          CloTT.Eval                 library\CloTT\Eval.hs:145:25-43           5423          0    0.0    0.1     0.0    0.1
+                 getEnv               CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5449          0    0.0    0.2     0.0    0.2
+                  erEnv               CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5450      99998    0.0    0.0     0.0    0.0
+                 lookupVar            CloTT.Eval                 library\CloTT\Eval.hs:(54,1)-(61,81)      5424          0    5.8    7.6     8.5   11.6
+                  envLookup           CloTT.Eval.Value           library\CloTT\Eval\Value.hs:114:1-34      5425     399996    0.4    0.1     0.4    0.1
+                   compare            CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5439    1499985    0.0    0.0     0.0    0.0
+                  getEnv              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5426          0    0.0    0.7     0.0    0.7
+                   erEnv              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5427     399996    0.0    0.0     0.0    0.0
+                  globalLookup        CloTT.Eval                 library\CloTT\Eval.hs:(46,1)-(51,44)      5442          0    1.4    2.9     2.4    3.2
+                   compare            CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5447    1199985    1.0    0.0     1.0    0.0
+                   get                CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:51:14-38      5443          0    0.0    0.3     0.0    0.3
+                evalClauses.helper.\  CloTT.Eval                 library\CloTT\Eval.hs:131:18-23           5421      99999    0.4    0.2     0.4    0.2
+              evalExprStep.cenv'      CloTT.Eval                 library\CloTT\Eval.hs:209:15-42           5399      99999    0.0    0.0     1.2    0.4
+               extendEnv              CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5400      99999    0.8    0.4     1.2    0.4
+                compare               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5404     299996    0.4    0.0     0.4    0.0
+                unEnv                 CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5401      99999    0.0    0.0     0.0    0.0
+              getEnv                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5410          0    0.2    0.5     0.2    0.5
+               erEnv                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5411     299996    0.0    0.0     0.0    0.0
+             withEnv.\                CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5373      99999    0.0    0.1     2.4    1.5
+              erEnv                   CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5374      99999    0.0    0.0     0.0    0.0
+              force.\.\               CloTT.Eval                 library\CloTT\Eval.hs:263:20-60           5375      99999    0.0    0.0     2.4    1.4
+               combine                CloTT.Eval.Value           library\CloTT\Eval\Value.hs:108:1-43      5376      99999    2.0    1.4     2.4    1.4
+                compare               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5384     299996    0.0    0.0     0.0    0.0
+                <=                    CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5383     199998    0.2    0.0     0.2    0.0
+                >=                    CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5385     199998    0.2    0.0     0.2    0.0
+            force.\                   CloTT.Eval                 library\CloTT\Eval.hs:264:8-13            5358          0    0.2    0.2     0.2    0.2
+          force                       CloTT.Eval                 library\CloTT\Eval.hs:(261,1)-(264,13)    5319          0    0.0    0.0     0.0    0.1
+           force.\                    CloTT.Eval                 library\CloTT\Eval.hs:264:8-13            5344     100000    0.0    0.1     0.0    0.1
+         evalExprStep                 CloTT.Eval                 library\CloTT\Eval.hs:(156,1)-(245,35)    5208         24    0.0    0.0     0.0    0.0
+          lookupVar                   CloTT.Eval                 library\CloTT\Eval.hs:(54,1)-(61,81)      5211          6    0.0    0.0     0.0    0.0
+           globalLookup               CloTT.Eval                 library\CloTT\Eval.hs:(46,1)-(51,44)      5253          6    0.0    0.0     0.0    0.0
+            compare                   CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5260         16    0.0    0.0     0.0    0.0
+            evalExprStep.cenv'        CloTT.Eval                 library\CloTT\Eval.hs:205:15-42           5275          2    0.0    0.0     0.0    0.0
+             extendEnv                CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5276          2    0.0    0.0     0.0    0.0
+              compare                 CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5278          2    0.0    0.0     0.0    0.0
+              unEnv                   CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5277          2    0.0    0.0     0.0    0.0
+            withEnv.\                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5272          2    0.0    0.0     0.0    0.0
+             combine                  CloTT.Eval.Value           library\CloTT\Eval\Value.hs:108:1-43      5274          2    0.0    0.0     0.0    0.0
+              <=                      CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5281          4    0.0    0.0     0.0    0.0
+              >=                      CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5283          3    0.0    0.0     0.0    0.0
+              compare                 CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5282          3    0.0    0.0     0.0    0.0
+             erEnv                    CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5273          2    0.0    0.0     0.0    0.0
+            envLookup                 CloTT.Eval.Value           library\CloTT\Eval\Value.hs:114:1-34      5267          1    0.0    0.0     0.0    0.0
+             compare                  CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5284          2    0.0    0.0     0.0    0.0
+            get                       CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:51:14-38      5257          0    0.0    0.0     0.0    0.0
+            getEnv                    CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5270          0    0.0    0.0     0.0    0.0
+             erEnv                    CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5271          5    0.0    0.0     0.0    0.0
+           envLookup                  CloTT.Eval.Value           library\CloTT\Eval\Value.hs:114:1-34      5213          4    0.0    0.0     0.0    0.0
+            compare                   CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5231          7    0.0    0.0     0.0    0.0
+           getEnv                     CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5218          0    0.0    0.0     0.0    0.0
+            erEnv                     CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5219          4    0.0    0.0     0.0    0.0
+          evalPrim                    CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5262          3    0.0    0.0     0.0    0.0
+           evalPrim.\                 CloTT.Eval                 library\CloTT\Eval.hs:152:5-92            5263          1    0.0    0.0     0.0    0.0
+            app                       CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:16:1-35      5265          2    0.0    0.0     0.0    0.0
+            var                       CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:25:1-25      5266          2    0.0    0.0     0.0    0.0
+            fixE                      CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:82:1-33      5387          1    0.0    0.0     0.0    0.0
+            lam'                      CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:37:1-42      5264          1    0.0    0.0     0.0    0.0
+            tAbs                      CloTT.AST.Helpers          library\CloTT\AST\Helpers.hs:61:1-40      5296          1    0.0    0.0     0.0    0.0
+           evalPrim.\                 CloTT.Eval                 library\CloTT\Eval.hs:146:25-45           5290          0    0.0    0.0     0.0    0.0
+          evalClauses                 CloTT.Eval                 library\CloTT\Eval.hs:(124,1)-(132,30)    5285          2    0.0    0.0     0.0    0.0
+           evalClauses.helper         CloTT.Eval                 library\CloTT\Eval.hs:(126,3)-(132,30)    5301          2    0.0    0.0     0.0    0.0
+            evalClause                CloTT.Eval                 library\CloTT\Eval.hs:(135,1)-(139,31)    5302          2    0.0    0.0     0.0    0.0
+             evalPat                  CloTT.Eval                 library\CloTT\Eval.hs:(97,1)-(121,47)     5303          5    0.0    0.0     0.0    0.0
+              extendEnv               CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5325          3    0.0    0.0     0.0    0.0
+               compare                CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5343          3    0.0    0.0     0.0    0.0
+               unEnv                  CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5326          1    0.0    0.0     0.0    0.0
+              ==                      CloTT.AST.Name             library\CloTT\AST\Name.hs:19:18-19        5304          2    0.0    0.0     0.0    0.0
+              evalPat.folder          CloTT.Eval                 library\CloTT\Eval.hs:(120,9)-(121,47)    5309          2    0.0    0.0     0.0    0.0
+               withEnv.\              CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5332          2    0.0    0.0     0.0    0.0
+               extendEnv              CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5327          0    0.0    0.0     0.0    0.0
+                compare               CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5335          4    0.0    0.0     0.0    0.0
+                unEnv                 CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5328          2    0.0    0.0     0.0    0.0
+               getEnv                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5330          0    0.0    0.0     0.0    0.0
+                erEnv                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5331          2    0.0    0.0     0.0    0.0
+              getEnv                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5333          0    0.0    0.0     0.0    0.0
+               erEnv                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5334          3    0.0    0.0     0.0    0.0
+             withEnv.\                CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5324          3    0.0    0.0     0.0    0.0
+             evalClauses.helper.\     CloTT.Eval                 library\CloTT\Eval.hs:131:18-23           5339          1    0.0    0.0     0.0    0.0
+             evalPrim                 CloTT.Eval                 library\CloTT\Eval.hs:(142,1)-(153,47)    5315          0    0.0    0.0     0.0    0.0
+              evalPrim.\              CloTT.Eval                 library\CloTT\Eval.hs:145:25-43           5316          0    0.0    0.0     0.0    0.0
+             getEnv                   CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5380          0    0.0    0.0     0.0    0.0
+              erEnv                   CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5381          1    0.0    0.0     0.0    0.0
+             lookupVar                CloTT.Eval                 library\CloTT\Eval.hs:(54,1)-(61,81)      5320          0    0.0    0.0     0.0    0.0
+              envLookup               CloTT.Eval.Value           library\CloTT\Eval\Value.hs:114:1-34      5321          4    0.0    0.0     0.0    0.0
+               compare                CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5336         13    0.0    0.0     0.0    0.0
+              getEnv                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5322          0    0.0    0.0     0.0    0.0
+               erEnv                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5323          4    0.0    0.0     0.0    0.0
+              globalLookup            CloTT.Eval                 library\CloTT\Eval.hs:(46,1)-(51,44)      5340          0    0.0    0.0     0.0    0.0
+               compare                CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5342         12    0.0    0.0     0.0    0.0
+               get                    CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:51:14-38      5341          0    0.0    0.0     0.0    0.0
+            evalClauses.helper.\      CloTT.Eval                 library\CloTT\Eval.hs:131:18-23           5310          1    0.0    0.0     0.0    0.0
+          evalPat                     CloTT.Eval                 library\CloTT\Eval.hs:(97,1)-(121,47)     5209          2    0.0    0.0     0.0    0.0
+           ==                         CloTT.AST.Name             library\CloTT\AST\Name.hs:19:18-19        5232          1    0.0    0.0     0.0    0.0
+           evalPat.folder             CloTT.Eval                 library\CloTT\Eval.hs:(120,9)-(121,47)    5237          1    0.0    0.0     0.0    0.0
+            withEnv.\                 CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5248          1    0.0    0.0     0.0    0.0
+            extendEnv                 CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5240          0    0.0    0.0     0.0    0.0
+             compare                  CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5251          1    0.0    0.0     0.0    0.0
+             unEnv                    CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5241          1    0.0    0.0     0.0    0.0
+            getEnv                    CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5246          0    0.0    0.0     0.0    0.0
+             erEnv                    CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5247          1    0.0    0.0     0.0    0.0
+           extendEnv                  CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5239          1    0.0    0.0     0.0    0.0
+           getEnv                     CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5249          0    0.0    0.0     0.0    0.0
+            erEnv                     CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5250          1    0.0    0.0     0.0    0.0
+          withEnv.\                   CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:72:26-50      5238          2    0.0    0.0     0.0    0.0
+           combine                    CloTT.Eval.Value           library\CloTT\Eval\Value.hs:108:1-43      5292          1    0.0    0.0     0.0    0.0
+            <=                        CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5298          2    0.0    0.0     0.0    0.0
+            >=                        CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5300          1    0.0    0.0     0.0    0.0
+            compare                   CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5299          1    0.0    0.0     0.0    0.0
+           erEnv                      CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5291          1    0.0    0.0     0.0    0.0
+          evalExprStep.cenv'          CloTT.Eval                 library\CloTT\Eval.hs:205:15-42           5293          1    0.0    0.0     0.0    0.0
+           extendEnv                  CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5294          1    0.0    0.0     0.0    0.0
+            compare                   CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5297          2    0.0    0.0     0.0    0.0
+            unEnv                     CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5295          1    0.0    0.0     0.0    0.0
+       evalExprCorec                  CloTT.Eval                 library\CloTT\Eval.hs:(271,1)-(284,19)    5204          1    0.0    0.0     0.0    0.0
+        evalExprStep                  CloTT.Eval                 library\CloTT\Eval.hs:(156,1)-(245,35)    5207          5    0.0    0.0     0.0    0.0
+         lookupVar                    CloTT.Eval                 library\CloTT\Eval.hs:(54,1)-(61,81)      5210          3    0.0    0.0     0.0    0.0
+          globalLookup                CloTT.Eval                 library\CloTT\Eval.hs:(46,1)-(51,44)      5252          3    0.0    0.0     0.0    0.0
+        evalExprCorec.evalMany        CloTT.Eval                 library\CloTT\Eval.hs:(280,3)-(284,19)    5353          0    0.0    0.0     0.0    0.0
+         force                        CloTT.Eval                 library\CloTT\Eval.hs:(261,1)-(264,13)    5354          1    0.0    0.0     0.0    0.0
+        evalExprCorec.go              CloTT.Eval                 library\CloTT\Eval.hs:(272,3)-(278,17)    5317          0    0.0    0.0     0.0    0.0
+         force                        CloTT.Eval                 library\CloTT\Eval.hs:(261,1)-(264,13)    5318          1    0.0    0.0     0.0    0.0
+       evalExprStep                   CloTT.Eval                 library\CloTT\Eval.hs:(156,1)-(245,35)    5199          1    0.0    0.0     0.0    0.0
+        getEnv                        CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:69:1-19       5228          0    0.0    0.0     0.0    0.0
+         erEnv                        CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:30:14-18      5229          1    0.0    0.0     0.0    0.0
+       transform.evl.cenv'            CloTT.Interop              library\CloTT\Interop.hs:182:9-37         5223          1    0.0    0.0     0.0    0.0
+        extendEnv                     CloTT.Eval.Value           library\CloTT\Eval\Value.hs:105:1-42      5224          1    0.0    0.0     0.0    0.0
+         unEnv                        CloTT.Eval.Value           library\CloTT\Eval\Value.hs:94:22-26      5225          1    0.0    0.0     0.0    0.0
+       transform.evl.inv              CloTT.Interop              library\CloTT\Interop.hs:181:9-30         5226          1    0.0    0.0     0.6    0.4
+        toCloTT                       Main                       benchmark\Main.hs:(51,3)-(53,47)          5227          1    0.0    0.0     0.6    0.4
+         toCloTT                      Main                       benchmark\Main.hs:43:3-49                 5243          1    0.0    0.0     0.6    0.4
+          clottStream                 Main                       benchmark\Main.hs:(46,1)-(47,53)          5244     100001    0.6    0.4     0.6    0.4
+           toCloTT                    Main                       benchmark\Main.hs:(29,3)-(30,48)          5329     100000    0.0    0.0     0.0    0.0
+         toCloTT.strsing              Main                       benchmark\Main.hs:52:9-78                 5242          1    0.0    0.0     0.0    0.0
+      unEvalM                         CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:47:28-34      5195          1    0.0    0.0     0.0    0.0
+     runEvalMState.x                  CloTT.Eval.EvalM           library\CloTT\Eval\EvalM.hs:66:29-64      5198          1    0.0    0.0     0.0    0.0
+ CAF:main65                           Main                       <no location info>                        2631          0    0.0    0.0     0.0    0.0
+  simpleTrans                         Main                       benchmark\Main.hs:(156,1)-(184,2)         5258          0    0.0    0.0     0.0    0.0
+   >=                                 CloTT.AST.Name             library\CloTT\AST\Name.hs:19:13-15        5259          8    0.0    0.0     0.0    0.0
+ CAF:simpleTrans                      Main                       benchmark\Main.hs:156:1-11                2632          0    0.0    0.0     0.0    0.0
+  simpleTrans                         Main                       benchmark\Main.hs:(156,1)-(184,2)         5190          1    0.0    0.0     0.0    0.0
+ main                                 Main                       benchmark\Main.hs:(187,1)-(192,56)        5185          0    0.8    0.0     0.8    0.0
