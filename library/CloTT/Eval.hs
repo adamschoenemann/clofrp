@@ -145,11 +145,12 @@ evalPrim = \case
   P.Fold             -> pure . Prim $ FoldP
   P.Unfold           -> pure . Prim $ UnfoldP
   P.Tick             -> pure . Prim $ Tick
+  P.Input            -> getInput
 
   -- fix ~> \f -> f (dfix f)
   -- fix ~> \f -> f (\\(af). fix f)
   P.Fix              -> 
-    evalExprStep (lam' "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f"))
+    pure $ Closure mempty "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f")
   P.Undefined        -> otherErr $ "Undefined!"
 
 evalExprStep :: Pretty a => Expr a -> EvalM a (Value a)
@@ -203,11 +204,11 @@ evalExprStep (A ann expr') =
         -- order of union of envs is very important to avoid incorrect name capture
         (Closure cenv nm e1', _) -> do
           let cenv' = extendEnv nm v2 cenv
-          withEnv (combine cenv') $ evalExprStep e1'
+          withEnv (const cenv') $ evalExprStep e1'
 
         (TickClosure cenv nm e1', _) -> do
           let cenv' = extendEnv nm v2 cenv
-          withEnv (combine cenv') $ evalExprStep e1'
+          withEnv (const cenv') $ evalExprStep e1'
 
         (Constr nm args, _) -> do
           pure $ Constr nm (args ++ [v2])
@@ -216,17 +217,15 @@ evalExprStep (A ann expr') =
         (Prim UnfoldP, _) -> 
           case v2 of 
             Fold v -> pure v
-            _      -> otherErr $ show $ "Expected (fold _) but got" <+> pretty v2
+            _      -> otherErr $ show $ "Cannot unfold" <+> pretty v2 <+> "at" <+> pretty ann
         
-        (_, Prim Tick) -> pure v1
-        (_, TickVar _) -> pure v1
+        (Delay v, Prim Tick) -> pure v
+        (Delay v, TickVar _) -> pure v
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim (RuntimeErr _)) -> pure v2
 
         _ -> otherErr $ show $  pretty v1 <+> pretty v2 <+> "is not a legal application at" <+> pretty ann
 
-          
-    
     E.Ann e t -> evalExprStep e
 
     E.Tuple ts -> Tuple <$> sequence (map evalExprStep ts) 
@@ -261,6 +260,7 @@ force :: Pretty a => Value a -> EvalM a (Value a)
 force = \case
   TickClosure cenv nm expr -> 
     withEnv (\e -> combine e (extendEnv nm (Prim Tick) cenv)) $ evalExprStep expr
+  Delay v -> pure v
   v -> pure v
 
 {- evalExprCorec (fix (\g -> cons z g))
@@ -273,7 +273,7 @@ evalExprCorec expr = go (10000000 :: Int) =<< evalExprStep expr where
   go n v = do
     case v of
       Constr nm vs -> Constr nm <$> evalMany n vs
-      Fold v -> Fold <$> (go (n-1) =<< force v)
+      Fold v -> Fold <$> go n v
       Tuple vs -> Tuple <$> evalMany n vs
       _ -> pure v
 

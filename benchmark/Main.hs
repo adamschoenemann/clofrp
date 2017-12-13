@@ -24,6 +24,13 @@ import CloTT.Eval
 import Data.Proxy
 import CloTT.QuasiQuoter
 import CloTT.Pretty
+import CloTT.Examples
+
+import Text.Parsec.Pos
+import Data.String (fromString)
+
+instance Pretty SourcePos where
+  pretty = fromString . show
 
 instance ToCloTT Bool ('CTFree "Bool") where
   toCloTT (SFree px) True  = (Constr "True" [])  
@@ -34,6 +41,15 @@ instance ToHask ('CTFree "Bool") Bool where
   toHask (SFree px) (Constr "False" []) = False
   toHask (SFree px) v                   = error ("Expected Constr but got " ++ pps (takeConstr 2 v))
 
+instance ToHask ('CTFree "Nat") Int where
+  toHask (SFree px) (Fold (Constr "Z" []))  = 0
+  toHask (SFree px) (Fold (Constr "S" [r])) = succ (toHask (SFree px) r)
+  toHask (SFree px) _                = undefined
+
+instance ToCloTT Int ('CTFree "Nat") where
+  toCloTT (SFree px) 0 = Fold (Constr "Z" [])
+  toCloTT (SFree px) n = Fold (Constr "S" [toCloTT (SFree px) (n-1)])
+
 instance ToHask t r => ToHask ('CTFree "Stream" :@: u :@: t) [r] where
   toHask s@((s1 `SApp` s2) `SApp` s3) (Fold (Constr "Cons" [v, c])) = toHask s3 v : toHask s c
   toHask s@((s1 `SApp` s2) `SApp` s3) v = error ("Expected fold (Cons x ..) but got " ++ pps (takeConstr 2 v))
@@ -43,7 +59,7 @@ instance ToCloTT hask clott => ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0"
   toCloTT s@(s1 `SApp` s2) xs = clottStream s2 xs
 
 -- clottStream s2 (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, clottStream s2 xs'])
-clottStream s2 (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, clottStream s2 xs'])
+clottStream s2 (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, Delay (clottStream s2 xs')])
 clottStream s2 []        = runtimeErr "End of stream"
 
 -- haskell lists to clott coinductive streams 
@@ -178,16 +194,28 @@ simpleTrans = [clott|
        in  fold (Cons x' (\\(af : k) -> (g [af]) (xs' [af])))
   ).
 
-  main : CoStream Bool -> Stream K0 Bool.
-  main = \input ->
-    let Cos xs = input in negate xs.
+  fixid : forall (k : Clock) a. Stream k a -> Stream k a.
+  fixid = fix (\g xs -> 
+    case unfold xs of
+    | Cons x xs' -> fold (Cons x (\\(af : k) -> g [af] (xs' [af])))
+  ).
+
+  main : Stream K0 Bool -> Stream K0 Bool.
+  main = \xs -> negate xs.
 |]
 -- main = defaultMain [bench "const" (whnf const ())]
 main :: IO ()
-main = do
-  let n = 100000
-  let truefalse = (True : False : truefalse :: [Bool])
-  let trues = repeat True
+main = bench_clott_add
+  -- let n = 500000
+  -- let truefalse = (True : False : truefalse :: [Bool])
+  -- let trues = repeat True
   -- putStrLn . show $ take 100000 (transform everyOtherTrans truefalse)
-  putStrLn . show $ take n (transform simpleTrans trues)
+  -- putStrLn . show $ take n (streamTrans simpleTrans trues)
   -- putStrLn . show $ take 8000000 (execute everyOtherExec)
+
+bench_clott_add :: IO ()
+bench_clott_add = do
+  let n = 500
+  let inputs = zip (repeat 1) (repeat 1)
+  let output = take n (streamTrans clott_add inputs)
+  putStrLn . show $ output

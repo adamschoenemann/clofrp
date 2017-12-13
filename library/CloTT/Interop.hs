@@ -32,8 +32,7 @@ import           Language.Haskell.TH ( Exp (..), ExpQ, Lit (..), Pat (..), Q
 import qualified Language.Haskell.TH.Syntax as S
 import qualified Language.Haskell.TH as T
 import           Data.Data
-import           Data.String (fromString)
-import           Text.Parsec.Pos
+import           Debug.Trace
 
 import qualified CloTT.AST as P
 import           CloTT.AST (Type, TySort(..))
@@ -41,9 +40,6 @@ import           CloTT.Annotated
 import           CloTT.AST.Helpers
 import           CloTT.Eval
 import           CloTT.Pretty
-
-instance Pretty (SourcePos) where
-  pretty = fromString . show
 
 -- -----------------------------------------------------------------------------
 -- CloTy
@@ -177,10 +173,58 @@ transform :: (Pretty a, ToCloTT hask1 clott1, ToHask clott2 hask2)
           => CloTT (clott1 :->: clott2) a -> hask1 -> hask2
 transform (CloTT er st expr (SArr s1 s2)) input = toHask s2 $ runEvalMState (evl expr) er st where
   evl e = do 
-    Closure cenv nm e <- evalExprStep e
+    Closure cenv nm ne <- evalExprStep e
     let inv = toCloTT s1 input
     let cenv' = extendEnv nm inv cenv
-    withEnv (combine cenv') $ evalExprCorec e
+    withEnv (combine cenv') $ evalExprCorec ne
+
+evalExprOver :: Pretty a => [Value a] -> P.Expr a -> EvalM a (Value a)
+evalExprOver [] _ = pure $ runtimeErr "End of input"
+evalExprOver (x : xs) expr = do
+  v <- withInput x $ evalExprStep expr
+  case v of
+    Fold (Constr "Cons" [y, TickClosure cenv nm e]) -> do
+      cont <- withEnv (combine $ extendEnv nm (Prim Tick) cenv) $ evalExprOver xs e
+      pure $ Fold $ Constr "Cons" [y, cont]
+    _ -> error (pps v)
+
+
+streamTrans :: (Pretty a, ToCloTT hask1 clott1, ToHask clott2 hask2)
+            => CloTT ('CTFree "Stream" ':@: 'CTFree "K0" ':@: clott1
+                      ':->:
+                      'CTFree "Stream" ':@: 'CTFree "K0" ':@: clott2) a
+            -> [hask1] -> [hask2]
+streamTrans (CloTT er st expr ((s1 `SApp` _ `SApp` s2) `SArr` (s3 `SApp` s4 `SApp` s5))) input = do
+  fromCloTTStream $ runEvalMState (begin input) er st
+  where
+    begin xs = do
+      Closure env nm e@(A ann _) <- evalExprStep expr
+      let e' = P.substExpr (P.Prim P.Input) nm e
+      let inputs = map (makeInput ann) xs
+      withEnv (const env) $ evalExprOver inputs e'
+
+    makeInput ann z = Fold $ Constr "Cons" [toCloTT s2 z, TickClosure mempty "#_" $ A ann $ P.Prim P.Input]
+      -- withEnv (extendEnv nm (toInput xs)) $ evalExprCorec e
+     
+
+    -- toInput [] = Prim $ RuntimeErr "End of input"
+    -- toInput (x : xs) = 
+    --   let env = singleEnv "#INPUT" (toInput xs)
+    --   in  Fold $ Constr "Cons" [toCloTT s2 x, TickClosure env "#_" $ A undefined $ P.Prim P.Input]
+
+    -- go [] _ _ = pure (Prim $ RuntimeErr "End of input")
+    -- go (x:xs) nm e = do
+    --   -- traceM $ "go " ++ show nm ++ " (" ++ pps e ++ ")"
+    --   let inv = toInput (x:xs) 
+    --   result <- withEnv (extendEnv nm inv) $ evalExprStep e
+    --   case result of
+    --     Fold (Constr "Cons" [rv, TickClosure ncenv tnm nne]) -> do 
+    --       cont <- withEnv (const $ extendEnv tnm (Prim Tick) ncenv) $ go xs "#INPUT" nne
+    --       pure $ Fold (Constr "Cons" [rv, cont])
+    --     _  -> error $ "unexpected: " ++ pps result
+
+    fromCloTTStream (Fold (Constr "Cons" [v, c])) = toHask s5 v : fromCloTTStream c
+    fromCloTTStream v = error $ "fromCloTTStream:" ++ pps v
 
 
 --   TyPrim _ TyNat  -> T.conE 'SNat

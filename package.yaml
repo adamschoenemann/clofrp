@@ -7,7 +7,9 @@ benchmarks:
     - base
     - clott
     - criterion
+    - parsec
     ghc-options:
+    - -w
     - -rtsopts
     - -threaded
     - -fprof-auto

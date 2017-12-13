@@ -22,6 +22,7 @@ data Prim
   | Tick
   | Fix
   | Undefined
+  | Input
   deriving (Eq, Data, Typeable, Generic, NFData)
 
 instance Show Prim where
@@ -33,6 +34,7 @@ instance Show Prim where
   show Tick    = "◇"
   show Fix     = "fix"
   show Undefined  = "⊥"
+  show Input  = "#input"
 
 instance Pretty Prim where
   pretty = fromString . show

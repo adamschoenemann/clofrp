@@ -12,8 +12,8 @@
 
 module CloTT.Eval.Value where
 
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
+import Data.Map.Lazy (Map)
+import qualified Data.Map.Lazy as M
 import Data.Text.Prettyprint.Doc 
 import Control.DeepSeq
 import GHC.Generics
@@ -52,6 +52,7 @@ data Value a
   | Tuple [Value a]
   | Constr Name [Value a]
   | Fold (Value a)
+  | Delay (Value a)
   deriving (Show, Eq, Generic, Data, Typeable)
 
 -- takes n levels down in a tree of constructors
@@ -86,6 +87,7 @@ prettyVal = pret where
       Constr nm [] -> pretty nm
       Constr nm vs -> parens $ pretty nm <+> fillSep (map (pret (i-1)) vs)
       Fold v       -> parens $ "fold" <+> (pret i v)
+      Delay v       -> parens $ "delay" <+> (pret i v)
     
 prettyEnv :: Int -> Env a -> Doc ann
 prettyEnv 0 _ = "..."
@@ -100,6 +102,9 @@ instance Pretty (Env a) where
 
 instance Show (Env a) where
   show = show . pretty
+
+singleEnv :: Name -> Value a -> Env a
+singleEnv n = Env . M.singleton n
 
 extendEnv :: Name -> Value a -> Env a -> Env a
 extendEnv k v = Env . M.insert k v . unEnv

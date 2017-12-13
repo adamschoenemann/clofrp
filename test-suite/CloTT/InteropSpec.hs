@@ -81,7 +81,7 @@ instance ToCloTT h c => ToCloTT (Foo h) ('CTFree "Foo" :@: c) where
 -- haskell lists to clott streams over k₀
 instance ToCloTT hask clott => ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) where
   toCloTT s@(s1 `SApp` s2) xs = clottStream xs where
-    clottStream (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, clottStream xs'])
+    clottStream (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, Delay (clottStream xs')])
     clottStream []        = runtimeErr "End of stream"
 
 -- haskell lists to clott coinductive streams 
@@ -131,7 +131,7 @@ clott_add = [clott|
 
 addition_ex :: IO ()
 addition_ex = interact (unlines . process . lines) where
-  process = map (("result: " ++) . (show :: Int -> String)) . transform clott_add .
+  process = map (("result: " ++) . (show :: Int -> String)) . streamTrans clott_add .
             map (read :: String -> (Int,Int))
 
 
@@ -277,6 +277,41 @@ interopSpec = do
         main = \x -> (x, x, x).
       |]
       transform prog True `shouldBe` (True, True, True)
+    
+    it "works with fixpoint (1)" $ do
+      let prog = [clott|
+        data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+        data Bool = True | False.        
+
+        negate : forall (k : Clock). Stream k Bool -> Stream k Bool.
+        negate = fix (\g xs ->
+          case unfold xs of 
+          | Cons x xs'-> 
+            let x' = (case x of | True -> False | False -> True) : Bool
+            in  fold (Cons x' (\\(af : k) -> (g [af]) (xs' [af])))
+        ).
+
+        -- fixid : forall (k : Clock) a. Stream k a -> Stream k a.
+        -- fixid = fix (\g xs -> 
+        --   case unfold xs of
+        --   | Cons x xs' -> fold (Cons x (\\(af : k) -> g [af] (xs' [af])))
+        -- ).
+
+        main : Stream K0 Bool -> Stream K0 Bool.
+        main = \xs -> negate xs.
+      |]
+      let n = 10
+      let falses = repeat False
+      take n (streamTrans prog falses) `shouldBe` replicate n True
+
+    it "works with clott_add" $ do
+      let n = 10
+      let inputs = zip [1..] [2..]
+      let output = take n (streamTrans clott_add inputs)
+      let expected = take n $ map (uncurry (+)) inputs :: [Int]
+      output `shouldBe` expected
 
     it "it works for every-other" $ do
       let prog = [clott|

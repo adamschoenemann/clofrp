@@ -150,3 +150,21 @@ unannE' = \case
   PrimRec t -> PrimRec (unannT t)
   Prim p -> Prim p
 
+substExpr :: Expr' a -> Name -> Expr a -> Expr a
+substExpr new old = go where 
+  go (A ann into) = A ann $ case into of
+    Var nm | nm == old -> new
+           | otherwise -> Var nm
+    TickVar nm | nm == old -> new
+               | otherwise -> TickVar nm
+    Ann e t -> Ann (go e) t
+    App e1 e2 -> App (go e1) (go e2)
+    Lam nm mty e -> Lam nm mty (go e)
+    TickAbs nm kappa e -> TickAbs nm kappa (go e)
+    Tuple es -> Tuple (map go es)
+    Let p e1 e2 -> Let p (go e1) (go e2)
+    Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses
+    TypeApp e t -> TypeApp (go e) t
+    Fmap t -> Fmap t
+    PrimRec t -> PrimRec t
+    Prim p -> Prim p
