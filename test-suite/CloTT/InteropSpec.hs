@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -297,7 +299,7 @@ interopSpec = do
         -- fixid = fix (\g xs -> 
         --   case unfold xs of
         --   | Cons x xs' -> fold (Cons x (\\(af : k) -> g [af] (xs' [af])))
-        -- ).
+        -- )
 
         main : Stream K0 Bool -> Stream K0 Bool.
         main = \xs -> negate xs.
@@ -307,7 +309,7 @@ interopSpec = do
       take n (streamTrans prog falses) `shouldBe` replicate n True
 
     it "works with clott_add" $ do
-      let n = 10
+      let n = 50
       let inputs = zip [1..] [2..]
       let output = take n (streamTrans clott_add inputs)
       let expected = take n $ map (uncurry (+)) inputs :: [Int]

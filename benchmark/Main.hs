@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeOperators #-}
@@ -69,6 +71,17 @@ instance ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) => ToCloTT
     in  Constr "Cos" [toCloTT strsing xs] where
 
 type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
+type CTBinTree = 'CTFree "BinTree" :@: 'CTFree "K0"
+
+instance ToHask ('CTFree "Unit") () where
+  toHask _ (Constr "MkUnit" []) = ()
+
+instance ToHask c h => ToHask (CTBinTree :@: c) (BinTree h) where
+  toHask s@(_ `SApp` _ `SApp` s1) (Fold (Constr "Branch" [x, l, r])) =
+    Branch (toHask s1 x) (toHask s l) (toHask s r)
+
+data BinTree a = Branch a (BinTree a) (BinTree a) | Done deriving (Show, Eq)
+
 -- type CTNat = 'CTFree "Nat"
 
 everyOtherExec = [clott|
@@ -203,6 +216,30 @@ simpleTrans = [clott|
   main : Stream K0 Bool -> Stream K0 Bool.
   main = \xs -> negate xs.
 |]
+
+binTree = [clott|
+  data BinTreeF (k : Clock) a f = Branch a (|>k f) (|>k f).
+  type BinTree (k : Clock) a = Fix (BinTreeF k a).
+  data Unit = MkUnit.
+  data Bool = True | False.
+
+  data StreamF (k : Clock) a f = Cons a (|>k f).
+  type Stream (k : Clock) a = Fix (StreamF k a).
+
+  constBinTree : forall (k : Clock) a. a -> BinTree k a.
+  constBinTree = \x ->
+    fix (\g -> fold (Branch x g g)).
+
+  -- repeat : forall (k : Clock) a. a -> Stream k a.
+  -- repeat = \x -> fix (\g -> fold (Cons x g)).
+
+  main : BinTree K0 Unit.
+  main = constBinTree MkUnit.
+
+  -- main : Stream K0 Bool.
+  -- main = repeat True.
+|]
+
 -- main = defaultMain [bench "const" (whnf const ())]
 main :: IO ()
 main = bench_clott_add
@@ -213,9 +250,14 @@ main = bench_clott_add
   -- putStrLn . show $ take n (streamTrans simpleTrans trues)
   -- putStrLn . show $ take 8000000 (execute everyOtherExec)
 
+bench_binTree :: IO ()
+bench_binTree = do
+  let n = 200000
+  putStrLn . show $ execute binTree
+
 bench_clott_add :: IO ()
 bench_clott_add = do
-  let n = 500
+  let n = 200000
   let inputs = zip (repeat 1) (repeat 1)
   let output = take n (streamTrans clott_add inputs)
   putStrLn . show $ output

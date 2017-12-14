@@ -436,6 +436,30 @@ evalSpec = do
       -- putStrLn (replicate 80 '-')
       -- True `shouldBe` True
 
+  it "evals corecursively under tuples" $ do
+    let Right prog = pprog [text|
+      data Bool = True | False.
+
+      data StreamF (k : Clock) a f = Cons (a, |>k f).
+      type Stream (k : Clock) a = Fix (StreamF k a).
+
+      repeat : forall (k : Clock) a. a -> Stream k a.
+      repeat = \x -> fix (\g -> fold (Cons (x,g))).
+
+      main : Stream K0 Bool.
+      main = repeat True.
+    |]
+    let v = evalProg "main" prog
+    takeValueList vboolToBool 10 v `shouldBe` replicate 10 True
+
+    -- let n = 2 :: Int
+    -- let t = takeBinTree n v
+    -- t `shouldBe` ofHeightBin () n
+
+    -- putStrLn . show $ t
+    -- True `shouldBe` True
+    -- countNodes t `shouldBe` 2 ^ (n-1) - 1
+
   it "evals replaceMin example" $ do
     let Right prog = pprog Fixtures.replaceMin
     let v = evalProg "main" prog
@@ -447,8 +471,21 @@ evalSpec = do
     let conv (Constr "MkUnit" []) = ()
         conv _                   = undefined
     takeValueList conv 10 v `shouldBe` replicate 10 ()
+
+data BinTree a = Branch a (BinTree a, BinTree a) | Done deriving (Eq, Show)
+
+ofHeightBin :: a -> Int -> BinTree a
+ofHeightBin x 0 = Done
+ofHeightBin x n = Branch x (ofHeightBin x (n-1), ofHeightBin x (n-1))
+
+takeBinTree :: Int -> Value a -> BinTree ()
+takeBinTree 0 _        = Done
+takeBinTree n (Fold v) = takeBinTree n v
+takeBinTree n (Constr "Branch" [Constr "MkUnit" [], t1, t2]) = Branch () (takeBinTree (n-1) t1, takeBinTree (n-1) t2)
+takeBinTree _ v = error $ pps v
         
 data Tree a = Leaf a | Br (Tree a) (Tree a) deriving (Eq, Show)
+
 takeTree :: Value a -> Tree String
 takeTree (Fold v) = takeTree v
 takeTree (Constr "Leaf" [Fold (Constr "Z" [])]) = Leaf "Z"
@@ -479,6 +516,7 @@ takeValueList f n v
       case v of
         Fold v' -> takeValueList f n v'
         Constr "Cons" [] -> []
+        Constr "Cons" [Tuple [v',vs]] -> takeValueList f n (Constr "Cons" [v', vs])
         Constr "Cons" (v':vs) -> f v' : concatMap (takeValueList f (n-1)) vs
         _            -> [f v]
         -- Constr nm vs -> Constr nm (map (takeConstr (n-1)) vs)

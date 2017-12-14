@@ -259,7 +259,7 @@ coindplz = let Right x = runTestM loop in x where
 force :: Pretty a => Value a -> EvalM a (Value a)
 force = \case
   TickClosure cenv nm expr -> 
-    withEnv (\e -> combine e (extendEnv nm (Prim Tick) cenv)) $ evalExprStep expr
+    withEnv (const $ extendEnv nm (Prim Tick) cenv) $ evalExprStep expr
   Delay v -> pure v
   v -> pure v
 
@@ -268,7 +268,7 @@ force = \case
   => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
 -}
 evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
-evalExprCorec expr = go (10000000 :: Int) =<< evalExprStep expr where 
+evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
   go n v | n <= 0 = pure v
   go n v = do
     case v of

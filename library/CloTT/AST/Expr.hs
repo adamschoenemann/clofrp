@@ -159,8 +159,12 @@ substExpr new old = go where
                | otherwise -> TickVar nm
     Ann e t -> Ann (go e) t
     App e1 e2 -> App (go e1) (go e2)
-    Lam nm mty e -> Lam nm mty (go e)
-    TickAbs nm kappa e -> TickAbs nm kappa (go e)
+    Lam nm mty e 
+      | nm == old -> Lam nm mty e
+      | otherwise -> Lam nm mty (go e)
+    TickAbs nm kappa e 
+      | nm == old -> TickAbs nm kappa e
+      | otherwise -> TickAbs nm kappa (go e)
     Tuple es -> Tuple (map go es)
     Let p e1 e2 -> Let p (go e1) (go e2)
     Case e clauses -> Case (go e) $ map (\(p,c) -> (p, go c)) clauses

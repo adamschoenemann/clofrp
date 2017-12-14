@@ -391,6 +391,21 @@ clockSpec = do
           xs.
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+    it "checks simple corecursive trees with tuple" $ do
+      let Right prog = pprog [text|
+        data TreeF (k : Clock) a f = Branch a (|>k f, |>k f).
+        type Tree (k : Clock) a = Fix (TreeF k a).
+        data Unit = MkUnit.
+
+        constTree : forall (k : Clock) a. a -> Tree k a.
+        constTree = \x ->
+          fix (\g -> fold (Branch x (g, g))).
+
+        main : Tree K0 Unit.
+        main = constTree MkUnit.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
 
     it "implements replaceMin" $ do
       let Right prog = pprog Fixtures.replaceMin

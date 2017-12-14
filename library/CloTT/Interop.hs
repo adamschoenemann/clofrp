@@ -178,15 +178,17 @@ transform (CloTT er st expr (SArr s1 s2)) input = toHask s2 $ runEvalMState (evl
     let cenv' = extendEnv nm inv cenv
     withEnv (combine cenv') $ evalExprCorec ne
 
-evalExprOver :: Pretty a => [Value a] -> P.Expr a -> EvalM a (Value a)
-evalExprOver [] _ = pure $ runtimeErr "End of input"
-evalExprOver (x : xs) expr = do
-  v <- withInput x $ evalExprStep expr
-  case v of
-    Fold (Constr "Cons" [y, TickClosure cenv nm e]) -> do
-      cont <- withEnv (combine $ extendEnv nm (Prim Tick) cenv) $ evalExprOver xs e
-      pure $ Fold $ Constr "Cons" [y, cont]
-    _ -> error (pps v)
+-- TODO: Generalizing these things is not easy
+evalExprOver :: forall a. Pretty a  => [(Value a)] -> P.Expr a -> EvalM a (Value a)
+evalExprOver f = foldr mapping (const $ pure $ runtimeErr "End of input") f where
+  mapping :: Value a -> (P.Expr a -> EvalM a (Value a)) -> (P.Expr a -> EvalM a (Value a))
+  mapping x accfn expr = do
+    v <- withInput x $ evalExprStep expr
+    case v of
+      Fold (Constr "Cons" [y, TickClosure cenv nm e]) -> do
+        cont <- withEnv (const $ extendEnv nm (Prim Tick) cenv) $ accfn e
+        pure $ Fold $ Constr "Cons" [y, cont]
+      _ -> error (pps v)
 
 
 streamTrans :: (Pretty a, ToCloTT hask1 clott1, ToHask clott2 hask2)
@@ -204,50 +206,6 @@ streamTrans (CloTT er st expr ((s1 `SApp` _ `SApp` s2) `SArr` (s3 `SApp` s4 `SAp
       withEnv (const env) $ evalExprOver inputs e'
 
     makeInput ann z = Fold $ Constr "Cons" [toCloTT s2 z, TickClosure mempty "#_" $ A ann $ P.Prim P.Input]
-      -- withEnv (extendEnv nm (toInput xs)) $ evalExprCorec e
-     
-
-    -- toInput [] = Prim $ RuntimeErr "End of input"
-    -- toInput (x : xs) = 
-    --   let env = singleEnv "#INPUT" (toInput xs)
-    --   in  Fold $ Constr "Cons" [toCloTT s2 x, TickClosure env "#_" $ A undefined $ P.Prim P.Input]
-
-    -- go [] _ _ = pure (Prim $ RuntimeErr "End of input")
-    -- go (x:xs) nm e = do
-    --   -- traceM $ "go " ++ show nm ++ " (" ++ pps e ++ ")"
-    --   let inv = toInput (x:xs) 
-    --   result <- withEnv (extendEnv nm inv) $ evalExprStep e
-    --   case result of
-    --     Fold (Constr "Cons" [rv, TickClosure ncenv tnm nne]) -> do 
-    --       cont <- withEnv (const $ extendEnv tnm (Prim Tick) ncenv) $ go xs "#INPUT" nne
-    --       pure $ Fold (Constr "Cons" [rv, cont])
-    --     _  -> error $ "unexpected: " ++ pps result
 
     fromCloTTStream (Fold (Constr "Cons" [v, c])) = toHask s5 v : fromCloTTStream c
     fromCloTTStream v = error $ "fromCloTTStream:" ++ pps v
-
-
---   TyPrim _ TyNat  -> T.conE 'SNat
---   TyPrim _ TyBool -> T.conE 'SBool
---   TyPrim _ TyUnit -> T.conE 'SUnit
---   TyAlloc _       -> T.conE 'SAlloc
---   TySum _ t1 t2 ->
---     let e1 = typeToSingExp t1
---         e2 = typeToSingExp t2
---     in  T.conE 'SSum `T.appE` e1 `T.appE` e2
---   TyProd _ t1 t2    ->
---     let e1 = typeToSingExp t1
---         e2 = typeToSingExp t2
---     in  runQ [| SProd $(e1) $(e2) |]
---   TyArr _ t1 t2    ->
---     let e1 = typeToSingExp t1
---         e2 = typeToSingExp t2
---     in  runQ [| SArr $(e1) $(e2) |]
---   TyStream _ t ->
---     let e = typeToSingExp t
---     in  runQ [| SStream $(e) |]
---   TyStable _ t -> typeToSingExp t
---   TyLater  _ t -> typeToSingExp t
---   TyVar _ _    -> fail "FRP types must be fully instantiated when marshalled"
---   TyRec _ _ _  -> fail "Recursive types are not supported"
-
