@@ -32,7 +32,7 @@ Notable differences between Haskell:
 
 ## Project Structure
 The `library` directory contains all the interesting code. `test-suite` contains the test suite (unsurprisingly) - the test suite
-consists of nearly 300 hand-written scenario tests.
+consists of just over 300 hand-written scenario tests.
 The code is split into several folders and modules:
 - `AST` contains the abstract syntax tree of programs written in CloTT - expressions, types, patterns, names, primitives, declarations and programs
 - `Check` contains code to type-check (and elaborate, which should be refactored out) programs written in CloTT. The meat of the implementation
