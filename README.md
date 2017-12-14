@@ -1,7 +1,7 @@
 # [Simply Typed Clocked Type Theory][clott]
 
 An implementation of the Simply Typed Clocked Type Theory [clocks] For my master's thesis at ITU.
-CloTT (Clocked Type Theory) is a language that enables safe co-inductive programming. Specifically, it
+CloFRP (Clocked Type Theory) is a language that enables safe co-inductive programming. Specifically, it
 uses guarded recursion to ensure that co-recursive definitions are productive and causal. The novel idea
 compared to ordinary nakano-style guarded recursion is that it introduces the notion of clocks and ticks
 on these clocks, which are used to unfold guarded-recursive definitions. One can quantify over clocks to
@@ -10,7 +10,7 @@ guarantees, but relax the causality constraint. As such, we can bridge the gap b
 and guarded-recursive definitions. On top of that, the "guardedness" of a recursive function is explicit
 in its type signature.
 
-Aside from these ideas, CloTT resembles an ordinary Haskell-inspired language. As such it features:
+Aside from these ideas, CloFRP resembles an ordinary Haskell-inspired language. As such it features:
 - Datatype declarations alá vanilla Haskell
 - Type aliases 
 - Automatic derivation of fmap (functor map) for strictly-positive types
@@ -34,14 +34,14 @@ Notable differences between Haskell:
 The `library` directory contains all the interesting code. `test-suite` contains the test suite (unsurprisingly) - the test suite
 consists of just over 300 hand-written scenario tests.
 The code is split into several folders and modules:
-- `AST` contains the abstract syntax tree of programs written in CloTT - expressions, types, patterns, names, primitives, declarations and programs
-- `Check` contains code to type-check (and elaborate, which should be refactored out) programs written in CloTT. The meat of the implementation
+- `AST` contains the abstract syntax tree of programs written in CloFRP - expressions, types, patterns, names, primitives, declarations and programs
+- `Check` contains code to type-check (and elaborate, which should be refactored out) programs written in CloFRP. The meat of the implementation
   lies within this namespace.
-- `Evals` contains code that evaluates CloTT programs
-- `Parser` contains parsers for various CloTT terms
+- `Evals` contains code that evaluates CloFRP programs
+- `Parser` contains parsers for various CloFRP terms
 - `Derive` contains code to derive functors from data-type declarations
-- `Interop` defines how to combine CloTT programs with Haskell programs in a somewhat typesafe manner
-- `QuasiQuoter` defines quasi-quoters that allow Haskell programmers to write programs in CloTT easily
+- `Interop` defines how to combine CloFRP programs with Haskell programs in a somewhat typesafe manner
+- `QuasiQuoter` defines quasi-quoters that allow Haskell programmers to write programs in CloFRP easily
 - `Annotated, Context, Pretty` and `Utils` contain mostly un-interesting helper functions to work with annotated AST's, different contexts,
   pretty-printing ASTs and assorted utility functions.
 
@@ -58,7 +58,7 @@ The code is split into several folders and modules:
 - Optimize type-checking in general
 - Make sure everything is sane by checking context-wellformedness more and checking that no impredicativeness takes place ✓
   - Note: Assigning an existential to a partially-applied type-constructor is fine  ✓
-- Add the actual CloTT primitives and rules ✓
+- Add the actual CloFRP primitives and rules ✓
 - Support (co)-inductive and guarded types ✓
   - no syntax sugar yet but otherwise ✓
 - Implement primitive recursion and guarded recursion

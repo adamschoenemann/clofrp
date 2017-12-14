@@ -6,13 +6,13 @@
 
 module Fixtures where
 
-import CloTT.QuasiQuoter
+import CloFRP.QuasiQuoter
 import NeatInterpolation
 
-import qualified CloTT.Parser.Expr as P
--- import qualified CloTT.Parser.Type as P
-import qualified CloTT.Parser.Decl as P
-import qualified CloTT.Parser.Prog as P
+import qualified CloFRP.Parser.Expr as P
+-- import qualified CloFRP.Parser.Type as P
+import qualified CloFRP.Parser.Decl as P
+import qualified CloFRP.Parser.Prog as P
 import Data.Text (Text)
 
 expr01 :: P.Expr

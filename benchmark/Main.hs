@@ -19,14 +19,14 @@
 -- website for help: <http://www.serpentine.com/criterion/>.
 import Criterion.Main
 
-import CloTT.Interop
-import CloTT.AST hiding (Fold, Constr)
-import CloTT.Eval.Value
-import CloTT.Eval
+import CloFRP.Interop
+import CloFRP.AST hiding (Fold, Constr)
+import CloFRP.Eval.Value
+import CloFRP.Eval
 import Data.Proxy
-import CloTT.QuasiQuoter
-import CloTT.Pretty
-import CloTT.Examples
+import CloFRP.QuasiQuoter
+import CloFRP.Pretty
+import CloFRP.Examples
 
 import Text.Parsec.Pos
 import Data.String (fromString)
@@ -34,9 +34,9 @@ import Data.String (fromString)
 instance Pretty SourcePos where
   pretty = fromString . show
 
-instance ToCloTT Bool ('CTFree "Bool") where
-  toCloTT (SFree px) True  = (Constr "True" [])  
-  toCloTT (SFree px) False = (Constr "False" []) 
+instance ToCloFRP Bool ('CTFree "Bool") where
+  toCloFRP (SFree px) True  = (Constr "True" [])  
+  toCloFRP (SFree px) False = (Constr "False" []) 
 
 instance ToHask ('CTFree "Bool") Bool where
   toHask (SFree px) (Constr "True" [])  = True
@@ -48,27 +48,27 @@ instance ToHask ('CTFree "Nat") Int where
   toHask (SFree px) (Fold (Constr "S" [r])) = succ (toHask (SFree px) r)
   toHask (SFree px) _                = undefined
 
-instance ToCloTT Int ('CTFree "Nat") where
-  toCloTT (SFree px) 0 = Fold (Constr "Z" [])
-  toCloTT (SFree px) n = Fold (Constr "S" [toCloTT (SFree px) (n-1)])
+instance ToCloFRP Int ('CTFree "Nat") where
+  toCloFRP (SFree px) 0 = Fold (Constr "Z" [])
+  toCloFRP (SFree px) n = Fold (Constr "S" [toCloFRP (SFree px) (n-1)])
 
 instance ToHask t r => ToHask ('CTFree "Stream" :@: u :@: t) [r] where
   toHask s@((s1 `SApp` s2) `SApp` s3) (Fold (Constr "Cons" [v, c])) = toHask s3 v : toHask s c
   toHask s@((s1 `SApp` s2) `SApp` s3) v = error ("Expected fold (Cons x ..) but got " ++ pps (takeConstr 2 v))
 
 -- haskell lists to clott streams over k₀
-instance ToCloTT hask clott => ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) where
-  toCloTT s@(s1 `SApp` s2) xs = clottStream s2 xs
+instance ToCloFRP hask clott => ToCloFRP [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) where
+  toCloFRP s@(s1 `SApp` s2) xs = clottStream s2 xs
 
--- clottStream s2 (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, clottStream s2 xs'])
-clottStream s2 (x : xs') = Fold (Constr "Cons" [toCloTT s2 x, Delay (clottStream s2 xs')])
+-- clottStream s2 (x : xs') = Fold (Constr "Cons" [toCloFRP s2 x, clottStream s2 xs'])
+clottStream s2 (x : xs') = Fold (Constr "Cons" [toCloFRP s2 x, Delay (clottStream s2 xs')])
 clottStream s2 []        = runtimeErr "End of stream"
 
 -- haskell lists to clott coinductive streams 
-instance ToCloTT [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) => ToCloTT [hask] ('CTFree "CoStream" :@: clott) where
-  toCloTT s@(s1 `SApp` s2) xs = 
+instance ToCloFRP [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) => ToCloFRP [hask] ('CTFree "CoStream" :@: clott) where
+  toCloFRP s@(s1 `SApp` s2) xs = 
     let strsing = SFree (Proxy @"Stream") `SApp` SFree (Proxy @"K0") `SApp` s2
-    in  Constr "Cos" [toCloTT strsing xs] where
+    in  Constr "Cos" [toCloFRP strsing xs] where
 
 type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTBinTree = 'CTFree "BinTree" :@: 'CTFree "K0"

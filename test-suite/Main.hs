@@ -13,17 +13,17 @@ import qualified Test.Tasty
 -- writing tests. Its website has more info: <https://hspec.github.io>.
 import Test.Tasty.Hspec
 
-import CloTT.ParserSpec
-import CloTT.QuasiQuoterSpec
-import CloTT.CheckSpec
-import CloTT.Check.ProgSpec
-import CloTT.Check.ClockSpec
-import CloTT.Check.RecSpec
-import CloTT.Check.HigherKinded
-import CloTT.AST.PrettySpec
-import CloTT.EvalSpec
-import CloTT.DeriveSpec
-import CloTT.InteropSpec
+import CloFRP.ParserSpec
+import CloFRP.QuasiQuoterSpec
+import CloFRP.CheckSpec
+import CloFRP.Check.ProgSpec
+import CloFRP.Check.ClockSpec
+import CloFRP.Check.RecSpec
+import CloFRP.Check.HigherKinded
+import CloFRP.AST.PrettySpec
+import CloFRP.EvalSpec
+import CloFRP.DeriveSpec
+import CloFRP.InteropSpec
 
 
 main :: IO ()

@@ -5,6 +5,9 @@
 **/*.aux
 **/*.log
 **/*.pdf
+**/*.hp
+**/*.prof
+**/*.ps
 **/*.synctex.gz
 cabal-helper*
 *.sublime*
