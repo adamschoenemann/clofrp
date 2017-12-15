@@ -218,15 +218,6 @@ getKCtx = asks trKinds
 instance HasInstances (TypingM a) a where
   getInstances = asks trInstances
 
-getCCtx :: TypingM a (ClockCtx a)
-getCCtx = do
-  Gamma ctx <- getCtx
-  pure $ foldr folder (ClockCtx mempty) ctx
-  where
-    folder (Uni x ClockK)    acc = extend x () acc
-    folder (Exists x ClockK) acc = extend x () acc
-    folder _                 acc = acc
-
 withCtx :: (LocalCtx a -> LocalCtx a) -> TypingM a r -> TypingM a r
 withCtx fn = local fn' where
   fn' rd = rd { trCtx = fn (trCtx rd) }

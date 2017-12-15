@@ -21,7 +21,6 @@ import Data.Data
 import GHC.Exts (IsList(..))
 import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
-import qualified Data.Set as S
 import Data.List (break, find)
 import Data.Maybe (isJust, catMaybes, listToMaybe)
 
@@ -89,6 +88,17 @@ x <\: t = (LamB, x) `HasType` t
 
 (.:) :: Name -> Type a 'Poly -> CtxElem a
 x .: t = (LetB, x) `HasType` t
+
+-- Local contexts contains local variables and stuff
+newtype LocalCtx a = Gamma { unGamma :: [CtxElem a] }
+  deriving (Eq)
+
+instance Show (LocalCtx a) where
+  show gamma = showW 80 (pretty gamma)
+
+instance Pretty (LocalCtx a) where
+  pretty (Gamma xs) = 
+    brackets $ concatWith (\x y -> x <+> softline' <> comma <> space <> y) $ map pretty (reverse xs)
 
 -- Free contexts contains "global" mappings from names to types
 newtype FreeCtx a = FreeCtx { unFreeCtx :: M.Map Name (Type a 'Poly) }
@@ -196,44 +206,9 @@ findInstanceOf className ty = do
 --   pretty (DestrCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
 --     fn (k, v) = pretty k <+> "↦" <+> pretty v 
 
--- Typing context contains local variables and stuff
-newtype LocalCtx a = Gamma { unGamma :: [CtxElem a] }
-  deriving (Eq)
-
-instance Show (LocalCtx a) where
-  show gamma = showW 80 (pretty gamma)
-
-instance Pretty (LocalCtx a) where
-  pretty (Gamma xs) = 
-    brackets $ concatWith (\x y -> x <+> softline' <> comma <> space <> y) $ map pretty (reverse xs)
-    -- brackets $ column p where
-    -- p c = concatWith (\x y -> nesting $ \n -> x <> nest (c - n) (softline' <> comma <> space <> y)) $ map pretty (reverse xs)
-    -- list $ map pretty $ reverse xs
 
 instance Unann (LocalCtx a) (LocalCtx ()) where
   unann (Gamma xs) = Gamma $ map unann xs
-
--- Clock context contains mappings from names to clocks.
--- Since clocks are just names, we really just need a set here.
--- But, we'll just use a Map from Name to Unit. Is that a hack? Certainly.
-newtype ClockCtx a = ClockCtx { unClockCtx :: M.Map Name () }
-  deriving (Show, Eq, Monoid, Data)
-
-instance Context (ClockCtx a) where
-  type Elem (ClockCtx a) = ()
-  type Key (ClockCtx a)  = Name
-  extend nm ty (ClockCtx m) = ClockCtx $ M.insert nm ty m
-  isMemberOf nm (ClockCtx m) = M.member nm m
-  query x (ClockCtx m) = M.lookup x m
-
-instance (IsList (ClockCtx a)) where
-  type Item (ClockCtx a) = Name
-  fromList xs = ClockCtx $ M.fromList (map (\x -> (x,())) xs)
-  toList (ClockCtx m) = M.keys m
-
-instance Pretty (ClockCtx a) where
-  pretty (ClockCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
-    fn (k, v) = pretty k 
 
 
 -- Lists are left-prepend but contexts are right-append
