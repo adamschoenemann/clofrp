@@ -197,20 +197,20 @@ findInstanceOf className ty = do
 --     fn (k, v) = pretty k <+> "↦" <+> pretty v 
 
 -- Typing context contains local variables and stuff
-newtype TyCtx a = Gamma { unGamma :: [CtxElem a] }
+newtype LocalCtx a = Gamma { unGamma :: [CtxElem a] }
   deriving (Eq)
 
-instance Show (TyCtx a) where
+instance Show (LocalCtx a) where
   show gamma = showW 80 (pretty gamma)
 
-instance Pretty (TyCtx a) where
+instance Pretty (LocalCtx a) where
   pretty (Gamma xs) = 
     brackets $ concatWith (\x y -> x <+> softline' <> comma <> space <> y) $ map pretty (reverse xs)
     -- brackets $ column p where
     -- p c = concatWith (\x y -> nesting $ \n -> x <> nest (c - n) (softline' <> comma <> space <> y)) $ map pretty (reverse xs)
     -- list $ map pretty $ reverse xs
 
-instance Unann (TyCtx a) (TyCtx ()) where
+instance Unann (LocalCtx a) (LocalCtx ()) where
   unann (Gamma xs) = Gamma $ map unann xs
 
 -- Clock context contains mappings from names to clocks.
@@ -240,18 +240,18 @@ instance Pretty (ClockCtx a) where
 -- It doesn't matter, so we just pretend that we right-append stuff,
 -- yet put it at the head 
 infixl 5 <+
-(<+) :: TyCtx a -> CtxElem a -> TyCtx a
+(<+) :: LocalCtx a -> CtxElem a -> LocalCtx a
 Gamma xs <+ x = Gamma (x : xs)
 
 infixl 4 <++
-(<++) :: TyCtx a -> TyCtx a -> TyCtx a
+(<++) :: LocalCtx a -> LocalCtx a -> LocalCtx a
 Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 
-instance Monoid (TyCtx a) where
+instance Monoid (LocalCtx a) where
   mempty = Gamma []
   mappend = (<++)
 
-isInContext :: CtxElem a -> TyCtx a -> Bool
+isInContext :: CtxElem a -> LocalCtx a -> Bool
 isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs
 
 isInFContext :: Name -> FreeCtx a -> Bool
@@ -260,10 +260,10 @@ isInFContext = isMemberOf
 isInKContext :: Name -> KindCtx a -> Bool
 isInKContext = isMemberOf
 
-ctxFind :: (CtxElem a -> Bool) -> TyCtx a -> Maybe (CtxElem a)
+ctxFind :: (CtxElem a -> Bool) -> LocalCtx a -> Maybe (CtxElem a)
 ctxFind p (Gamma xs) = find p xs
 
-lookupTy :: Name -> TyCtx a -> Maybe (Type a 'Poly)
+lookupTy :: Name -> LocalCtx a -> Maybe (Type a 'Poly)
 lookupTy nm (Gamma xs) = findMap p xs where
   p ((_,nm') `HasType` ty) | nm' == nm = Just ty
   p _                  = Nothing
@@ -271,16 +271,16 @@ lookupTy nm (Gamma xs) = findMap p xs where
 elemBy :: (a -> Bool) -> [a] -> Bool
 elemBy fn = isJust . find fn
 
-findAssigned :: Name -> TyCtx a -> Maybe (Type a 'Mono)
+findAssigned :: Name -> LocalCtx a -> Maybe (Type a 'Mono)
 findAssigned nm (Gamma xs) = findMap fn xs >>= asMonotype where
   fn (nm' := ty) | nm == nm' = pure ty
   fn _                       = Nothing
 
-isAssigned :: Name -> TyCtx a -> Bool
+isAssigned :: Name -> LocalCtx a -> Bool
 isAssigned = isJust .*. findAssigned where
   (.*.) = (.) . (.)
 
-hasTypeInCtx :: Name -> TyCtx a -> Maybe (Type a 'Poly)
+hasTypeInCtx :: Name -> LocalCtx a -> Maybe (Type a 'Poly)
 hasTypeInCtx nm (Gamma xs) = findMap fn xs where
   fn ((_,nm') `HasType` ty) | nm == nm' = pure ty
   fn _                             = Nothing
@@ -289,21 +289,21 @@ hasTypeInFCtx :: Name -> FreeCtx a -> Maybe (Type a 'Poly)
 hasTypeInFCtx nm (FreeCtx m) = M.lookup nm m
 
 -- | drop until an element `el` is encountered in the context. Also drops `el`
-dropTil :: CtxElem a -> TyCtx a -> TyCtx a
+dropTil :: CtxElem a -> LocalCtx a -> LocalCtx a
 dropTil el (Gamma xs) = Gamma $ tl $ dropWhile ((unann el /=) . unann) xs where
   tl []     = []
   tl (_:ys) = ys
 
 -- again, since contexts are "reversed" notationally, this does not yield 
 -- we switch ys and zs in the definition
-splitCtx' :: CtxElem a -> TyCtx a -> Maybe (TyCtx a, CtxElem a, TyCtx a)
+splitCtx' :: CtxElem a -> LocalCtx a -> Maybe (LocalCtx a, CtxElem a, LocalCtx a)
 splitCtx' el ctx@(Gamma xs) =
   case break ((unann el ==) . unann) xs of
     (_, [])    -> Nothing
     (ys, z:zs) -> pure (Gamma zs, z, Gamma ys)
 
 -- | Check if an elem alpha comes before beta in a context
-before' :: CtxElem a -> CtxElem a -> TyCtx a -> Bool
+before' :: CtxElem a -> CtxElem a -> LocalCtx a -> Bool
 before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False where
   comesBefore x y [] xr yr = yr
   comesBefore x y (a:as) False False
@@ -317,25 +317,25 @@ before' alpha beta (Gamma ctx) = (beta `comesBefore` alpha) ctx False False wher
   comesBefore _ _ _ _ _ = False
 
 
-insertAt' :: CtxElem a -> TyCtx a -> TyCtx a -> Maybe (TyCtx a)
+insertAt' :: CtxElem a -> LocalCtx a -> LocalCtx a -> Maybe (LocalCtx a)
 insertAt' at insertee into = do
   (l, _, r) <- splitCtx' at into
   pure $ l <++ insertee <++ r
 
-containsEVar :: TyCtx a -> Name -> Bool
+containsEVar :: LocalCtx a -> Name -> Bool
 containsEVar ctx alpha = isJust $ ctxFind expred ctx where
     expred = \case
       Exists alpha' _k -> alpha == alpha'
       alpha' := _   -> alpha == alpha' 
       _             -> False
 
-containsTVar :: TyCtx a -> Name -> Bool
+containsTVar :: LocalCtx a -> Name -> Bool
 containsTVar ctx alpha = isJust $ ctxFind varPred ctx where
     varPred = \case
       Uni alpha' _k -> alpha == alpha'
       _          -> False
 
-getUnsolved :: TyCtx a -> [(Name, Kind)]
+getUnsolved :: LocalCtx a -> [(Name, Kind)]
 getUnsolved (Gamma xs) = foldr fn [] xs where
   fn (Exists nm k) acc = (nm, k) : acc
   fn _ acc             = acc

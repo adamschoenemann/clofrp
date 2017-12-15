@@ -72,7 +72,7 @@ data TypingState   =
 -- Typing reader
 
 data TypingRead a  = 
-  TR { trCtx :: TyCtx a
+  TR { trCtx :: LocalCtx a
      , trFree :: FreeCtx a
      , trKinds :: KindCtx a
      , trDestrs :: DestrCtx a
@@ -91,7 +91,7 @@ instance Monoid (TypingRead a) where
   
 
 type TypingWrite a = [(Integer, Doc ())]
-type TypingErr a = (TyExcept a, TyCtx a)
+type TypingErr a = (TyExcept a, LocalCtx a)
 
 showTree :: TypingWrite a -> String
 showTree = showW 90 . prettyTree
@@ -104,7 +104,7 @@ data TyExcept a
   = Type a 'Poly `CannotSubtype` Type a 'Poly
   | Name `OccursIn` Type a 'Poly
   | NameNotFound Name
-  | CannotSplit (CtxElem a) (TyCtx a)
+  | CannotSplit (CtxElem a) (LocalCtx a)
   | CannotSynthesize (Expr a)
   | CannotAppSynthesize (Type a 'Poly) (Expr a)
   | NotWfType (Type a 'Poly)
@@ -168,7 +168,7 @@ notWfType ty = tyExcept $ NotWfType ty
 notWfContext :: CtxElem a -> TypingM a r
 notWfContext el = tyExcept $ NotWfContext el
 
-cannotSplit :: CtxElem a -> TyCtx a -> TypingM a r
+cannotSplit :: CtxElem a -> LocalCtx a -> TypingM a r
 cannotSplit el ctx = tyExcept $ CannotSplit el ctx
 
 otherErr :: String -> TypingM a r
@@ -203,7 +203,7 @@ runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
 initRead :: TypingRead a 
 initRead = TR { trFree = mempty, trCtx = mempty, trKinds = mempty, trDestrs = mempty, trInstances = mempty }
 
-getCtx :: TypingM a (TyCtx a)
+getCtx :: TypingM a (LocalCtx a)
 getCtx = asks trCtx
 
 getFCtx :: TypingM a (FreeCtx a)
@@ -227,7 +227,7 @@ getCCtx = do
     folder (Exists x ClockK) acc = extend x () acc
     folder _                 acc = acc
 
-withCtx :: (TyCtx a -> TyCtx a) -> TypingM a r -> TypingM a r
+withCtx :: (LocalCtx a -> LocalCtx a) -> TypingM a r -> TypingM a r
 withCtx fn = local fn' where
   fn' rd = rd { trCtx = fn (trCtx rd) }
 

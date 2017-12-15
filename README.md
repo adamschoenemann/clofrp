@@ -48,7 +48,7 @@ The code is split into several folders and modules:
 ## TODO
 - Support higher-kinded types (should be not that hard)
   - Infer kind of tvar syntactically
-  - Maintain the kind-info either in kind-ctx or annotate with kind in TyCtx ✓
+  - Maintain the kind-info either in kind-ctx or annotate with kind in LocalCtx ✓
 - Validate kinds in kind-signatures. Clocks cannot be directly to the right of an arrow
 - Check/infer lambdas with annotated type-params ✓
 - Parse and desugar multi-param lambdas ✓

@@ -48,7 +48,7 @@ bar xs =
 
 typecheckSpec :: Spec
 typecheckSpec = do
-  let nil = mempty :: TyCtx ()
+  let nil = mempty :: LocalCtx ()
   let stdlib = ["True" |-> A mempty (E.TFree "Bool"), "False" |-> A mempty (E.TFree "Bool")]
   let rd fctx kctx ctx = TR ctx (fctx `mappend` stdlib) kctx mempty mempty 
   let rd'  = rd mempty 
