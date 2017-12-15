@@ -22,15 +22,11 @@ import Control.Monad.RWS.Strict hiding ((<>))
 import Control.Monad.Except
 import Control.Monad.State ()
 import Data.String (fromString)
-import qualified Data.Map.Strict as M
-import GHC.Exts (IsList(..))
-import Data.Data
 
 import CloFRP.AST.Name
 import CloFRP.Annotated
 import CloFRP.AST hiding (exists)
 import CloFRP.Pretty
-import CloFRP.Context
 import CloFRP.Check.Contexts
 
 branch :: Pretty r => TypingM a r -> TypingM a r
@@ -45,28 +41,11 @@ branch comp = do
 root :: Doc () -> TypingM a ()
 root x = gets level >>= \l -> tell [(l,x)]
 
-
-instance Context (InstanceCtx a) where
-  type Elem (InstanceCtx a) = [ClassInstance a]
-  type Key (InstanceCtx a)  = Name
-  extend nm ty (InstanceCtx m) = InstanceCtx $ M.insert nm ty m
-  isMemberOf nm (InstanceCtx m) = M.member nm m
-  query x (InstanceCtx m) = M.lookup x m
-
-instance (IsList (InstanceCtx a)) where
-  type Item (InstanceCtx a) = (Name, [ClassInstance a])
-  fromList xs = InstanceCtx $ M.fromList xs
-  toList (InstanceCtx m) = M.toList m
-
-instance Pretty (InstanceCtx a) where
-  pretty (InstanceCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
-    fn (k, v) = pretty k <+> "↦" <+> pretty v 
-
 -- Typing state
 
 data TypingState   = 
   TS { names :: Integer -- |Just an integer for generating names
-     , level :: Integer
+     , level :: Integer -- |For debugging
      }
 
 -- Typing reader

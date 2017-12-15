@@ -814,8 +814,8 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   --     _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg
 
   -- Fixpoint<=
+  -- an optimization really, since subsumption and Fixpoint=> can type the same
   check' (A _ (Prim Fix) `App` e2) _ = do
-    ctx <- getCtx
     rule "Fixpoint<=" (pretty e <+> "<=" <+> pretty ty)
     kappa <- freshName
     let kappat = A tann (TExists kappa)
@@ -824,7 +824,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   
   -- Sub
   check' _ _ = do
-    ctx <- getCtx
     rule "Sub" (pretty e <+> "<=" <+> pretty ty)
     (aty, theta) <- branch $ synthesize e
     atysubst <- substCtx theta aty `decorateErr` (Other "Sub.1")
@@ -860,7 +859,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   checkCaseClauses markerName pty clauses expected = 
     case clauses of
       (pat, expr) : clauses' -> do
-        ctx <- getCtx
         rule "CheckClause" ("|" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected)
         (expected', ctx') <- checkClause pty (pat, expr) expected
         let nextCtx =  (dropTil (Marker markerName) ctx') <+ Marker markerName
@@ -895,8 +893,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     case (nm `hasTypeInCtx` ctx <|> nm `hasTypeInFCtx` fctx) of
       Just ty -> do
         root $ "[Var]" <+> pretty expr <+> "=>" <+> pretty ty
-        _ <- checkWfType ty
-        pure (ty, ctx)
+        checkWfType ty *> pure (ty, ctx)
 
       Nothing -> root "[Var]" *> nameNotFound nm
  
@@ -907,9 +904,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- Anno
   synthesize' (Ann e ty) = do
     root $ "[Anno]" <+> pretty e <+> ":" <+> pretty ty
-    ctx <- getCtx
-    ty' <- substCtx ctx ty
-    _ <- branch $ check e ty'
+    _ <- branch $ check e ty
     (ty, ) <$> getCtx
   
   -- ->I=> (with generalization)
@@ -954,7 +949,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
         betat  = A ann $ TExists beta
     let ce = (LamB, x) `HasType` argty
     ctx' <- withCtx (\g -> g <+ betac <+ ce) $ branch (check e betat)
-    (delta, _, theta) <- splitCtx ce ctx'
+    (delta, _, _) <- splitCtx ce ctx'
     pure (A ann $ argty :->: betat, delta)
   
   -- PrimRec=>
@@ -985,7 +980,6 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
   -- ->E
   synthesize' (e1 `App` e2) = do
-    ctx <- getCtx
     rule "->E" (pretty expr)
     (ty1, theta) <- branch $ synthesize e1
     ty1subst <- substCtx theta ty1 `decorateErr` (Other "[->E]")
@@ -1041,17 +1035,18 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
   synthesize' _ = cannotSynthesize expr
   
-  assertLater t = do
-    rule "AssertLater" (pretty t)
-    kappa <- freshName
-    alpha <- freshName
-    let kappat = A ann $ TExists kappa
-    let alphat  = A ann $ TExists alpha
-    let lt = A ann (Later kappat alphat)
-    theta <- branch $ withCtx (\g -> g <+ Exists kappa ClockK <+ Exists alpha Star) $ t `subtypeOf` lt 
-    kappat' <- substCtx theta kappat
-    alphat' <- substCtx theta alphat
-    pure (kappat', alphat', theta)
+  -- assertLater t = do
+  --   rule "AssertLater" (pretty t)
+  --   kappa <- freshName
+    
+  --   alpha <- freshName
+  --   let kappat = A ann $ TExists kappa
+  --   let alphat  = A ann $ TExists alpha
+  --   let lt = A ann (Later kappat alphat)
+  --   theta <- branch $ withCtx (\g -> g <+ Exists kappa ClockK <+ Exists alpha Star) $ t `subtypeOf` lt 
+  --   kappat' <- substCtx theta kappat
+  --   alphat' <- substCtx theta alphat
+  --   pure (kappat', alphat', theta)
 
 inferPrim :: a -> Prim -> TypingM a (Type a 'Poly, LocalCtx a)
 inferPrim ann p = case p of

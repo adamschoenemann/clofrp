@@ -121,7 +121,7 @@ instance Context (FreeCtx a) where
   query x (FreeCtx m) = M.lookup x m
 
 -- Kind context contains "global" mappings from type-names to kinds
-newtype KindCtx a = KindCtx { unKundCtx :: M.Map Name Kind }
+newtype KindCtx a = KindCtx { unKindCtx :: M.Map Name Kind }
   deriving (Show, Eq, Monoid, Data)
 
 instance Context (KindCtx a) where
@@ -173,6 +173,23 @@ instance Show (ClassInstance a) where
 
 newtype InstanceCtx a = InstanceCtx { unInstanceCtx :: M.Map Name [ClassInstance a] }
   deriving (Show, Eq, Monoid, Data, Typeable)
+
+instance Context (InstanceCtx a) where
+  type Elem (InstanceCtx a) = [ClassInstance a]
+  type Key (InstanceCtx a)  = Name
+  extend nm ty (InstanceCtx m) = InstanceCtx $ M.insert nm ty m
+  isMemberOf nm (InstanceCtx m) = M.member nm m
+  query x (InstanceCtx m) = M.lookup x m
+
+instance (IsList (InstanceCtx a)) where
+  type Item (InstanceCtx a) = (Name, [ClassInstance a])
+  fromList xs = InstanceCtx $ M.fromList xs
+  toList (InstanceCtx m) = M.toList m
+
+instance Pretty (InstanceCtx a) where
+  pretty (InstanceCtx m) = enclose "[" "]" $ cat $ punctuate ", " $ map fn $ toList m where
+    fn (k, v) = pretty k <+> "↦" <+> pretty v 
+
 
 class HasInstances m a | m -> a where
   getInstances :: m (InstanceCtx a)
