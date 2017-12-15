@@ -13,7 +13,6 @@ import Data.Text.Prettyprint.Doc
 
 import CloFRP.Annotated 
 import CloFRP.AST.Name
-import CloFRP.AST.Type
 import CloFRP.AST.Kind
 import CloFRP.AST.Constr
 

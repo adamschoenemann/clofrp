@@ -38,15 +38,16 @@ type Type a s = Annotated a (Type' a s)
 data TySort = Mono | Poly deriving (Show, Eq)
 
 data Type' :: * -> TySort -> * where
-  TFree   :: Name                        -> Type' a s
-  TVar    :: Name                        -> Type' a s
-  TExists :: Name                        -> Type' a s
-  TApp    :: Type a s     -> Type a s    -> Type' a s
-  (:->:)  :: Type a s     -> Type a s    -> Type' a s
-  Forall  :: Name -> Kind -> Type a 'Poly -> Type' a 'Poly
-  RecTy   :: Type a s                    -> Type' a s
-  TTuple  :: [Type a s]                  -> Type' a s
-  Later   :: Type a s     -> Type a s    -> Type' a s
+  TFree   :: Name                         -> Type' a s -- ℱ
+  TVar    :: Name                         -> Type' a s -- x
+  TExists :: Name                         -> Type' a s -- α^
+  TApp    :: Type a s     -> Type a s     -> Type' a s -- F B
+  (:->:)  :: Type a s     -> Type a s     -> Type' a s -- A -> B
+  Forall  :: Name -> Kind -> Type a 'Poly -> Type' a 'Poly -- ∀(α : χ). A
+  RecTy   :: Type a s                     -> Type' a s -- Fix F
+  TTuple  :: [Type a s]                   -> Type' a s -- ⟨A₁,...,Aₙ⟩
+  Later   :: Type a s     -> Type a s     -> Type' a s -- ⊳k A
+
 
 
 deriving instance Eq a       => Eq (Type' a s)

@@ -28,8 +28,8 @@ import GHC.Generics
 
 import CloFRP.Annotated 
 import CloFRP.AST.Name
-type Pat a = Annotated a (Pat' a)
 
+type Pat a = Annotated a (Pat' a)
 data Pat' a  
   = Bind Name 
   | Match Name [Pat a]
