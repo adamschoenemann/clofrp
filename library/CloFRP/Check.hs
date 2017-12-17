@@ -116,19 +116,19 @@ substCtx ctx (A a ty) =
 -- | Apply a context to itself, substituting away all solved existentials.
 -- Only used for debugging to make large contexts easier to reason about.
 selfapp :: LocalCtx a -> TypingM a (LocalCtx a)
-selfapp (Gamma []) = pure $ mempty
-selfapp ctx@(Gamma ((ahat := ty) : xs)) = do
+selfapp (LocalCtx []) = pure $ mempty
+selfapp ctx@(LocalCtx ((ahat := ty) : xs)) = do
   tys <- asMonotypeTM =<< substCtx ctx (asPolytype ty)
-  Gamma xs' <- selfapp (Gamma xs)
-  pure (Gamma $ (ahat := tys) : xs')
-selfapp (Gamma (x : xs)) = do
-  Gamma xs' <- selfapp (Gamma xs)
-  pure $ Gamma (x : xs')
+  LocalCtx xs' <- selfapp (LocalCtx xs)
+  pure (LocalCtx $ (ahat := tys) : xs')
+selfapp (LocalCtx (x : xs)) = do
+  LocalCtx xs' <- selfapp (LocalCtx xs)
+  pure $ LocalCtx (x : xs')
 
 -- | Checks that a context is κ-stable - that is, the context contains no
 -- lambda-bound names that mention κ in their type
 mustBeStableUnder :: LocalCtx a -> Name -> TypingM a ()
-mustBeStableUnder (Gamma xs) k = traverse traversal xs *> pure () where
+mustBeStableUnder (LocalCtx xs) k = traverse traversal xs *> pure () where
   traversal ce = case ce of
     (LamB, nm) `HasType` ty
       | k `inFreeVars` ty -> otherErr $ show $ "Context not stable wrt" <+> pretty k <+> "due to" <+> pretty ce
@@ -271,10 +271,10 @@ checkWfType ty = kindOf ty *> pure ()
 -- | Check if a given context is well-formed
 -- TODO: Also fail ctx such as [a := tau, a] or [a, a := tau]
 wfContext :: forall a. LocalCtx a -> TypingM a ()
-wfContext (Gamma elems) = (foldrM fn [] elems *> pure ())  where
+wfContext (LocalCtx elems) = (foldrM fn [] elems *> pure ())  where
   fn :: CtxElem a -> [CtxElem a] -> TypingM a [CtxElem a]
   fn el acc = do
-    _ <- withCtx (const $ Gamma acc) $ checkIt el
+    _ <- withCtx (const $ LocalCtx acc) $ checkIt el
     pure (el : acc)
 
   elem' f xs = isJust $ find (\x -> f (unann x)) xs
@@ -287,7 +287,7 @@ wfContext (Gamma elems) = (foldrM fn [] elems *> pure ())  where
     nm := ty        -> notInDom nm el *> checkWfType (asPolytype ty) `decorateErr` (NotWfContext el)
     Marker nm       -> do
       _ <- notInDom nm el
-      Gamma ctx <- getCtx
+      LocalCtx ctx <- getCtx
       if ((\x -> Marker nm == x) `elem'` ctx)
         then notWfContext (Marker nm)
         else pure ()
@@ -317,7 +317,7 @@ validType kctx t = do
 -- TODO: Optimize
 assign :: Name -> Type a 'Mono -> TypingM a (LocalCtx a)
 assign nm ty = do
-  ctx@(Gamma xs) <- getCtx
+  ctx@(LocalCtx xs) <- getCtx
   case findAssigned nm ctx of
     Just ty'
       | ty =%= ty' -> pure ctx
@@ -328,8 +328,8 @@ assign nm ty = do
         (xs', True) -> do
           let asserr = Other $ show $ "Assigning" <+> pretty nm <+> "to"
                     <+> pretty ty
-          _ <- wfContext (Gamma xs') `decorateErr` asserr
-          pure (Gamma xs')
+          _ <- wfContext (LocalCtx xs') `decorateErr` asserr
+          pure (LocalCtx xs')
         (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything"
       where
         -- TODO: Check that kindOf ty == k

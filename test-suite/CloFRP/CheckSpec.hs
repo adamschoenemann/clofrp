@@ -268,10 +268,10 @@ typecheckSpec = do
 
   describe "before'" $ do
     it "fails on empty context" $ do
-      let ctx = Gamma @() []
+      let ctx = LocalCtx @() []
       before' (exists "a") (exists "b") ctx `shouldBe` False
     it "fails on singleton context" $ do
-      let ctx = Gamma @() [exists "a"]
+      let ctx = LocalCtx @() [exists "a"]
       before' (exists "a") (exists "b") ctx `shouldBe` False
     it "before' a b (.,a,b) == True" $ do
       let ctx = nil <+ exists "a" <+ exists "b"
