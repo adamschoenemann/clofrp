@@ -17,6 +17,7 @@ and Neel Krishnaswami
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -1167,29 +1168,29 @@ checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
           t' <- substCtx acc t `decorateErr` (Other $ show $ "substCtx" <+> pretty acc <+> pretty t)
           withCtx (const acc) $ checkPat p t'
 
-applysynth :: Type a 'Poly -> Expr a -> TypingM a (Type a 'Poly, LocalCtx a)
+applysynth :: forall a. Type a 'Poly -> Expr a -> TypingM a (Type a 'Poly, LocalCtx a)
 applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
   -- ∀App
   applysynth' (Forall alpha k aty) _ = do
     rule "∀App" (pretty ty <+> "•" <+> pretty e)
     -- fresh name to avoid clashes
     alpha' <- freshName
-    let atysubst = subst (A tann $ TExists alpha') alpha aty
+    let atysubst = subst (texists alpha') alpha aty
     withCtx (\g -> g <+ Exists alpha' k) $ branch $ applysynth atysubst e
 
   -- αTickApp
   applysynth' (TExists alpha) (TickVar _tv) =
-    let articulated a1 a2 =
-          let a1toa2 = A tann $ Later (A tann (TExists a1)) (A tann (TExists a2))
-          in  mempty <+ Exists a2 Star <+ Exists a1 ClockK <+ alpha := a1toa2
-    in  appsynthforall alpha "αTickApp" articulated
+    let articulate a1 a2 =
+          let articulated = A tann $ Later (texists a1) (texists a2)
+          in  [Exists a2 Star, Exists a1 ClockK, alpha := articulated]
+    in  appsynthforall alpha "αTickApp" articulate
 
   -- αApp
   applysynth' (TExists alpha) _ =
-    let articulated a1 a2 =
-          let a1toa2 = A tann $ A tann (TExists a1) :->: A tann (TExists a2)
-          in  mempty <+ Exists a2 Star <+ Exists a1 Star <+ alpha := a1toa2
-    in  appsynthforall alpha "αApp" articulated
+    let articulate a1 a2 =
+          let articulated = A tann (texists a1 :->: texists a2)
+          in  [Exists a2 Star, Exists a1 Star, alpha := articulated]
+    in  appsynthforall alpha "αApp" articulate
 
   -- ->TickApp
   applysynth' (Later kappat cty) (Prim Tick) = do
@@ -1223,12 +1224,14 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
     rule ruleName (pretty ty <+> "•" <+> pretty e)
     if ctx `containsEVar` alpha
       then do
-        a1 <- freshName
-        a2 <- freshName
+        a1 <- freshName; a2 <- freshName
         alphak <- queryKind alpha
         ctx' <- insertAt (Exists alpha alphak) (toInsert a1 a2)
-        delta <- branch $ withCtx (const ctx') $ check e (A tann $ TExists a1)
-        pure (A tann $ TExists a2, delta)
+        delta <- branch $ withCtx (const ctx') $ check e (texists a1)
+        pure (texists a2, delta)
       else
         nameNotFound alpha
+
+  texists :: Name -> Type a s
+  texists = A tann . TExists
 
