@@ -38,7 +38,7 @@ data CtxElem a
   = Uni Name Kind 
   -- | Existential  
   | Exists Name Kind 
-  -- | (λ?)x : A  
+  -- | x :_? A  
   | (Binding, Name) `HasType` Type a 'Poly 
   -- | a = t  
   | Name := Type a 'Mono 
@@ -242,6 +242,11 @@ Gamma xs <++ Gamma ys = Gamma (ys ++ xs)
 instance Monoid (LocalCtx a) where
   mempty = Gamma []
   mappend = (<++)
+
+instance (IsList (LocalCtx a)) where
+  type Item (LocalCtx a) = CtxElem a
+  fromList xs = Gamma $ reverse xs
+  toList (Gamma m) = reverse m
 
 isInContext :: CtxElem a -> LocalCtx a -> Bool
 isInContext el (Gamma xs) = isJust $ find (\x -> unann el == unann x) xs

@@ -86,3 +86,9 @@ foldE = A ?annotation $ Prim P.Fold
 
 unfoldE :: (?annotation :: a) => Expr a
 unfoldE = A ?annotation $ Prim P.Unfold
+
+later :: (?annotation :: a) => Type a 'Poly -> Type a 'Poly -> Type a 'Poly
+later kappa ty = A ?annotation $ Later kappa ty
+
+exists :: (?annotation :: a) => Name -> Type a 'Poly
+exists nm = A ?annotation $ TExists nm
