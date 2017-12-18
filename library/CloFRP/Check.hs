@@ -635,8 +635,7 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
     ctx' <- branch (b1 `subtypeOf` a1)
     a2' <- substCtx ctx' a2 `decorateErr` (Other "<:->.1")
     b2' <- substCtx ctx' b2` decorateErr` (Other "<:->.2")
-    r <- withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
-    pure r
+    withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
 
   -- <:∀R
   subtypeOf' t1 (Forall a k (A ann t2)) = do
@@ -1178,21 +1177,21 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
     let atysubst = subst (texists alpha') alpha aty
     withCtx (\g -> g <+ Exists alpha' k) $ branch $ applysynth atysubst e
 
-  -- αTickApp
+  -- |>καApp
   applysynth' (TExists alpha) (TickVar _tv) =
     let articulate a1 a2 =
           let articulated = A tann $ Later (texists a1) (texists a2)
           in  [Exists a2 Star, Exists a1 ClockK, alpha := articulated]
-    in  appsynthforall alpha "αTickApp" articulate
+    in  appsynthexists alpha "|>καApp" articulate
 
   -- αApp
   applysynth' (TExists alpha) _ =
     let articulate a1 a2 =
           let articulated = A tann (texists a1 :->: texists a2)
           in  [Exists a2 Star, Exists a1 Star, alpha := articulated]
-    in  appsynthforall alpha "αApp" articulate
+    in  appsynthexists alpha "αApp" articulate
 
-  -- ->TickApp
+  -- |>κApp⋄
   applysynth' (Later kappat cty) (Prim Tick) = do
     rule "TickApp" (pretty ty <+> "•" <+> pretty e)
     kappa <- extractKappa kappat
@@ -1207,7 +1206,7 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
           TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
           _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
 
-  -- ->TickVarApp
+  -- |>κApp
   applysynth' (Later kappat cty) _ = do
     rule "TickVarApp" (pretty ty <+> "•" <+> pretty e)
     (cty,) <$> branch (check e kappat)
@@ -1219,14 +1218,14 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
 
   applysynth' _ _ = root "[CannotAppSynthesize]" *> cannotAppSynthesize ty e
 
-  appsynthforall alpha ruleName toInsert = do
+  appsynthexists alpha ruleName toInsert = do
     ctx <- getCtx
     rule ruleName (pretty ty <+> "•" <+> pretty e)
     if ctx `containsEVar` alpha
       then do
         a1 <- freshName; a2 <- freshName
-        alphak <- queryKind alpha
-        ctx' <- insertAt (Exists alpha alphak) (toInsert a1 a2)
+        -- alphak <- queryKind alpha
+        ctx' <- insertAt (Exists alpha Star) (toInsert a1 a2)
         delta <- branch $ withCtx (const ctx') $ check e (texists a1)
         pure (texists a2, delta)
       else
