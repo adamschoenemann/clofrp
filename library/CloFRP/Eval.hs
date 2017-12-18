@@ -166,7 +166,7 @@ evalExprStep (A ann expr') =
       env <- getEnv
       pure (Closure env x e)
 
-    E.TickAbs x k e -> do
+    E.TickAbs x _k e -> do
       env <- getEnv
       pure (TickClosure env x e)
     
@@ -201,7 +201,6 @@ evalExprStep (A ann expr') =
       v1 <- evalExprStep e1
       v2 <- evalExprStep e2
       case (v1, v2) of 
-        -- order of union of envs is very important to avoid incorrect name capture
         (Closure cenv nm e1', _) -> do
           let cenv' = extendEnv nm v2 cenv
           withEnv (const cenv') $ evalExprStep e1'
@@ -226,7 +225,7 @@ evalExprStep (A ann expr') =
 
         _ -> otherErr $ show $  pretty v1 <+> pretty v2 <+> "is not a legal application at" <+> pretty ann
 
-    E.Ann e t -> evalExprStep e
+    E.Ann e _t -> evalExprStep e
 
     E.Tuple ts -> Tuple <$> sequence (map evalExprStep ts) 
 
@@ -241,7 +240,7 @@ evalExprStep (A ann expr') =
       v1 <- evalExprStep e1
       evalClauses v1 cs
 
-    E.TypeApp e t -> evalExprStep e
+    E.TypeApp e _t -> evalExprStep e
 
 
 -- proof that the except monad is not lazy

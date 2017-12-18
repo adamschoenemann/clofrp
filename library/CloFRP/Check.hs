@@ -588,7 +588,6 @@ instR ty@(A a ty') ahat =
             pure r
 
           _ -> do
-            ctx <- getCtx
             rule "InstRError" ("^" <> pretty ahat <+> "=" <+> pretty ty)
             throwError err
             -- otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
@@ -632,32 +631,29 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   -- <:->
   subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
     root $ "[<:->]" <+> pretty ty1 <+> "<:" <+> pretty ty2
-    ctx' <- branch (b1 `subtypeOf` a1)
-    a2' <- substCtx ctx' a2 `decorateErr` (Other "<:->.1")
-    b2' <- substCtx ctx' b2` decorateErr` (Other "<:->.2")
-    withCtx (const ctx') $ branch (a2' `subtypeOf` b2')
+    theta <- branch (b1 `subtypeOf` a1)
+    a2' <- substCtx theta a2 `decorateErr` (Other "<:->.1")
+    b2' <- substCtx theta b2` decorateErr` (Other "<:->.2")
+    withCtx (const theta) $ branch (a2' `subtypeOf` b2')
 
   -- <:∀R
-  subtypeOf' t1 (Forall a k (A ann t2)) = do
-    a' <- freshName
-    ctx <- getCtx
+  subtypeOf' _t1 (Forall alpha k (A ann t2)) = do
+    alpha' <- freshName
     rule "<:∀R" (pretty ty1 <+> "<:" <+> pretty ty2)
-    let ty2' = subst (A ann $ TVar a') a (A ann $ t2)
-    ctx' <- withCtx (\g -> g <+ Uni a' k) $ branch (ty1 `subtypeOf` ty2')
-    pure $ dropTil (Uni a' k) ctx'
+    let ty2' = subst (A ann $ TVar alpha') alpha (A ann t2)
+    theta <- withCtx (\g -> g <+ Uni alpha' k) $ branch (ty1 `subtypeOf` ty2')
+    pure $ dropTil (Uni alpha' k) theta
 
   -- <:∀L
-  subtypeOf' (Forall nm k (A at1 t1)) _ = do
-    ctx <- getCtx
+  subtypeOf' (Forall alpha k (A at1 t1)) _ = do
     rule "<:∀L" (pretty ty1 <+> "<:" <+> pretty ty2)
-    nm' <- freshName
-    let t1' = subst (A at1 $ TExists nm') nm (A at1 t1)
-    ctx' <- withCtx (\g -> g <+ marker nm' <+ Exists nm' k) $ branch (t1' `subtypeOf` ty2)
-    pure $ dropTil (Marker nm') ctx'
+    alpha' <- freshName
+    let t1' = subst (A at1 $ TExists alpha') alpha (A at1 t1)
+    theta <- withCtx (\g -> g <+ marker alpha' <+ Exists alpha' k) $ branch (t1' `subtypeOf` ty2)
+    pure $ dropTil (Marker alpha') theta
 
   -- <:TApp
   subtypeOf' (TApp a1 a2) (TApp b1 b2) = do
-    ctx <- getCtx
     rule "<:TApp" (pretty ty1 <+> "<:" <+> pretty ty2)
     theta <- branch $ a1 `subtypeOf` b1
     a2' <- substCtx theta a2
@@ -687,7 +683,6 @@ subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
   subtypeOf' (TExists ahat) _
     | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
     | otherwise = do
-        ctx <- getCtx
         root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
         _ <- checkWfType (A ann1 $ TExists ahat)
         r <- branch (ahat `instL` ty2)
