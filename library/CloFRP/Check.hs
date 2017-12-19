@@ -391,11 +391,10 @@ instL ahat ty@(A a ty') =
           let ahat1 = Exists af1 Star
           let ahat2 = Exists af2 Star
           let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat Star) $ mempty <+ ahat1 <+ ahat2 <+ ahat := arr
+          ctx' <- insertAt (Exists ahat Star) [ahat1, ahat2, ahat := arr]
           omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
           substed <- substCtx omega t2
-          r <- withCtx (const omega) $ branch (af2 `instL` substed)
-          pure r
+          withCtx (const omega) $ branch (af2 `instL` substed)
 
         -- InstLAllR
         Forall beta k bty -> do
@@ -403,27 +402,25 @@ instL ahat ty@(A a ty') =
           beta' <- freshName
           let bty' = subst (A a $ TVar beta') beta bty
           theta <- withCtx (\g -> g <+ Uni beta' k) $ branch (ahat `instL` bty')
-          (delta, _, _delta') <- splitCtx (Uni beta' k) theta
-          pure delta
+          pure $ dropTil (Uni beta' k) theta
 
         -- InstLTApp. Identical to InstLArr
         TApp t1 t2 -> do
-          ctx <- getCtx
           rule "InstLTApp" (pretty ahat <+> ":<=" <+> pretty ty)
           af1 <- freshName
           af2 <- freshName
           t1k <- kindOf t1
-          -- TODO: Sanitiy check that t1k is * -> k'
           t2k <- kindOf t2
           tyk <- kindOf ty
+          let expectKind = t2k :->*: tyk
+          errIf (pure t1k) (/= expectKind) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected" <+> pretty expectKind)
           let ahat1 = Exists af1 t1k
           let ahat2 = Exists af2 t2k
           let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat tyk) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
+          ctx' <- insertAt (Exists ahat tyk) [ahat1, ahat2, ahat := app]
           omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
           substed <- substCtx omega t2
-          r <- withCtx (const omega) $ branch (af2 `instL` substed)
-          pure r
+          withCtx (const omega) $ branch (af2 `instL` substed)
 
         -- InstLTuple
         TTuple ts -> do
