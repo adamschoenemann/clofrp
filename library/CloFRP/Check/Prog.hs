@@ -296,7 +296,7 @@ elabCs :: forall a. Name -> [(Name,Kind)] -> [Constr a] -> (FreeCtx a, DestrCtx 
 elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) where
   -- | The fully applied type e.g. Maybe a
   fullyApplied :: a -> Type a 'Poly
-  fullyApplied ann = foldl (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType' . fst) bound
+  fullyApplied ann = foldl' (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType' . fst) bound
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
   toFn    (A ann (Constr nm args)) = (nm, quantify bound $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)
   -- | Convert a constructor to a destructor, to use for pattern matches

@@ -5,6 +5,7 @@ module CloFRP.Parser.Expr where
 
 import Text.Parsec.Pos
 import Text.Parsec
+import Data.List (foldl')
 
 import qualified CloFRP.Annotated  as A
 import qualified CloFRP.AST as E
@@ -131,7 +132,7 @@ expr = try tickabs <|> lam <|> buildExpressionParser table atom where
     p <- getPosition
     -- nasty hack to make it behave "infixl" ish 
     ts <- many1 (ann <*> braces T.typep)
-    pure (\e -> foldl (\acc (A.A a t) -> A.A a $ E.TypeApp acc t) e ts)
+    pure (\e -> foldl' (\acc (A.A a t) -> A.A a $ E.TypeApp acc t) e ts)
 
   app :: Parser (Expr -> Expr -> Expr)
   app = fn <$> getPosition where

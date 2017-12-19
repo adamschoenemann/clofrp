@@ -141,7 +141,7 @@ typeToSingExp (A _ typ') = case typ' of
         let s1 = typeToSingExp x1
             s2 = typeToSingExp x2
             base = [| $(s1) `SPair` $(s2) |]
-        foldr (\x acc -> [| STup $(typeToSingExp x) $(acc) |]) base xs -- foldl' here but its never gonna be a real problem
+        foldr (\x acc -> [| STup $(typeToSingExp x) $(acc) |]) base xs -- foldl'' here but its never gonna be a real problem
       _ -> fail $ "Cannot convert tuples of " ++ show (length ts) ++ " elements"
 
   _                    -> fail "Can only convert free types, tuples, and arrow types atm"

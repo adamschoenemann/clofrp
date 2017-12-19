@@ -9,7 +9,7 @@ module CloFRP.Derive where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import Data.List (genericLength)
+import Data.List (genericLength, foldl')
 
 import CloFRP.Annotated
 import CloFRP.Pretty
@@ -74,7 +74,7 @@ deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : 
   expr <- deriveFunctorDef ann (fst $ safeLast b bs) cs
   let ?annotation = ann
   let extrabs = map fst $ safeInit bs
-  let nfa = foldl (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
+  let nfa = foldl' (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
   let typ = forAll (extrabs ++ ["#a", "#b"]) $ (tvar "#a" `arr` tvar "#b") `arr` (nfa `tapp` tvar "#a") `arr` (nfa `tapp` tvar "#b")
   -- let fmapNm = UName $ show (pretty dtName <> "_fmap")
   let inst = ClassInstance { ciClassName = "Functor"
@@ -99,7 +99,7 @@ deriveFunctorConstr f tnm constr@(A ann (Constr nm args)) = do
   let (pat, assocs) = matchConstr constr
   let ?annotation = ann
   cargs <- traverse traversal assocs
-  pure $ (pat, foldl folder (var nm) cargs)
+  pure $ (pat, foldl' folder (var nm) cargs)
   where
     folder acc darg = acc `app` darg
 
