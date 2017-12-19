@@ -368,11 +368,10 @@ instL :: Name -> Type a 'Poly -> TypingM a (LocalCtx a)
 -- InstLSolve
 instL ahat ty@(A a ty') =
   let solve = do
-        ctx <- getCtx
         mty <- asMonotypeTM ty
-        ctx' <- assign ahat mty
+        theta <- assign ahat mty
         rule "InstLSolve" (pretty ahat <+> ":<=" <+> pretty ty)
-        pure ctx'
+        pure theta
   in solve `catchError` \err ->
       case ty' of
         -- InstLReach
@@ -386,7 +385,6 @@ instL ahat ty@(A a ty') =
 
         -- InstLArr
         t1 :->: t2 -> do
-          ctx <- getCtx
           rule "InstLArr" (pretty ahat <+> ":<=" <+> pretty ty)
           af1 <- freshName
           af2 <- freshName
@@ -401,27 +399,12 @@ instL ahat ty@(A a ty') =
 
         -- InstLAllR
         Forall beta k bty -> do
-          ctx <- getCtx
           rule "InstLAllR" (pretty ahat <+> ":<=" <+> pretty ty)
           beta' <- freshName
           let bty' = subst (A a $ TVar beta') beta bty
-          let safepath = do
-                ctxSAFE <- (<+ Uni beta' k) <$> getCtx
-                ctx' <- withCtx (const ctxSAFE) $ branch (ahat `instL` bty')
-                (delta, _, delta') <- splitCtx (Uni beta' k) ctx'
-                pure delta
-              -- TODO: Find out of this is sound. We insert the quantified variable right before
-              -- the existential we're trying to assign. This allows us to type
-              -- (id (\x -> x)) : (forall a. a) -> forall b. b. Without this addition, we could
-              -- only type (id (\x -> x)) : forall b. (forall a. a) -> b even though it should
-              -- be equivalent to the one above
-              unsafepath = do
-                ctxUNSAFE <- insertAt (Exists ahat Star) $ mempty <+ Uni beta' k <+ Exists ahat Star
-                markerName <- freshName
-                ctx' <- withCtx (const (ctxUNSAFE <+ Marker markerName)) $ branch (ahat `instL` bty')
-                (delta, _, delta') <- splitCtx (Marker markerName) ctx'
-                pure delta
-          safepath
+          theta <- withCtx (\g -> g <+ Uni beta' k) $ branch (ahat `instL` bty')
+          (delta, _, _delta') <- splitCtx (Uni beta' k) theta
+          pure delta
 
         -- InstLTApp. Identical to InstLArr
         TApp t1 t2 -> do
