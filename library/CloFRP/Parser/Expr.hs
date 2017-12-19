@@ -13,7 +13,6 @@ import qualified CloFRP.AST.Prim   as P
 import           CloFRP.Parser.Lang
 import qualified CloFRP.Parser.Type as T
 import           CloFRP.AST.Name
-import           CloFRP.Pretty ((<+>), pretty)
 
 type Expr = E.Expr SourcePos
 type Pat  = E.Pat  SourcePos

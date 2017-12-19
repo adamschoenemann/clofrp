@@ -28,7 +28,6 @@ import CloFRP.Annotated (Annotated(..))
 import CloFRP.AST
 import CloFRP.Check
 import CloFRP.Derive
-import CloFRP.Context
 
 -- Program "elaboration"
 -- Go through a parsed program and compute the type signatures of the constructors and
@@ -91,16 +90,16 @@ data ElabProg a = ElabProg
 -}
 
 -- is this just a free monad?
-data ElabAlias a
+data AliasExpansion a
   = Done (Type a 'Poly) -- a fully expanded alias
   -- | the Name is the name of the alias
-  | Ex Name (Type a 'Poly -> ElabAlias a) -- an alias that still needs at least one application
+  | Ex Name (Type a 'Poly -> AliasExpansion a) -- an alias that still needs at least one application
 
-instance Eq (ElabAlias a) where
+instance Eq (AliasExpansion a) where
   Done t1 == Done t2 = t1 =%= t2
   _       == _       = False
 
-instance Monoid a => Show (ElabAlias a) where
+instance Monoid a => Show (AliasExpansion a) where
   show e = showex 0 e where
     showex i (Ex _ f) = showex (i+1) (f (A mempty $ TFree (DeBruijn i)))
     showex i (Done t) = show . pretty $ t
@@ -112,29 +111,30 @@ instance Monoid a => Show (ElabAlias a) where
   = Ex (\x -> Ex (\y -> Done (Either y x)))
 -}
 
-elabAlias :: a -> Alias a -> ElabAlias a
-elabAlias ann = go 0 . deb where 
+aliasExpansion :: a -> Alias a -> AliasExpansion a
+aliasExpansion ann = go 0 . deb where 
+  deb al@(Alias {alBound = b, alExpansion = ex}) =
+    al { alExpansion = deBruijnify ann (map fst b) ex } 
 
-  deb al@(Alias {alName, alBound, alExpansion}) =
-    al { alExpansion = deBruijnify ann (map fst alBound) alExpansion } 
-
-  go i al@(Alias {alName, alBound, alExpansion}) =
-    case alBound of
-      [] -> Done alExpansion
-      _:xs -> Ex alName $ \t ->
-          let alExpansion' = subst t (DeBruijn i) alExpansion
-          in  go (i+1) (al { alBound = xs, alExpansion = alExpansion' }) 
+  go i al@(Alias {alName = nm, alBound = b, alExpansion = ex}) =
+    case b of
+      [] -> Done ex
+      _:xs -> Ex nm $ \t ->
+          let ex' = subst t (DeBruijn i) ex
+          in  go (i+1) (al { alBound = xs, alExpansion = ex' }) 
 
 -- Change type-variables to use debruijn indices based on the order induced
 -- by the second argument. Type-variables that do not appear in the list are
 -- not changed
 deBruijnify :: a -> [Name] -> Type a 'Poly -> Type a 'Poly
 deBruijnify ann = go 0 where
-  go i []     ty = ty
+  go _ []     ty = ty
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
-checkRecAliases :: Aliases a -> TypingM a ()
-checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (alExpansion al)) als) *> pure () where
+checkRecAliases :: forall a. Aliases a -> TypingM a ()
+checkRecAliases als = sequence (M.map checkAl als) *> pure () where
+  checkAl (Alias {alName, alExpansion}) = checkRecAl alName alExpansion
+  checkRecAl :: Name -> Type a 'Poly -> TypingM a ()
   checkRecAl name (A _ ty') = 
     case ty' of
       TFree n 
@@ -142,20 +142,14 @@ checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (a
         | Just al' <- M.lookup n als -> checkRecAl name (alExpansion al')
         | otherwise                  -> pure ()
 
-      TVar n     -> pure ()
-      TExists n  -> pure ()
-      TApp t1 t2 -> do
-        checkRecAl name t1
-        checkRecAl name t2
-
-      t1 :->: t2   -> do
-        checkRecAl name t1
-        checkRecAl name t2
-
+      TVar _         -> pure ()
+      TExists _      -> pure ()
+      TApp t1 t2     -> checkRecAl name t1 *> checkRecAl name t2
+      t1 :->: t2     -> checkRecAl name t1 *> checkRecAl name t2
       Forall _n _k t -> checkRecAl name t
-      RecTy  t -> checkRecAl name t
-      TTuple ts -> traverse (checkRecAl name) ts *> pure ()
-      Later _k t -> checkRecAl name t
+      RecTy  t       -> checkRecAl name t
+      TTuple ts      -> traverse (checkRecAl name) ts *> pure ()
+      Later _k t     -> checkRecAl name t
             
 
 
@@ -172,17 +166,18 @@ checkRecAliases als = sequence (M.mapWithKey (\k al -> checkRecAl (alName al) (a
 expandAliases :: forall a. Aliases a -> Type a 'Poly -> TypingM a (Type a 'Poly)
 expandAliases als t = 
   -- fixpoint it! for recursive alias expansion
-  -- recursive type aliases will probably make this non-terminating
+  -- recursive type aliases will make this non-terminating, so its good
+  -- that we check for those first :)
   go t >>= \case 
     Done t' | t =%= t' -> pure t'
             | otherwise -> expandAliases als t'
     Ex nm _ -> wrong nm
   where
-    go :: Type a 'Poly -> TypingM a (ElabAlias a)
+    go :: Type a 'Poly -> TypingM a (AliasExpansion a)
     go (A ann ty') = 
       case ty' of
         TFree n 
-          | Just al <- M.lookup n als -> pure $ elabAlias ann al
+          | Just al <- M.lookup n als -> pure $ aliasExpansion ann al
           | otherwise                 -> done (A ann $ ty')
 
         TVar n     -> done (A ann ty')
@@ -324,7 +319,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor
         -- resetNameState
-        local (const ctx) $ check expr ty
+        -- local (const ctx) $ check expr ty
         censor (const []) $ local (const ctx) $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     

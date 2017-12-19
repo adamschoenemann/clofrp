@@ -100,14 +100,14 @@ typecheckSpec = do
       deBruijnify () ["a", "b", "c"] ("a" @@: ("b" @@: "c")) `shouldBe` (E.debrjn 0 @@: (E.debrjn 1 @@: E.debrjn 2))
       deBruijnify () ["a"] ("a" @@: ("a" @@: "a")) `shouldBe` (E.debrjn 0 @@: (E.debrjn 0 @@: E.debrjn 0))
 
-  describe "elabAlias" $ do
+  describe "aliasExpansion" $ do
     it "should work with flipsum" $ do
-      let (Ex _ f) = elabAlias () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f) = aliasExpansion () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
       let (Ex _ f') = f ("a")
       f' "b" `shouldBe` Done ("Either" @@: "b" @@: "a")
 
     it "should work with nested flipsum" $ do
-      let (Ex _ f1) = elabAlias () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f1) = aliasExpansion () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
       let (Ex _ f2) = f1 ("a")
       let (Done t) = f2 ("FlipSum" @@: "b" @@: "d")
       t `shouldBe` ("Either" @@: ("FlipSum" @@: "b" @@: "d") @@: "a")

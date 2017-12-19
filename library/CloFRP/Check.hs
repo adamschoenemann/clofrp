@@ -360,6 +360,11 @@ assertFunctor ty = findInstanceOf "Functor" ty >>= \case
   Just _ -> pure ()
   Nothing -> otherErr $ show $ "Cannot resolve functor instance of" <+> pretty ty
 
+solve :: Name -> Type a s -> TypingM a (LocalCtx a)
+solve ahat ty = do
+  mty <- asMonotypeTM ty
+  assign ahat mty
+
 -- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
 -- at least implement them both in terms of a more general combinator
 
@@ -367,12 +372,7 @@ assertFunctor ty = findInstanceOf "Functor" ty >>= \case
 instL :: Name -> Type a 'Poly -> TypingM a (LocalCtx a)
 -- InstLSolve
 instL ahat ty@(A a ty') =
-  let solve = do
-        mty <- asMonotypeTM ty
-        theta <- assign ahat mty
-        rule "InstLSolve" (pretty ahat <+> ":<=" <+> pretty ty)
-        pure theta
-  in solve `catchError` \err ->
+  (solve ahat ty <* rule "InstLSolve" (pretty ahat <+> ":<=" <+> pretty ty)) `catchError` \err ->
       case ty' of
         -- InstLReach
         TExists bhat -> do
@@ -470,12 +470,7 @@ instL ahat ty@(A a ty') =
 instR :: Type a 'Poly -> Name -> TypingM a (LocalCtx a)
 -- InstRSolve
 instR ty@(A a ty') ahat =
-  let solve = do
-        mty <- asMonotypeTM ty
-        ctx' <- assign ahat mty
-        rule "InstRSolve" (pretty ty <+> "=<:" <+> pretty ahat)
-        pure ctx'
-  in  solve `catchError` \err ->
+  (solve ahat ty <* rule "InstRSolve" (pretty ty <+> "=<:" <+> pretty ahat)) `catchError` \err ->
         case ty' of
           -- InstRReach
           TExists bhat -> do
@@ -488,7 +483,6 @@ instR ty@(A a ty') ahat =
 
           -- InstRArr
           t1 :->: t2 -> do
-            ctx <- getCtx
             rule "InstRArr" (pretty ty <+> "=<:" <+> pretty ahat)
             af1 <- freshName
             af2 <- freshName
@@ -503,17 +497,15 @@ instR ty@(A a ty') ahat =
 
           -- InstRAllL
           Forall beta k bty -> do
-            ctx <- getCtx
             rule "InstRAllL" (pretty ty <+> "=<:" <+> pretty ahat)
             beta' <- freshName
             let bty' = subst (A a $ TExists beta') beta bty
             ctx' <- withCtx (\g -> g <+ marker beta' <+ Exists beta' k) $ branch (bty' `instR` ahat)
-            (delta, _, delta') <- splitCtx (Marker beta') ctx'
+            (delta, _, _delta') <- splitCtx (Marker beta') ctx'
             pure delta
 
           -- InstRTApp. Identical to InstRArr
           TApp t1 t2 -> do
-            ctx <- getCtx
             rule "InstRTApp" (pretty ty <+> "=<:" <+> pretty ahat)
             af1 <- freshName
             af2 <- freshName
@@ -697,7 +689,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
 
   -- ∀I
   check' _ (Forall alpha k aty) = do
-    ctx <- getCtx
     rule "∀I" (pretty e <+> "<=" <+> pretty ty)
     alpha' <- freshName
     let alphat = A tann $ TVar alpha'
@@ -708,7 +699,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
 
   -- ->I
   check' (Lam x mty e2) (aty :->: bty) = do
-    ctx <- getCtx
     rule "->I" (pretty e <+> "<=" <+> pretty ty)
     ctx' <- maybe getCtx (aty `subtypeOf`) mty
     let c = (LamB, x) `HasType` aty
@@ -729,7 +719,6 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
 
   -- TickAbsI
   check' (TickAbs af k e2) (Later k' t2) = do
-    ctx <- getCtx
     rule "TickAbsI" (pretty e <+> "<=" <+> pretty ty)
     let kty = nameToType eann k
     delta <- branch $ k' `subtypeOf` kty
@@ -1088,26 +1077,24 @@ inferPrim ann p = case p of
 checkPat :: Pat a -> Type a 'Poly -> TypingM a (LocalCtx a)
 checkPat pat@(A ann p) ty = do
   ctx <- getCtx
-  rule "CheckPat" (pretty pat <+> "<=" <+> pretty ty)
   dctx <- getDCtx
+  rule "CheckPat" (pretty pat <+> "<=" <+> pretty ty)
   case p of
     Bind nm -> pure $ ctx <+ (LetB, nm) `HasType` ty
 
     Match nm pats -> case query nm dctx of
       Nothing    -> otherErr $ "Pattern " ++ show nm ++ " not found in context."
-      Just destr -> do
-        ctx' <- branch $ checkPats pats destr ty
-        pure ctx'
+      Just destr -> branch $ checkDestr destr pats ty
 
-    PTuple pats -> do
+    PTuple pats -> 
       -- generate a tuple destructor of length (length pats)
       let plen = genericLength pats
-      let dname = UName $ "tuple_" ++ show plen
-      let dbound = map (\x -> (DeBruijn x, Star)) [0 .. (plen - 1)]
-      let dargs = map (A ann . TVar . fst) dbound
-      let dtyp = A ann $ TTuple $ dargs
-      let d = Destr {name = dname, bound = dbound, typ = dtyp, args = dargs}
-      branch $ checkPats pats d ty
+          dname = UName $ "tuple_" ++ show plen
+          dbound = map (\x -> (DeBruijn x, Star)) [0 .. (plen - 1)]
+          dargs = map (A ann . TVar . fst) dbound
+          dtyp = A ann $ TTuple $ dargs
+          d = Destr {name = dname, bound = dbound, typ = dtyp, args = dargs}
+      in  branch $ checkDestr d pats ty
 
 -- Take a destructor and "existentialize it" - replace its bound type-variables
 -- with fresh existentials
@@ -1126,10 +1113,10 @@ existentialize ann destr = do
       pure $ ((b',k) : nms, d {typ = ntyp, args = nargs})
 
 
--- in a context, check a list of patterns against a destructor and an expected type.
+-- in a context, check a destructor against a list of patterns and an expected type.
 -- if it succeeds, it binds the names listed in the pattern match to the input context
-checkPats :: [Pat a] -> Destr a -> Type a 'Poly -> TypingM a (LocalCtx a)
-checkPats pats d@(Destr {name, typ, args}) expected@(A ann _)
+checkDestr :: Destr a -> [Pat a] -> Type a 'Poly -> TypingM a (LocalCtx a)
+checkDestr d@(Destr {name, args}) pats expected@(A ann _)
   | length pats /= length args =
       otherErr $ show $ "Expected" <+> pretty (length args)
              <+> "arguments to" <> pretty name <+> "but got" <+> pretty (length pats)
