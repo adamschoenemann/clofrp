@@ -31,6 +31,19 @@ import           CloFRP.Context
 import           CloFRP.Utils
 import           CloFRP.Eval
 
+data T a f = C1 (a -> f) | C2 Int (Maybe f)
+
+instance Functor (T a) where
+  -- fmap f t =
+  --   case t of
+  --     C1 g    -> C1 (\x -> f (g x))
+  --     C2 i mg -> C2 i (fmap f mg)
+  fmap f t =
+    case t of
+      C1 x0    -> C1 ((\x b -> f (x (id b))) x0)
+      C2 x0 x1 -> C2 (id x0) ((\x -> fmap f x) x1)
+
+
 data Ftor0 f = Ftor0 (forall a. (a, f))
 
 instance Functor Ftor0 where
@@ -328,6 +341,14 @@ deriveSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
       evalProg "main" prog `shouldBe` Constr "F2" [Constr "F1" [Constr "MkB" []]]
+
+    it "works for later functors" $ do
+      let prog = [unsafeProg|
+        data Wrap a = Wrap a deriving Functor.
+        data Delay (k : Clock) f = Delay (|>k (Wrap f)) deriving Functor.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+      -- evalProg "main" prog `shouldBe` Constr "F2" [Constr "F1" [Constr "MkB" []]]
 
     -- it "works for recursive types (Nat)" $ do
     --   let prog = [unsafeProg|

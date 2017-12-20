@@ -62,29 +62,31 @@ instance Functor NatF where
 -- a giant hack of course
 deriveClass :: Name -> Datatype a -> Either String (ClassInstance a)
 deriveClass (UName "Functor") dt = deriveFunctor dt
-deriveClass nm dt = Left $ show $ "Cannot derive" <+> pretty nm <+> "for" <+> (pretty $ dtName dt) <+> "since we can only derive functor atm."
+deriveClass nm dt =
+  Left $ show $ "Cannot derive" <+> pretty nm <+> "for" 
+      <+> (pretty $ dtName dt) <+> "since we can only derive functor atm."
 
 -- | Derive functor for a data-type (or fail if impossible)
 deriveFunctor :: Datatype a -> Either String (ClassInstance a)
 deriveFunctor (Datatype {dtName, dtBound = []}) =
   Left $ show $ "Cannot derive functor for concrete type" <+> pretty dtName
-
 deriveFunctor (Datatype {dtName, dtConstrs = []}) =
   Left $ show $ "Cannot derive functor uninhabited  type" <+> pretty dtName
-
-deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : _)}) = do
-  let (bnm, bk) = safeLast b bs
-  checkKind (bnm, bk)
-  expr <- deriveFunctorDef ann bnm cs
-  let ?annotation = ann
-  let extrabs = map fst $ safeInit bs
-  let nfa = foldl' (tapp) (tfree dtName) (map tvar extrabs) -- nearlyFullyApplied
-  let typ = forAllK (safeInit bs ++ [(bnm, Star), ("#b", Star)]) $ (tvar bnm `arr` tvar "#b") `arr` (nfa `tapp` tvar bnm) `arr` (nfa `tapp` tvar "#b")
-  -- let fmapNm = UName $ show (pretty dtName <> "_fmap")
-  let inst = ClassInstance { ciClassName = "Functor"
+deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann _ : _)}) = do
+  let (bnm, bk) = safeLast b bs                           -- the last bound variable in bs, or b if bs = []
+  checkKind (bnm, bk)                                     -- check that the kind of bnm is correct (*)
+  expr <- deriveFmapDef ann bnm cs                        -- derive the definition of the functor
+  let ?annotation = ann                                   -- use ann for implicit anotations
+  let extrabs = map fst $ safeInit bs                     -- take all type-variables except the last (which we're functorial over)
+  let nfa = foldl' tapp (tfree dtName) (map tvar extrabs) -- The nearly fully applied type
+  -- the type for fmap
+  let typ = forAllK (safeInit bs ++ [(bnm, Star), ("#b", Star)]) $ 
+              (tvar bnm `arr` tvar "#b") `arr` (nfa `tapp` tvar bnm) `arr` (nfa `tapp` tvar "#b")
+  -- create the class instance
+  let inst = ClassInstance { ciClassName        = "Functor"
                            , ciInstanceTypeName = dtName
-                           , ciParams = extrabs
-                           , ciDictionary = M.singleton "fmap" (typ, expr)
+                           , ciParams           = extrabs
+                           , ciDictionary       = M.singleton "fmap" (typ, expr)
                            }
   pure $ inst
   where
@@ -93,16 +95,18 @@ deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann c1 : 
 
 type TVarName = Name
 
-deriveFunctorDef :: a -> Name -> [Constr a] -> Either String (Expr a)
-deriveFunctorDef ann tnm cs =
+-- | Derive the definition of fmap
+deriveFmapDef :: a -> Name -> [Constr a] -> Either String (Expr a)
+deriveFmapDef ann tnm cs =
   let vn = UName "#val"
       fn = UName "#f"
   in  let ?annotation = ann
-  in  lam fn Nothing . lam vn Nothing .
-        casee (var vn) <$> traverse (deriveFunctorConstr (var fn) tnm) cs
+  in  lam' fn . lam' vn .
+        casee (var vn) <$> traverse (deriveFmapConstr (var fn) tnm) cs
 
-deriveFunctorConstr :: forall a. Expr a -> TVarName -> Constr a -> Either String (Pat a, Expr a)
-deriveFunctorConstr f tnm constr@(A ann (Constr nm args)) = do
+-- | Derive a clause of fmap for a constructor
+deriveFmapConstr :: forall a. Expr a -> TVarName -> Constr a -> Either String (Pat a, Expr a)
+deriveFmapConstr f tnm constr@(A ann (Constr nm args)) = do
   let (pat, assocs) = matchConstr constr
   let ?annotation = ann
   cargs <- traverse traversal assocs
@@ -121,25 +125,24 @@ matchConstr (A ann (Constr nm args)) =
   let assocs = map (\(i, t) -> (UName ("#" ++ show i), t)) $ zip [(0::Int)..] args
   in  (match nm $ map (bind . fst) assocs, assocs)
 
--- derive `fmap f` for functorial type variable `tnm` over type `typ`
+-- | Derive `fmap f` for functorial type variable `tnm` over type `typ`
 -- https://ghc.haskell.org/trac/ghc/wiki/Commentary/Compiler/DeriveFunctor
 deriveFmapArg :: Expr a -> TVarName -> Type a 'Poly -> Either String (Expr a)
-deriveFmapArg f tnm typ@(A anno _)
-  | not (inFreeVars tnm typ) = pure $ ide
-  | otherwise = go typ
-  where
-  go (A ann typ') = 
+deriveFmapArg f tnm typ@(A anno _) = go typ where
+  go typ2 | not (inFreeVars tnm typ2) = pure ide
+  go (A ann typ') =
     let ?annotation = ann 
     in  case typ' of
       TFree _   -> pure ide
-      TExists _ -> pure ide
+      TExists _ -> Left "existentials are not part of the concrete syntax"
       TVar nm | nm == tnm -> pure $ f
               | otherwise -> pure ide
       Forall v k t -> go t
       Later t1 t2 -> do
-        let af = UName "0af"
+        let af = UName "#af"
         k <- extractKappa t1
-        pure $ lam' "x" $ tAbs af k (f `app` (var "x" `app` tickvar af))
+        e2 <- go t2
+        pure $ lam' "x" $ tAbs af k (e2 `app` (var "x" `app` tickvar af))
       TTuple ts -> deriveFmapTuple f tnm ts 
       t1 `TApp` t2 -> pure $ lam' "x" $ (A anno $ Fmap t1) `app` f `app` var "x"
       t1 :->: t2     -> do
@@ -148,26 +151,27 @@ deriveFmapArg f tnm typ@(A anno _)
         let x = UName "x"
             b = UName "b"
         pure $ lam' x $ lam' b $ e2 `app` (var x `app` (e1 `app` var b))
-      RecTy t -> Left $ "Cannot deriv functor for recursive types"
+      RecTy t -> Left $ "Cannot derive functor for recursive types"
         -- let x1 = UName "x1"
         --     x2 = UName "x2"
         --     x3 = UName "x3"
         -- fmapinner <- deriveFmapArg f tnm t
         -- pure $ letE (bind "snd") snde $ lam' x1 $ primRec t `app` (lam' x2 $ foldE `app` (fmapinner `app` (lam' x3 $ f `app` (var "snd" `app` var x3)) `app` var x2)) `app` var x1
 
-  cogo (A ann _) | not (inFreeVars tnm typ) = pure $ A ann $ Lam "x" Nothing $ (A ann $ Var "x")
+  cogo typ2 | not (inFreeVars tnm typ2) = pure ide
   cogo (A ann typ') = 
     let ?annotation = ann 
     in  case typ' of
       TFree _   -> pure ide
-      TExists _ -> pure ide
+      TExists _ -> Left "existentials are not part of the concrete syntax"
       TVar nm | nm == tnm -> Left $ "type variable " ++ pps tnm ++ " is in a negative position"
               | otherwise -> pure ide
       Forall v k t -> go t 
       Later t1 t2 -> do
-        let af = UName "0af"
+        let af = UName "#af"
         k <- extractKappa t1
-        pure $ lam' "x" $ tAbs af k (f `app` (var "x" `app` tickvar af))
+        e2 <- go t2
+        pure $ lam' "x" $ tAbs af k (e2 `app` (var "x" `app` tickvar af))
       TTuple ts    -> deriveFmapTuple f tnm ts
       t1 `TApp` t2 -> pure $ lam' "x" $ (A anno $ Fmap t1) `app` f `app` var "x"
       t1 :->: t2     -> do
@@ -176,16 +180,16 @@ deriveFmapArg f tnm typ@(A anno _)
         let x = UName "x"
             b = UName "b"
         pure $ lam' x $ lam' b $ e2 `app` (var x `app` (e1 `app` var b))
-      RecTy t -> Left $ "Cannot deriv functor for recursive types"
+      RecTy t -> Left $ "Cannot derive functor for recursive types"
   
   ide = A anno $ Lam "x" Nothing (A anno $ Var "x")
-  snde :: (?annotation :: a) => Expr a
-  snde = A ?annotation $ Ann (lam' "tup" $ casee (var "tup") [ptuple [bind "_", bind "x_2"] |-> var "x_2"]) sndty where
-    sndty = forAll ["a","b"] $ ttuple [tvar "a", tvar "b"] `arr` tvar "b"
+  -- snde :: (?annotation :: a) => Expr a
+  -- snde = A ?annotation $ Ann (lam' "tup" $ casee (var "tup") [ptuple [bind "_", bind "x_2"] |-> var "x_2"]) sndty where
+  --   sndty = forAll ["a","b"] $ ttuple [tvar "a", tvar "b"] `arr` tvar "b"
 
 deriveFmapTuple :: (?annotation :: a) => Expr a -> TVarName -> [Type a 'Poly] -> Either String (Expr a)
 deriveFmapTuple f tnm ts = do
-  let is = [0 .. genericLength ts - 1]
+  let is = [(0::Int) .. genericLength ts - 1]
   let nms = map (UName . ("#" ++) . show) is
   fmaps <- traverse (deriveFmapArg f tnm) ts
   let es = zipWith (\f v -> f `app` v) fmaps (map var nms)
