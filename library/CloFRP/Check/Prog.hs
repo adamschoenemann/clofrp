@@ -183,14 +183,14 @@ expandAliases als t =
         TVar _     -> done (A ann ty')
         TExists _  -> done (A ann ty')
         TApp t1 t2 -> 
-          (go t1, go t2) &&& \case
+          (go t1, go t2) >>*= \case
             (Done t1', Done t2') -> done (A ann $ TApp t1' t2')
             (Done _, Ex nm _)    -> wrong nm
             (Ex _ f1, Done t2')  -> pure $ f1 t2'
             (Ex nm _, Ex _ _)    -> wrong nm
 
         t1 :->: t2 -> 
-          (go t1, go t2) &&& \case
+          (go t1, go t2) >>*= \case
             (Done t1', Done t2') -> done (A ann $ t1' :->: t2')
             (Ex nm _, _)         -> wrong nm
             (_, Ex nm _)         -> wrong nm
@@ -218,8 +218,8 @@ expandAliases als t =
             Done t1' -> done $ A ann $ Later k t1'
             Ex nm _ -> wrong nm
 
-    (&&&) :: Monad m => (m t1, m t2) -> ((t1, t2) -> m c) -> m c
-    (c1, c2) &&& fn = do
+    (>>*=) :: Monad m => (m t1, m t2) -> ((t1, t2) -> m c) -> m c
+    (c1, c2) >>*= fn = do
       e1 <- c1
       e2 <- c2
       fn (e1, e2)
@@ -246,10 +246,20 @@ collectDecls (Prog decls) = foldr folder mempty decls where
       AliasD alias     -> er {erAliases = M.insert (alName alias) alias als}
 
 
-elabInstances :: Applicative m => (Either String (ClassInstance a) -> m (ClassInstance a)) -> Deriving a -> m (InstanceCtx a)
+-- | Elaborate instances and expand their types with aliases with a function
+-- `inject` to go from the Either representation to a monad representation
+elabInstances :: (Either String (ClassInstance a) -> TypingM a (ClassInstance a)) -> Deriving a -> TypingM a (InstanceCtx a)
 elabInstances inject derivs = InstanceCtx <$> M.traverseWithKey traverseDerivs derivs where
   traverseDerivs nm dts = 
     traverse (\dt -> inject $ deriveClass nm dt) dts
+  -- expandInstance ci = do 
+  --   dict <- traverse tfn (ciDictionary ci)
+  --   pure ci { ciDictionary = dict }
+  --   where
+  --     tfn (ty,expr) = do 
+  --       expty <- expandAliases aliases ty
+  --       pure (expty, expr)
+
 
 -- TODO: modularize this
 elabProg :: Prog a -> TypingM a (ElabProg a)
@@ -267,15 +277,20 @@ elabProg program = do
             let FreeCtx types = sigds <> cnstrs
             expFree <- traverse (expandAliases aliases) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
+            expDerivs <- traverse (expandDerivs aliases) derivs
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
-            instances <- elabInstances (either otherErr pure) derivs
+            instances <- elabInstances fromEither expDerivs
             let allFree = FreeCtx $ expFree -- <> M.fromList derivTyps
             let allDefs = expFunds -- <> M.fromList derivDefs
             pure $ ElabProg kinds allFree allDefs expDestrs aliases instances
   where 
-    -- getInstances dts = M.map mapper dts where
-    --   mapper v = S.fromList $ map dtName
-
+    expandDerivs als ds = traverse (expandDeriv als) ds
+    expandDeriv als d@(Datatype {dtConstrs}) = do
+      constrs <- traverse expandConstr dtConstrs
+      pure (d {dtConstrs = constrs})
+      where
+        expandConstr (A ann (Constr nm args)) = 
+          A ann . Constr nm <$> traverse (expandAliases als) args
 
     expandDestr als d@(Destr {typ, args}) = do
       typ' <- expandAliases als typ
@@ -303,16 +318,20 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
   anned :: a -> (t -> r -> b) -> t -> r -> Annotated a b
   anned ann fn = \x y -> A ann $ fn x y
 
+-- | Check an elaborated program
+-- TODO: Check derived definitions in instances
 checkElabedProg :: ElabProg a -> TypingM a ()
 checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
   _ <- checkTypes
   _ <- checkDefs
   _ <- checkAliases
+  _ <- local (const ctx) checkInstances
   pure ()
   where 
     checkTypes = traverse (validType kinds) (unFreeCtx types)
     checkDefs  = M.traverseWithKey traverseDefs defs
     checkAliases = traverse traverseAlias aliases
+    checkInstances = traverse traverseInstances (unInstanceCtx instances)
 
     initKinds = extend "K0" ClockK kinds
     ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trInstances = instances}
@@ -324,9 +343,16 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
         censor (const []) $ local (const ctx) $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
-    traverseAlias (Alias {alName, alBound, alExpansion}) = do
+    traverseAlias (Alias {alBound, alExpansion}) = do
       expanded <- expandAliases aliases alExpansion
       validType kinds (quantify alBound expanded)
+    
+    traverseInstances xs = traverse checkInstance xs where
+      checkInstance (ClassInstance {ciDictionary = dict, ciClassName = cnm, ciInstanceTypeName = inm}) = M.traverseWithKey (checkDict cnm inm) dict
+      checkDict cnm inm k (ty, expr) = check expr ty `decorateErr` err where 
+        err = Other $ showW 120 $ "Checking derived definition of" <+> pretty cnm 
+            <> "." <> pretty k <+> "for" <+> pretty inm <> ":" <+> line <> pretty expr
+            <> line <> "against type" <> line <> pretty ty
     
 
 

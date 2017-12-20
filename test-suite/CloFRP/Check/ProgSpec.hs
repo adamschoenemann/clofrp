@@ -429,6 +429,10 @@ progSpec = do
           case xs of
             | Nil -> MkUnit
             | Cons x xs -> x.
+        
+        bar : forall a. (Unit, a).
+        bar = let x = undefined : forall b. (Unit, b)
+              in  case x of | (x1,x2) -> (x1, x2).
       |]
       runCheckProg mempty prog `shouldYield` ()
 

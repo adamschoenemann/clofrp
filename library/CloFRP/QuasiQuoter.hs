@@ -13,8 +13,9 @@ import CloFRP.Interop
 import CloFRP.Utils (findMap)
 import CloFRP.Eval (progToEval)
 import CloFRP.Check.Prog (runCheckProg)
+import CloFRP.Check.TypingM (runTypingM0)
 import CloFRP.Annotated
-import CloFRP.Pretty (ppsw)
+import CloFRP.Pretty (ppsw, pps)
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
@@ -84,11 +85,11 @@ clott = QuasiQuoter
       case runCheckProg mempty prog of
         (Left err, _, _) -> fail (ppsw 200 err)
         (Right _,  _, _) -> 
-          case progToEval (UName "main") prog of
-            Right (expr, ty, rd, st) -> do
+          case runTypingM0 (progToEval (UName "main") prog) mempty of
+            (Right (expr, ty, rd, st), _, _) -> do
               let sing = typeToSingExp ty
               let exprQ = liftData expr
               let rdQ = liftData rd
               let stQ = liftData st
               [|CloFRP $(rdQ) $(stQ) $(exprQ) $(sing)|]
-            Left err -> fail err
+            (Left (err,_), _, _) -> fail (pps err)

@@ -29,6 +29,7 @@ import           CloFRP.Check.Prog
 import           CloFRP.QuasiQuoter
 import           CloFRP.Context
 import           CloFRP.Utils
+import           CloFRP.Eval
 
 data Ftor0 f = Ftor0 (forall a. (a, f))
 
@@ -64,11 +65,11 @@ data Cont r a = Cont ((a -> r) -> r)
 instance Functor (Cont r) where
   fmap f (Cont c) = Cont (\c' -> c (\x -> c' (f x)))
 
-runElabProg :: (Show a2, Monad f, Unann a1 (E.Prog a2)) => a1 -> f (ElabProg a2)
+runElabProg :: Unann a1 (E.Prog a) => a1 -> Either (TyExcept a) (ElabProg a)
 runElabProg p = 
   case runTypingM0 (elabProg . unann $ p) mempty of
     (Right ep, _, _) -> pure ep
-    (Left err, _, _) -> fail (show err)
+    (Left (err,_), _, _) -> Left err
 
 
 mktr :: Unann p (E.Prog a) => p -> TypingRead a
@@ -76,8 +77,8 @@ mktr p =
   let (Right (ElabProg { kinds, destrs, types }), _, _) = runTypingM0 (elabProg . unann $ p) mempty
   in  mempty { trKinds = kinds, trDestrs = destrs, trFree = types }
 
-fmapt :: [String] -> E.Type () 'E.Poly -> E.Type () 'E.Poly
-fmapt b con = E.forAll (b ++ ["#a", "#b"]) $ ("#a" @->: "#b") @->: con @@: "#a" @->: con @@: "#b"
+fmapt :: String -> [String] -> E.Type () 'E.Poly -> E.Type () 'E.Poly
+fmapt f b con = E.forAll (b ++ [f, "#b"]) $ (E.tvar f @->: "#b") @->: con @@: E.tvar f @->: con @@: "#b"
 
 deriveFunctorAndExtract :: E.Datatype a -> Either String (E.Type a 'E.Poly, E.Expr a)
 deriveFunctorAndExtract dt = 
@@ -114,7 +115,7 @@ deriveSpec = do
             ]
         )
 
-      fmapTy `shouldBe` fmapt [] "NatF"
+      fmapTy `shouldBe` fmapt "f" [] "NatF"
       let tr = mktr [unsafeProg|data NatF f = Z | S f.|]
       runCheck tr fmapDef fmapTy `shouldYield` mempty
 
@@ -137,7 +138,7 @@ deriveSpec = do
             ]
         )
 
-      fmapTy `shouldBe` fmapt ["a"] ("ListF" @@: "a")
+      fmapTy `shouldBe` fmapt "f" ["a"] ("ListF" @@: "a")
       let tr = mktr [unsafeProg|data ListF a f = Nil | Cons a f.|]
       runCheck tr fmapDef fmapTy `shouldYield` mempty
     
@@ -159,7 +160,7 @@ deriveSpec = do
             [ E.match "Pair" [bindp 0] |-> "Pair" @@ (inner @@ varm 0) ]
         )
 
-      fmapTy `shouldBe` fmapt [] "Pair"
+      fmapTy `shouldBe` fmapt "a" [] "Pair"
       let tr = mktr [unsafeProg|data Pair a = Pair (a,a). |]
       runCheck tr fmapDef fmapTy `shouldYield` mempty
 
@@ -188,7 +189,7 @@ deriveSpec = do
                 [ (E.match "Pos" [bindp 0], "Pos" @@ (("x" @-> "b" @-> "#f" @@ ("x" @@ (("x" @-> "x") @@ "b"))) @@ varm 0))
                 ]
             )
-          fmapTy `shouldBe` fmapt [] "Pos"
+          fmapTy `shouldBe` fmapt "f" [] "Pos"
           let tr = mktr [unsafeProg|data Unit = Unit. data Pos f = Pos (Unit -> f).|]
           runCheck tr fmapDef fmapTy `shouldYield` mempty
 
@@ -248,7 +249,7 @@ deriveSpec = do
                 [ (E.match "Pos" [bindp 0], "Pos" @@ pos)
                 ]
             )
-          fmapTy `shouldBe` fmapt [] "Pos"
+          fmapTy `shouldBe` fmapt "f" [] "Pos"
           let tr = mktr [unsafeProg|data Unit = Unit. data Pos f = Pos ((f -> Unit) -> Unit).|]
           runCheck tr fmapDef fmapTy `shouldYield` mempty
 
@@ -274,13 +275,13 @@ deriveSpec = do
                 [ (E.match "Cont" [bindp 0], "Cont" @@ pos)
                 ]
             )
-          fmapTy `shouldBe` fmapt ["r"] ("Cont" @@: "r")
+          fmapTy `shouldBe` fmapt "a" ["r"] ("Cont" @@: "r")
           let tr = mktr [unsafeProg|data Cont r a = Cont ((a -> r) -> r).|]
           runCheck tr fmapDef fmapTy `shouldYield` mempty
 
   describe "deriving in elabProg" $ do
     it "works for simple example " $ do
-      ep <- runElabProg [unsafeProg|
+      let Right ep = runElabProg [unsafeProg|
         data NatF f = Z | S f deriving Functor.
         data ListF a f = Nil | Cons a f deriving (Functor).
       |]
@@ -288,6 +289,100 @@ deriveSpec = do
       let natf = (ftors !! 0)
       let listf = (ftors !! 0)
       ciClassName natf `shouldBe` "Functor"
-      fst <$> M.lookup "fmap" (ciDictionary natf) `shouldBe` Just (fmapt [] "NatF")
+      fst <$> M.lookup "fmap" (ciDictionary natf) `shouldBe` Just (fmapt "f" [] "NatF")
       ciClassName listf `shouldBe` "Functor"
-      fst <$> M.lookup "fmap" (ciDictionary listf) `shouldBe` Just (fmapt [] "NatF")
+      fst <$> M.lookup "fmap" (ciDictionary listf) `shouldBe` Just (fmapt "f" [] "NatF")
+
+    it "works for type with forall-quantification" $ do
+      let v = evalProg "main" [unsafeProg|
+        data Foo a = Foo (forall b. b -> (a,b)) deriving Functor.
+        data A = A.
+        data B = B.
+
+        main : Foo B.
+        main = case fmap {Foo} (\x -> B) (Foo (\x -> (A, x))) of
+          | Foo fn -> fn B.
+      |]
+      v `shouldBe` Tuple [Constr "B" [], Constr "B" []]
+
+    it "works for nested functors" $ do
+      let prog = [unsafeProg|
+        data F1 a = F1 a deriving Functor.
+        data F2 a = F2 (F1 a) deriving Functor.
+        data A = MkA. data B = MkB.
+
+        main : F2 B.
+        main = fmap {F2} (\x -> MkB) (F2 (F1 MkA)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+
+    it "works for nested functors and type aliases" $ do
+      let prog = [unsafeProg|
+        data F1 a = F1 a deriving Functor.
+        type F1' a = F1 a.
+        data F2 a = F2 (F1' a) deriving Functor.
+        data A = MkA. data B = MkB.
+
+        main : F2 B.
+        main = fmap {F2} (\x -> MkB) (F2 (F1 MkA)).
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+      evalProg "main" prog `shouldBe` Constr "F2" [Constr "F1" [Constr "MkB" []]]
+
+    -- it "works for recursive types (Nat)" $ do
+    --   let prog = [unsafeProg|
+    --     data NatF f = Z | S f deriving Functor.
+    --     data Nat = Nat (Fix NatF) deriving Functor.
+
+    --     z : Nat.
+    --     z = Nat (fold Z).
+    --     s : Nat -> Nat.
+    --     s = \x -> Nat (fold (S x)).
+
+    --     main : Nat.
+    --     main = fmap {Nat} (\x -> x) (s (s (s z))).
+    --   |]
+    --   runCheckProg mempty prog `shouldYield` ()
+      -- let moreList x y = Constr "MoreList" [x ,y]
+      -- let nil = Fold (Constr "Nil" [])
+      -- let cons x xs = Fold (Constr "Cons" [x, xs])
+      -- let mka = Constr "MkA" []
+      -- let mkb = Constr "MkB" []
+
+      -- let v = evalProg "main" prog
+      -- v `shouldBe` moreList mkb (cons mkb (cons mkb (cons mkb nil)))
+
+    -- it "works for recursive types (List)" $ do
+    --   let prog = [unsafeProg|
+    --     data ListF a f = Nil | Cons a f deriving Functor.
+    --     type List a = Fix (ListF a).
+    --     data List' a = List' (List a) deriving Functor.
+    --     data A = A. data B = B.
+
+    --     cons : forall a. a -> List a -> List a.
+    --     cons = \x xs -> fold (Cons x xs).
+
+    --     nil : forall a. List a.
+    --     nil = fold Nil.
+
+    --     as : List' A.
+    --     as = List' (cons A (cons A (cons A nil))).
+
+    --     main : List' B.
+    --     main = fmap {List'} (\x -> B) as.
+    --   |]
+    --   runCheckProg mempty prog `shouldYield` ()
+      -- let moreList x y = Constr "MoreList" [x ,y]
+      -- let nil = Fold (Constr "Nil" [])
+      -- let cons x xs = Fold (Constr "Cons" [x, xs])
+      -- let mka = Constr "MkA" []
+      -- let mkb = Constr "MkB" []
+
+    --   let v = evalProg "main" prog
+    --   v `shouldBe` moreList mkb (cons mkb (cons mkb (cons mkb nil)))
+
+    it "doesnt work for type with wrong kind" $ do
+      let Left err = runElabProg [unsafeProg|
+        data FooF (f : * -> *) = Foo (forall a. f a) deriving Functor.
+      |]
+      err `shouldBe` Other "f must have kind * but had kind * -> *"

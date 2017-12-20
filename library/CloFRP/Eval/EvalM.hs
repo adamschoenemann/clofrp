@@ -44,9 +44,6 @@ type EvalWrite = ()
 type Globals a = Map Name (Either (Expr a) (Value a)) -- either unevaled defs or already evaled values
 type EvalState a = Globals a
 
-data EvalErr = Other String
-  deriving (Show, Eq)
-
 newtype EvalM a r = Eval { unEvalM :: RWS (EvalRead a) EvalWrite (EvalState a) r }
   deriving ( Functor
            , Applicative
@@ -95,6 +92,3 @@ updGlobals = modify
 
 getGlobals :: EvalM a (Globals a)
 getGlobals = get
-
-otherErr :: String -> EvalM a (Value a)
-otherErr = pure . Prim . RuntimeErr 

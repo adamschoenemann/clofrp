@@ -209,6 +209,9 @@ withKCtx :: (KindCtx a -> KindCtx a) -> TypingM a r -> TypingM a r
 withKCtx fn = local fn' where
   fn' rd = rd { trKinds = fn (trKinds rd) }
 
+fromEither :: Either String r -> TypingM a r
+fromEither = either otherErr pure
+
 -- withCCtx :: (ClockCtx a -> ClockCtx a) -> TypingM a r -> TypingM a r
 -- withCCtx fn = local fn' where
 --   fn' rd = rd { trClocks = fn (trClocks rd) }

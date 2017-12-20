@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 
 module CloFRP.Experiments where
@@ -94,6 +95,24 @@ toInt (Into n) =
 data ListF a f = Nil | Cons a f deriving (Functor, Show)
 type List a = Fix (ListF a)
 
+fmapList :: (a -> b) -> List a -> List b
+fmapList f = primRec fn where 
+  -- fn x = Into (fmap (\(y1,y2) -> _) x)
+  fn x = case x of 
+    Nil -> nil
+    Cons x (xs, r) -> cons (f x) r
+
+instance Show a => Show (List a) where
+  show xs = "[" ++ primRec fn xs ++ "]" where
+    fn Nil = ""
+    fn (Cons x (xs', r)) = show x ++ "," ++ r
+
+nil :: List a
+nil = Into Nil
+
+cons :: a -> List a -> List a
+cons x xs = Into (Cons x xs)
+
 sing :: a -> List a
 sing x = Into (Cons x (Into Nil))
 
@@ -130,8 +149,8 @@ idsp :: SP i i
 idsp = fix (\f -> Into $ Get (\x -> Into (Put x f)))
   
 
-data A = A
-data B = B
+data A = A deriving (Show, Eq)
+data B = B deriving (Show, Eq)
 
 gen :: Bool -> Either A B
 gen b = 
@@ -140,3 +159,25 @@ gen b =
         True -> Left (f b A)
         False -> Right (f b B)
 
+data Fun a = Fun (forall b. (a,b))
+
+instance Functor Fun where
+  fmap f (Fun x1) = Fun (f (fst x1), snd x1)
+
+tst :: forall a. (Int, a)
+tst = let x :: forall b. (Int, b)
+          x = undefined
+      in  case x of (x1,x2) -> (x1,x2)
+  
+data MoreList a = MoreList a (List a) deriving Show
+
+instance Functor MoreList where
+  fmap f (MoreList x xs) = MoreList (f x) (fmapList f xs)
+
+tst2 :: MoreList B
+tst2 = 
+  let as = MoreList A (cons A (cons A nil))
+  in  fmap (const B) as
+
+-- fun1 :: Fun Int
+-- fun1 = Fun (0, [])

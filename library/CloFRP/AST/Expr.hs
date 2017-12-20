@@ -93,7 +93,7 @@ prettyE' (PrettyEP {lamParens, otherParens}) = \case
   Let p e1 e2 -> align $ "let" <+> pretty p <+> "=" <+> group (pretty e1) <+> "in" <> softline <> pretty e2
 
   Case e clauses ->
-    "case" <+> prettyE parlam e <+> "of" <> softline <> (align $ sep $ map prettyC clauses)
+    "case" <+> prettyE parlam e <+> "of" <> nest 2 (softline <> (sep $ map prettyC clauses))
 
   TypeApp e t -> otherParens (pretty e <+> braces (prettyT False t))
   Fmap t -> "fmap" <+> braces (pretty t)

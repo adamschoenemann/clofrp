@@ -34,6 +34,7 @@ import CloFRP.Eval.Value
 import CloFRP.Pretty
 import CloFRP.Check.Prog
 import CloFRP.AST.Helpers
+import CloFRP.Check.TypingM
 
 import qualified CloFRP.AST.Prim as P
 import           CloFRP.AST (Expr, Prog, Pat, Type, TySort(..), Datatype(..))
@@ -58,7 +59,7 @@ lookupVar nm = do
     Just v -> pure v
     Nothing -> do 
       env <- getEnv
-      otherErr $ show $ "Cannot lookup" <+> pretty nm <+> "in env" <+> pretty env
+      pure . runtimeErr $ show $ "Cannot lookup" <+> pretty nm <+> "in env" <+> pretty env
 
 
 fmapNat :: a -> Expr a
@@ -151,7 +152,7 @@ evalPrim = \case
   -- fix ~> \f -> f (\\(af). fix f)
   P.Fix              -> 
     pure $ Closure mempty "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f")
-  P.Undefined        -> otherErr $ "Undefined!"
+  P.Undefined        -> pure . runtimeErr $ "Undefined!"
 
 evalExprStep :: Pretty a => Expr a -> EvalM a (Value a)
 evalExprStep (A ann expr') = 
@@ -216,14 +217,14 @@ evalExprStep (A ann expr') =
         (Prim UnfoldP, _) -> 
           case v2 of 
             Fold v -> pure v
-            _      -> otherErr $ show $ "Cannot unfold" <+> pretty v2 <+> "at" <+> pretty ann
+            _      -> pure . runtimeErr $ show $ "Cannot unfold" <+> pretty v2 <+> "at" <+> pretty ann
         
         (Delay v, Prim Tick) -> pure v
         (Delay v, TickVar _) -> pure v
         (Prim (RuntimeErr _), _) -> pure v1
         (_, Prim (RuntimeErr _)) -> pure v2
 
-        _ -> otherErr $ show $  pretty v1 <+> pretty v2 <+> "is not a legal application at" <+> pretty ann
+        _ -> pure . runtimeErr $ show $  pretty v1 <+> pretty v2 <+> "is not a legal application at" <+> pretty ann
 
     E.Ann e _t -> evalExprStep e
 
@@ -283,22 +284,22 @@ evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where
     pure (v' : vs')
 
 
-progToEval :: Name -> Prog a -> Either String (Expr a, Type a 'Poly, EvalRead a, EvalState a)
+progToEval :: Name -> Prog a -> TypingM a (Expr a, Type a 'Poly, EvalRead a, EvalState a)
 progToEval mainnm pr = do
-  let er@(ElabRes {erDefs, erConstrs, erDeriving, erSigs}) = collectDecls pr
-      vconstrs = M.mapWithKey (\k v -> Right (Constr k [])) . unFreeCtx $ erConstrs
-      initState = (M.map Left erDefs) `M.union` vconstrs
-  instances <- elabInstances id erDeriving
-  let initRead = mempty { erInstances = instances }
+  let (ElabRes {erDefs, erConstrs, erSigs}) = collectDecls pr
+      vconstrs = M.mapWithKey (\k _ -> Right (Constr k [])) . unFreeCtx $ erConstrs
+      initSt = (M.map Left erDefs) `M.union` vconstrs
+  ElabProg {instances} <- elabProg pr
+  let initRd = mempty { erInstances = instances }
   case M.lookup mainnm erDefs of 
     Just maindef -> 
       let Just mainty = query mainnm erSigs
-      in  Right (maindef, mainty, initRead, initState)
-    Nothing -> Left $ "No main definition of name " ++ pps mainnm ++ " found"
+      in  pure (maindef, mainty, initRd, initSt)
+    Nothing -> otherErr $ "No main definition of name " ++ pps mainnm ++ " found"
 
 evalProg :: Pretty a => Name -> Prog a -> Value a
 evalProg mainnm pr =
-  case progToEval mainnm pr of
-    Right (expr, _ty, er, es) -> runEvalMState (evalExprCorec expr) er es
-    Left err                  -> runtimeErr err
+  case runTypingM0 (progToEval mainnm pr) mempty of
+    (Right (expr, _ty, er, es), _, _) -> runEvalMState (evalExprCorec expr) er es
+    (Left (err, _), _, _)             -> runtimeErr (pps err)
 

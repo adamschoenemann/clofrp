@@ -129,6 +129,9 @@ sum = \xs ->
 var :: Name -> Expr ()
 var = A () . Var 
 
+tvar :: String -> Type () 'Poly
+tvar = A () . TVar . fromString 
+
 free :: Name -> Type () 'Poly
 free nm = A () $ TFree nm
 

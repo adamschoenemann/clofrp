@@ -959,6 +959,14 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     root $ "[Case=>]" <+> pretty e <+> enclose "[" "]" (cat $ map pretty clauses)
     cannotSynthesize expr
 
+  -- Let=>
+  synthesize' (Let p e1 e2) = do
+    root $ "[Let=>]" <+> pretty expr <+> "=>" 
+    (e1ty, theta) <- branch $ synthesize e1
+    e1tys <- substCtx theta e1ty
+    theta' <- withCtx (const theta) $ branch $ checkPat p e1tys
+    withCtx (const theta') $ branch $ synthesize e2
+
   -- Tuple=>
   synthesize' (Tuple es) = do
     root $ "[Tuple=>]" <+> pretty expr
@@ -1156,17 +1164,10 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
   -- |>κApp⋄
   applysynth' (Later kappat cty) (Prim Tick) = do
     rule "TickApp" (pretty ty <+> "•" <+> pretty e)
-    kappa <- extractKappa kappat
+    kappa <- fromEither $ extractKappa kappat
     ctx <- getCtx
     ctx `mustBeStableUnder` kappa
     pure (cty, ctx)
-    where
-      extractKappa (A _ kv) =
-        case kv of
-          TExists k -> pure k
-          TVar    k -> pure k
-          TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
-          _         -> otherErr $ show $ "Expected clock variable but got" <+> pretty kv
 
   -- |>κApp
   applysynth' (Later kappat cty) _ = do

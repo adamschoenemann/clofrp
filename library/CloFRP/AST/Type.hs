@@ -235,3 +235,12 @@ subst x forY (A a inTy) =
     t1 `TApp` t2 -> A a $ subst x forY t1 `TApp` subst x forY t2
 
     t1 :->: t2 -> A a $ subst x forY t1 :->: subst x forY t2
+
+-- | Extract the clock-variable from a type
+extractKappa :: Type a s -> Either String Name
+extractKappa (A _ kv) =
+  case kv of
+    TExists k -> pure k
+    TVar    k -> pure k
+    TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
+    _         -> Left $ show $ "Expected clock variable but got" <+> pretty kv

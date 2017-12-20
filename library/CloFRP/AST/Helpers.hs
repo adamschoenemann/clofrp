@@ -92,3 +92,6 @@ later kappa ty = A ?annotation $ Later kappa ty
 
 exists :: (?annotation :: a) => Name -> Type a 'Poly
 exists nm = A ?annotation $ TExists nm
+
+letE :: (?annotation :: a) => Pat a -> Expr a -> Expr a -> Expr a
+letE nm e1 e2 = A ?annotation $ Let nm e1 e2
