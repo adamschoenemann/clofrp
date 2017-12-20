@@ -102,7 +102,7 @@ instance Eq (AliasExpansion a) where
 instance Monoid a => Show (AliasExpansion a) where
   show e = showex 0 e where
     showex i (Ex _ f) = showex (i+1) (f (A mempty $ TFree (DeBruijn i)))
-    showex i (Done t) = show . pretty $ t
+    showex _ (Done t) = show . pretty $ t
 
 {-
   ae (Alias FlipSum [a,b] (Either b a))
@@ -180,16 +180,16 @@ expandAliases als t =
           | Just al <- M.lookup n als -> pure $ aliasExpansion ann al
           | otherwise                 -> done (A ann $ ty')
 
-        TVar n     -> done (A ann ty')
-        TExists n  -> done (A ann ty')
+        TVar _     -> done (A ann ty')
+        TExists _  -> done (A ann ty')
         TApp t1 t2 -> 
           (go t1, go t2) &&& \case
             (Done t1', Done t2') -> done (A ann $ TApp t1' t2')
-            (Done t1', Ex nm f2) -> wrong nm
+            (Done _, Ex nm _)    -> wrong nm
             (Ex _ f1, Done t2')  -> pure $ f1 t2'
-            (Ex nm f1, Ex _ f2)  -> wrong nm
+            (Ex nm _, Ex _ _)    -> wrong nm
 
-        t1 :->: t2   -> 
+        t1 :->: t2 -> 
           (go t1, go t2) &&& \case
             (Done t1', Done t2') -> done (A ann $ t1' :->: t2')
             (Ex nm _, _)         -> wrong nm
@@ -218,6 +218,7 @@ expandAliases als t =
             Done t1' -> done $ A ann $ Later k t1'
             Ex nm _ -> wrong nm
 
+    (&&&) :: Monad m => (m t1, m t2) -> ((t1, t2) -> m c) -> m c
     (c1, c2) &&& fn = do
       e1 <- c1
       e2 <- c2
