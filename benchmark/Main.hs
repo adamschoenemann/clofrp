@@ -14,6 +14,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- You can benchmark your code quickly and effectively with Criterion. See its
 -- website for help: <http://www.serpentine.com/criterion/>.
@@ -77,10 +78,25 @@ instance ToHask ('CTFree "Unit") () where
   toHask _ (Constr "MkUnit" []) = ()
 
 instance ToHask c h => ToHask (CTBinTree :@: c) (BinTree h) where
-  toHask s@(_ `SApp` _ `SApp` s1) (Fold (Constr "Branch" [x, l, r])) =
+  toHask s@(_ `SApp` _ `SApp` s1) (Fold (Constr "Branch" (x : l : r : _))) =
     Branch (toHask s1 x) (toHask s l) (toHask s r)
+  toHask s v = undefined -- error $ "did not expect" ++ pps v
 
-data BinTree a = Branch a (BinTree a) (BinTree a) | Done deriving (Show, Eq)
+data BinTree a = Branch a (BinTree a) (BinTree a) | Done deriving (Eq, Show)
+
+takeBinTree :: Int -> BinTree a -> BinTree a
+takeBinTree n t 
+  | n <= 0 = Done
+  | otherwise = case t of
+      Done -> Done
+      Branch x l r -> Branch x (takeBinTree (n-1) l) (takeBinTree (n-1) r)
+
+constTree :: a -> BinTree a
+constTree x = Branch x (constTree x) (constTree x)
+
+-- instance Show a => Show (BinTree a) where
+--   showsPrec p (Done) = shows "Done"
+--   showsPrec p (Branch x l r) = ("Branch " ++) . (show x ++) . showsPrec p l . showsPrec p r
 
 -- type CTNat = 'CTFree "Nat"
 
@@ -242,7 +258,7 @@ binTree = [clott|
 
 -- main = defaultMain [bench "const" (whnf const ())]
 main :: IO ()
-main = bench_clott_add
+main = bench_binTree
   -- let n = 500000
   -- let truefalse = (True : False : truefalse :: [Bool])
   -- let trues = repeat True
@@ -252,8 +268,8 @@ main = bench_clott_add
 
 bench_binTree :: IO ()
 bench_binTree = do
-  let n = 200000
-  putStrLn . show $ execute binTree
+  let n = 20
+  putStrLn . show $ takeBinTree n $ execute binTree
 
 bench_clott_add :: IO ()
 bench_clott_add = do

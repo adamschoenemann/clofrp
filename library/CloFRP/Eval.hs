@@ -263,17 +263,35 @@ force = \case
   Delay v -> pure v
   v -> pure v
 
+-- findTickAbstractions :: Value a -> [Value a -> Value a]
+-- findTickAbstractions = go where
+--   go v = case v of
+--     Prim p -> const v
+--     Var nm  -> pretty nm
+--     TickVar nm  -> pretty nm
+--     Closure env n e -> parens $ group $ "\\" <> pretty n <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pret i env)
+--     TickClosure env n e -> 
+--       let penv = if i > 0 then line <> indent 4 ("closed over" <+> prettyEnv i env)
+--                           else ""
+--       in  parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> penv
+--     Tuple vs -> tupled (map (pret i) vs)
+--     Constr nm [] -> pretty nm
+--     Constr nm vs -> parens $ pretty nm <+> fillSep (map (pret (i-1)) vs)
+--     Fold v       -> parens $ "fold" <+> (pret i v)
+--     Delay v       -> parens $ "delay" <+> (pret i v)
+
+
 {- evalExprCorec (fix (\g -> cons z g))
   => Constr "Cons" [Constr "Z" [], TickClosure _ _ e]
   => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
 -}
 evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
 evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
-  go n v | n <= 0 = pure v
+  go n v | n <= 0 = pure (runtimeErr $ "Evaluation limit reached")
   go n v = do
     case v of
       Constr nm vs -> Constr nm <$> evalMany n vs
-      Fold v -> Fold <$> go n v
+      Fold v' -> Fold <$> go n v'
       Tuple vs -> Tuple <$> evalMany n vs
       _ -> pure v
 
