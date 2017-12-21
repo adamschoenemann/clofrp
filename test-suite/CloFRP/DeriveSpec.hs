@@ -105,9 +105,9 @@ deriveFunctorAndExtract dt =
 deriveSpec :: Spec
 deriveSpec = do
   describe "deriveFunctor" $ do
-    let bindp x = E.bind . E.UName $ ("#" ++ show (x :: Int))
+    let bindp x = E.bind . E.UName $ ("x" ++ show (x :: Int))
     let bindpm  = E.bind . E.MName
-    let varm x  = E.var . E.UName $ ("#" ++ show (x :: Int))
+    let varm x  = E.var . E.UName $ ("x" ++ show (x :: Int))
 
     it "derives peano numerals functor" $ do
       let dt = E.Datatype
@@ -121,10 +121,10 @@ deriveSpec = do
             }
       let Right (fmapTy, fmapDef) = deriveFunctorAndExtract dt
       fmapDef `shouldBe` 
-        ("#f" @-> "#val" @-> 
-          E.caseof "#val" 
+        ("f" @-> "val" @-> 
+          E.caseof "val" 
             [ (E.match "Z" [], "Z")
-            , (E.match "S" [bindp 0], "S" @@ ("#f" @@ varm 0))
+            , (E.match "S" [bindp 0], "S" @@ ("f" @@ varm 0))
             ]
         )
 
@@ -144,10 +144,10 @@ deriveSpec = do
             }
       let Right (fmapTy, fmapDef) = deriveFunctorAndExtract dt
       fmapDef `shouldBe` 
-        ("#f" @-> "#val" @-> 
-          E.caseof "#val" 
+        ("f" @-> "val" @-> 
+          E.caseof "val" 
             [ (E.match "Nil" [], "Nil")
-            , (E.match "Cons" [bindp 0, bindp 1], "Cons" @@ (("x" @-> "x") @@ varm 0) @@ ("#f" @@ varm 1))
+            , (E.match "Cons" [bindp 0, bindp 1], "Cons" @@ (("x" @-> "x") @@ varm 0) @@ ("f" @@ varm 1))
             ]
         )
 
@@ -166,10 +166,10 @@ deriveSpec = do
             }
 
       let Right (fmapTy, fmapDef) = deriveFunctorAndExtract dt
-      let inner = "x" @-> E.caseof "x" [E.pTup [bindp 0, bindp 1] |-> E.tup ["#f" @@ varm 0, "#f" @@ varm 1]]
+      let inner = "x" @-> E.caseof "x" [E.pTup [bindp 0, bindp 1] |-> E.tup ["f" @@ varm 0, "f" @@ varm 1]]
       fmapDef `shouldBe` 
-        ("#f" @-> "#val" @-> 
-          E.caseof "#val" 
+        ("f" @-> "val" @-> 
+          E.caseof "val" 
             [ E.match "Pair" [bindp 0] |-> "Pair" @@ (inner @@ varm 0) ]
         )
 
@@ -188,18 +188,18 @@ deriveSpec = do
             }
       {-
       it derives to
-      Pos ((\x b -> #f (x (id b))) `a)
-      => Pos ((\x b -> #f (x b)) `a)
-      => Pos (\b -> #f (`a b))
-      Pos (\b -> #f (`a b))
+      Pos ((\x b -> f (x (id b))) `a)
+      => Pos ((\x b -> f (x b)) `a)
+      => Pos (\b -> f (`a b))
+      Pos (\b -> f (`a b))
       -}
       case deriveFunctorAndExtract dt of
         Left err -> failure err
         Right (fmapTy, fmapDef) -> do
           fmapDef `shouldBe` 
-            ("#f" @-> "#val" @-> 
-              E.caseof "#val" 
-                [ (E.match "Pos" [bindp 0], "Pos" @@ (("x" @-> "b" @-> "#f" @@ ("x" @@ (("x" @-> "x") @@ "b"))) @@ varm 0))
+            ("f" @-> "val" @-> 
+              E.caseof "val" 
+                [ (E.match "Pos" [bindp 0], "Pos" @@ (("x" @-> "b" @-> "f" @@ ("x" @@ (("x" @-> "x") @@ "b"))) @@ varm 0))
                 ]
             )
           fmapTy `shouldBe` fmapt "f" [] "Pos"
@@ -243,22 +243,22 @@ deriveSpec = do
             }
       {-
       Pos ((\x b -> 
-            (\x -> x) (x ((\x b -> (\x -> x) (x (#f b))) b)))
+            (\x -> x) (x ((\x b -> (\x -> x) (x (f b))) b)))
           `a
           )
       =>
-      Pos ((\b -> (`a (\b' -> b (#f b')))))
+      Pos ((\b -> (`a (\b' -> b (f b')))))
       -}
       case deriveFunctorAndExtract dt of
         Left err -> failure err
         Right (fmapTy, fmapDef) -> do
           let ide = "x" @-> "x"
-              bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("#f" @@ "b"))) @@ "b"))
+              bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("f" @@ "b"))) @@ "b"))
               fn = "x" @-> "b" @-> bd
               pos = fn @@ varm 0
           fmapDef `shouldBe` 
-            ("#f" @-> "#val" @-> 
-              E.caseof "#val" 
+            ("f" @-> "val" @-> 
+              E.caseof "val" 
                 [ (E.match "Pos" [bindp 0], "Pos" @@ pos)
                 ]
             )
@@ -279,12 +279,12 @@ deriveSpec = do
         Left err -> failure err
         Right (fmapTy, fmapDef) -> do
           let ide = "x" @-> "x"
-              bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("#f" @@ "b"))) @@ "b"))
+              bd = ide @@ ("x" @@ (("x" @-> "b" @-> ide @@ ("x" @@ ("f" @@ "b"))) @@ "b"))
               fn = "x" @-> "b" @-> bd
               pos = fn @@ varm 0
           fmapDef `shouldBe` 
-            ("#f" @-> "#val" @-> 
-              E.caseof "#val" 
+            ("f" @-> "val" @-> 
+              E.caseof "val" 
                 [ (E.match "Cont" [bindp 0], "Cont" @@ pos)
                 ]
             )

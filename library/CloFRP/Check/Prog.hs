@@ -182,39 +182,31 @@ expandAliases als t =
 
         TVar _     -> done (A ann ty')
         TExists _  -> done (A ann ty')
-        TApp t1 t2 -> 
-          (go t1, go t2) >>*= \case
+        TApp t1 t2 -> (go t1, go t2) >>*= \case
             (Done t1', Done t2') -> done (A ann $ TApp t1' t2')
             (Done _, Ex nm _)    -> wrong nm
             (Ex _ f1, Done t2')  -> pure $ f1 t2'
             (Ex nm _, Ex _ _)    -> wrong nm
 
-        t1 :->: t2 -> 
-          (go t1, go t2) >>*= \case
+        t1 :->: t2 -> (go t1, go t2) >>*= \case
             (Done t1', Done t2') -> done (A ann $ t1' :->: t2')
             (Ex nm _, _)         -> wrong nm
             (_, Ex nm _)         -> wrong nm
 
-        Forall n k t1 -> 
-          go t1 >>= \case
+        Forall n k t1 -> go t1 >>= \case
             Done t1' -> done $ A ann $ Forall n k t1'
             Ex nm _ -> wrong nm
 
-        RecTy t1 -> 
-          go t1 >>= \case
+        RecTy t1 -> go t1 >>= \case
             Done t1' -> done $ A ann $ RecTy t1'
             Ex nm _ -> wrong nm
         
-        TTuple ts -> do 
-          ts' <- traverse fn ts
-          done (A ann $ TTuple ts')
-          where
-            fn tt = go tt >>= \case
-              Done tt' -> pure tt'
-              Ex nm _ -> wrong nm
+        TTuple ts -> done . A ann . TTuple =<< traverse fn ts where
+          fn tt = go tt >>= \case
+            Done tt' -> pure tt'
+            Ex nm _ -> wrong nm
         
-        Later k t1 -> 
-          go t1 >>= \case
+        Later k t1 -> go t1 >>= \case
             Done t1' -> done $ A ann $ Later k t1'
             Ex nm _ -> wrong nm
 

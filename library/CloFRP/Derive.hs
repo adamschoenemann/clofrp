@@ -98,15 +98,15 @@ type TVarName = Name
 -- | Derive the definition of fmap
 deriveFmapDef :: a -> Name -> [Constr a] -> Either String (Expr a)
 deriveFmapDef ann tnm cs =
-  let vn = UName "#val"
-      fn = UName "#f"
+  let vn = UName "val"
+      fn = UName "f"
   in  let ?annotation = ann
   in  lam' fn . lam' vn .
         casee (var vn) <$> traverse (deriveFmapConstr (var fn) tnm) cs
 
 -- | Derive a clause of fmap for a constructor
 deriveFmapConstr :: forall a. Expr a -> TVarName -> Constr a -> Either String (Pat a, Expr a)
-deriveFmapConstr f tnm constr@(A ann (Constr nm args)) = do
+deriveFmapConstr f tnm constr@(A ann (Constr nm _args)) = do
   let (pat, assocs) = matchConstr constr
   let ?annotation = ann
   cargs <- traverse traversal assocs
@@ -122,7 +122,7 @@ deriveFmapConstr f tnm constr@(A ann (Constr nm args)) = do
 matchConstr :: Constr a -> (Pat a, [(Name, Type a 'Poly)])
 matchConstr (A ann (Constr nm args)) = 
   let ?annotation = ann in
-  let assocs = map (\(i, t) -> (UName ("#" ++ show i), t)) $ zip [(0::Int)..] args
+  let assocs = map (\(i, t) -> (UName ("x" ++ show i), t)) $ zip [(0::Int)..] args
   in  (match nm $ map (bind . fst) assocs, assocs)
 
 -- | Derive `fmap f` for functorial type variable `tnm` over type `typ`
@@ -139,7 +139,7 @@ deriveFmapArg f tnm typ@(A anno _) = go typ where
               | otherwise -> pure ide
       Forall v k t -> go t
       Later t1 t2 -> do
-        let af = UName "#af"
+        let af = UName "af"
         k <- extractKappa t1
         e2 <- go t2
         pure $ lam' "x" $ tAbs af k (e2 `app` (var "x" `app` tickvar af))
@@ -168,7 +168,7 @@ deriveFmapArg f tnm typ@(A anno _) = go typ where
               | otherwise -> pure ide
       Forall v k t -> go t 
       Later t1 t2 -> do
-        let af = UName "#af"
+        let af = UName "af"
         k <- extractKappa t1
         e2 <- go t2
         pure $ lam' "x" $ tAbs af k (e2 `app` (var "x" `app` tickvar af))
@@ -190,7 +190,7 @@ deriveFmapArg f tnm typ@(A anno _) = go typ where
 deriveFmapTuple :: (?annotation :: a) => Expr a -> TVarName -> [Type a 'Poly] -> Either String (Expr a)
 deriveFmapTuple f tnm ts = do
   let is = [(0::Int) .. genericLength ts - 1]
-  let nms = map (UName . ("#" ++) . show) is
+  let nms = map (UName . ("x" ++) . show) is
   fmaps <- traverse (deriveFmapArg f tnm) ts
   let es = zipWith (\f v -> f `app` v) fmaps (map var nms)
   pure $ lam' "x" $ casee (var "x") [ptuple (map bind nms) |-> tuple es]
