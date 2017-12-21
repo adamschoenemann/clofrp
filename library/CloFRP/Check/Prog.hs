@@ -320,19 +320,22 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
   _ <- local (const ctx) checkInstances
   pure ()
   where 
-    checkTypes = traverse (validType kinds) (unFreeCtx types)
+    checkTypes = M.traverseWithKey traverseTypes (unFreeCtx types)
     checkDefs  = M.traverseWithKey traverseDefs defs
     checkAliases = traverse traverseAlias aliases
     checkInstances = traverse traverseInstances (unInstanceCtx instances)
 
     initKinds = extend "K0" ClockK kinds
     ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trInstances = instances}
-    -- we have explicit recursion allowed here. In the future, we should probably disallow this
+
+    traverseTypes k v = validType kinds v `decorateErr` (Other $ show $ "When checking" <+> pretty k)
+
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor
-        -- resetNameState
-        -- local (const ctx) $ check expr ty
-        censor (const []) $ local (const ctx) $ check expr ty
+        resetNameState
+        let ctx' = ctx {trFree = delete k (trFree ctx)}
+        -- local (const ctx') $ check expr ty
+        censor (const []) $ local (const ctx') $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
     traverseAlias (Alias {alBound, alExpansion}) = do

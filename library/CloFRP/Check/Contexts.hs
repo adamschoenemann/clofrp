@@ -119,6 +119,7 @@ instance Context (FreeCtx a) where
   extend nm ty (FreeCtx m) = FreeCtx $ M.insert nm ty m
   isMemberOf nm (FreeCtx m) = M.member nm m
   query x (FreeCtx m) = M.lookup x m
+  delete x (FreeCtx m) = FreeCtx (M.delete x m)
 
 -- Kind context contains "global" mappings from type-names to kinds
 newtype KindCtx a = KindCtx { unKindCtx :: M.Map Name Kind }
@@ -130,6 +131,7 @@ instance Context (KindCtx a) where
   extend nm ty (KindCtx m) = KindCtx $ M.insert nm ty m
   isMemberOf nm (KindCtx m) = M.member nm m
   query x (KindCtx m) = M.lookup x m
+  delete x (KindCtx m) = KindCtx (M.delete x m)
 
 instance (IsList (KindCtx a)) where
   type Item (KindCtx a) = (Name, Kind)
@@ -150,6 +152,7 @@ instance Context (DestrCtx a) where
   extend nm ty (DestrCtx m) = DestrCtx $ M.insert nm ty m
   isMemberOf nm (DestrCtx m) = M.member nm m
   query x (DestrCtx m) = M.lookup x m
+  delete x (DestrCtx m) = DestrCtx (M.delete x m)
 
 instance (IsList (DestrCtx a)) where
   type Item (DestrCtx a) = (Name, Destr a)
@@ -180,6 +183,7 @@ instance Context (InstanceCtx a) where
   extend nm ty (InstanceCtx m) = InstanceCtx $ M.insert nm ty m
   isMemberOf nm (InstanceCtx m) = M.member nm m
   query x (InstanceCtx m) = M.lookup x m
+  delete x (InstanceCtx m) = InstanceCtx (M.delete x m)
 
 instance (IsList (InstanceCtx a)) where
   type Item (InstanceCtx a) = (Name, [ClassInstance a])

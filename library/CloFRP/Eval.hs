@@ -280,6 +280,9 @@ force = \case
 --     Fold v       -> parens $ "fold" <+> (pret i v)
 --     Delay v       -> parens $ "delay" <+> (pret i v)
 
+{-
+eval tree => Branch x &l &r
+-}
 
 {- evalExprCorec (fix (\g -> cons z g))
   => Constr "Cons" [Constr "Z" [], TickClosure _ _ e]
@@ -295,11 +298,11 @@ evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where
       Tuple vs -> Tuple <$> evalMany n vs
       _ -> pure v
 
-  evalMany _ [] = pure []
-  evalMany n (v:vs) = do 
-    v' <- go (n-1) =<< force v
-    vs' <- evalMany (n-1) vs
-    pure (v' : vs')
+  evalMany n vs = foldr (\x acc -> (go (n-1) =<< force x) >>= (\v' -> (v' :) <$> acc)) (pure []) vs
+  -- evalMany _ [] = pure []
+  -- evalMany n (v:vs) = do 
+  --   v' <- go (n-1) =<< force v
+  --   (v' :) <$> evalMany (n-1) vs
 
 
 progToEval :: Name -> Prog a -> TypingM a (Expr a, Type a 'Poly, EvalRead a, EvalState a)

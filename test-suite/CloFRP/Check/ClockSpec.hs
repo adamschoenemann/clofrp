@@ -312,6 +312,15 @@ clockSpec = do
         
         tl : forall a. CoStream a -> CoStream a.
         tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+
+        nth : Nat -> CoStream Nat -> Nat.
+        nth = \n xs ->
+          let Cos xs' = xs in
+          let fn = \n xs' ->
+            case n of
+            | Z -> hdk xs'
+            | S (n', r) -> r (tlk xs' [<>])
+          in  primRec {NatF} fn n xs'.
         
         test : forall (k' : Clock) a. |>k' (CoStream a) -> |>k' (Stream k' a).
         test = \xs -> \\(af : k') -> 

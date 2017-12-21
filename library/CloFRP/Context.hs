@@ -11,3 +11,4 @@ class Monoid a => Context a where
   query :: Key a -> a -> Maybe (Elem a)
   isEmpty :: Eq a => a -> Bool
   isEmpty x = x == mempty
+  delete :: Key a -> a -> a

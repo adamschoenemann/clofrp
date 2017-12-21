@@ -613,15 +613,17 @@ progSpec = do
       let Right prog = pprog [text|
         data Bool = True | False.
         data Either a b = Left a | Right b.
-        data List a = Nil | Cons a (List a).
+        data ListF a f = Nil | Cons a f deriving Functor.
+        type List a = Fix (ListF a).
 
         lefts : forall a b. List (Either a b) -> List a.
-        lefts = \xs ->
-          case xs of
-            | Nil -> Nil
-            | Cons (Left x) xs'  -> Cons x (lefts xs')
-            | Cons (Right x) xs' -> lefts xs'.
-
+        lefts = 
+          let fn = \xs ->
+            case xs of
+            | Nil -> fold Nil
+            | Cons (Left x) (xs', r)  -> fold (Cons x r)
+            | Cons (Right x) (xs', r) -> r
+          in primRec {ListF (Either a b)} fn.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -826,9 +828,9 @@ progSpec = do
     it "succeeds for Data.Either stdlib" $ do
       let Right prog = pprog [text|
         data Either a b = Left a | Right b.
-        data List a = Nil | Cons a (List a).
+        data ListF a f = Nil | Cons a f deriving Functor.
+        type List a = Fix (ListF a).
         data Bool = True | False.
-        data Pair a b = MkPair a b.
 
         either : forall a b c. (a -> c) -> (b -> c) -> Either a b -> c.
         either = \lf rf e ->
@@ -837,29 +839,31 @@ progSpec = do
             | Right r -> rf r.
         
         lefts : forall a b. List (Either a b) -> List a.
-        lefts = \xs ->
-          case xs of
-            | Nil -> Nil
-            | Cons (Left x) xs'  -> Cons x (lefts xs')
-            | Cons (Right x) xs' -> lefts xs'.
+        lefts = 
+          let fn = \xs ->
+            case xs of
+            | Nil -> fold Nil
+            | Cons (Left x) (xs', r)  -> fold (Cons x r)
+            | Cons (Right x) (xs', r) -> r
+          in primRec {ListF (Either a b)} fn.
 
         rights : forall a b. List (Either a b) -> List b.
-        rights = \xs ->
-          case xs of
-            | Nil -> Nil
-            | Cons (Right x) xs' -> Cons x (rights xs')
-            | Cons (Left x) xs'  -> rights xs'.
-        
-        partitionEithers : forall a b. List (Either a b) -> Pair (List a) (List b).
-        partitionEithers = \xs ->
-          case xs of
-            | Nil -> MkPair Nil Nil
-            | Cons x xs' -> 
-              case (partitionEithers xs') of
-                | MkPair ls rs ->
-                  case x of
-                    | Left x' -> MkPair (Cons x' ls) rs
-                    | Right x' -> MkPair ls (Cons x' rs).
+        rights = 
+          let fn = \xs ->
+            case xs of
+            | Nil -> fold Nil
+            | Cons (Left x) (xs', r)  -> r 
+            | Cons (Right x) (xs', r) -> fold (Cons x r)
+          in primRec {ListF (Either a b)} fn.
+
+        partitionEithers : forall a b. List (Either a b) -> (List a, List b).
+        partitionEithers = 
+          let fn = \xs ->
+            case xs of
+              | Nil -> (fold Nil, fold Nil)
+              | Cons (Left x')  (xs', (l, r)) -> (fold (Cons x' l), r)
+              | Cons (Right x') (xs', (l, r)) -> (l, fold (Cons x' r))
+          in primRec {ListF (Either a b)} fn.
         
         isLeft : forall a b. Either a b -> Bool.
         isLeft = \e ->
@@ -938,50 +942,50 @@ progSpec = do
       |]
       shouldFail $ runCheckProg mempty prog 
     
-    it "succeeds for non-regular data (omg)" $ do
-      let Right prog = pprog [text|
-        data Pair a = MkPair a a.
-        data BalTree a = Empty | Branch a (BalTree (Pair a)).
-        data Nat = Z | S Nat.
+    -- it "succeeds for non-regular data (no it wont since we dont have polymorphic recursion)" $ do
+    --   let Right prog = pprog [text|
+    --     data Pair a = MkPair a a.
+    --     data BalTree a = Empty | Branch a (BalTree (Pair a)).
+    --     data Nat = Z | S Nat.
 
-        zero : Nat.
-        zero = Z.
-        one : Nat.
-        one = S zero.
-        two : Nat.
-        two = S one.
-        three : Nat.
-        three = S two.
+    --     zero : Nat.
+    --     zero = Z.
+    --     one : Nat.
+    --     one = S zero.
+    --     two : Nat.
+    --     two = S one.
+    --     three : Nat.
+    --     three = S two.
 
-        ex01 : forall a. BalTree a.
-        ex01 = Empty.
+    --     ex01 : forall a. BalTree a.
+    --     ex01 = Empty.
 
-        ex02 : BalTree Nat.
-        ex02 = Branch zero Empty.
+    --     ex02 : BalTree Nat.
+    --     ex02 = Branch zero Empty.
 
-        ex03 : BalTree Nat.
-        ex03 = Branch zero (Branch (MkPair one two) Empty).
+    --     ex03 : BalTree Nat.
+    --     ex03 = Branch zero (Branch (MkPair one two) Empty).
 
-        ex04 : BalTree Nat.
-        ex04 =
-          Branch
-            zero 
-            (Branch
-              (MkPair one two)
-              (Branch
-                (MkPair (MkPair three three) (MkPair three three))
-                Empty
-              )
-             ).
+    --     ex04 : BalTree Nat.
+    --     ex04 =
+    --       Branch
+    --         zero 
+    --         (Branch
+    --           (MkPair one two)
+    --           (Branch
+    --             (MkPair (MkPair three three) (MkPair three three))
+    --             Empty
+    --           )
+    --          ).
         
-        ofDepth : forall a. a -> Nat -> BalTree a.
-        ofDepth = \x n ->
-          case n of
-            | Z -> Empty
-            | S n' -> Branch x (ofDepth (MkPair x x) n').
+    --     ofDepth : forall a. a -> Nat -> BalTree a.
+    --     ofDepth = \x n ->
+    --       case n of
+    --         | Z -> Empty
+    --         | S n' -> Branch x (ofDepth (MkPair x x) n').
 
-      |]
-      runCheckProg mempty prog `shouldYield` ()
+    --   |]
+    --   runCheckProg mempty prog `shouldYield` ()
     
     it "checks and expands type-aliases (1) " $ do
       let Right prog = pprog [text|
@@ -1015,22 +1019,26 @@ progSpec = do
 
     it "checks and expands '2nd-order' type-aliases (4)" $ do
       let Right prog = pprog [text|
-        data List a = Nil | Cons a (List a).
+        data ListF a f = Nil | Cons a f deriving Functor.
+        type List a = Fix (ListF a).
         type Array a = List a.
         type Array2D a = Array (Array a).
 
         app : forall a. List a -> List a -> List a.
-        app = \xs -> \ys ->
-          case xs of
+        app = 
+          let fn = \xs ys ->
+            case xs of
             | Nil -> ys
-            | Cons x xs' -> Cons x (app xs' ys).
+            | Cons x (xs', r) -> fold (Cons x (r ys))
+          in  primRec {ListF a} fn.
 
         flatten : forall a. Array2D a -> Array a.
-        flatten = \xss ->
-          case xss of
-            | Nil -> Nil
-            | Cons xs xss' -> app xs (flatten xss').
-
+        flatten = 
+          let fn = \xss ->
+            case xss of
+            | Nil -> fold Nil
+            | Cons xs (xss', r) -> app xs r
+          in  primRec {ListF (List a)} fn.
       |]
       runCheckProg mempty prog `shouldYield` ()
 

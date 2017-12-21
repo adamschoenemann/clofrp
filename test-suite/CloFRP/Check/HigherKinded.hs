@@ -52,13 +52,13 @@ higherKindedSpec = do
         maybef = Functor mapMaybe.
 
         -- we use general recursion here. Soon, we cannot do this
-        mapList : forall a b. (a -> b) -> List a -> List b.
-        mapList = \f xs -> case xs of
-          | Nil -> Nil
-          | Cons x xs' -> Cons (f x) (mapList f xs).
+        -- mapList : forall a b. (a -> b) -> List a -> List b.
+        -- mapList = \f xs -> case xs of
+        --   | Nil -> Nil
+        --   | Cons x xs' -> Cons (f x) (mapList f xs).
 
-        listf : Functor List.
-        listf = Functor mapList.
+        -- listf : Functor List.
+        -- listf = Functor mapList.
 
         mapPair : forall a b c. (b -> c) -> Pair a b -> Pair a c.
         mapPair = \f p -> case p of
@@ -67,8 +67,8 @@ higherKindedSpec = do
         pairf : forall a. Functor (Pair a).
         pairf = Functor mapPair.
 
-        mapListMaybe : forall a b. (a -> b) -> List (Maybe a) -> List (Maybe b).
-        mapListMaybe = \f xs -> (map listf) (map maybef f) xs.
+        -- mapListMaybe : forall a b. (a -> b) -> List (Maybe a) -> List (Maybe b).
+        -- mapListMaybe = \f xs -> (map listf) (map maybef f) xs.
         
       |]
       runCheckProg mempty prog `shouldYield` ()

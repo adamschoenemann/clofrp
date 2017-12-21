@@ -8,6 +8,7 @@ benchmarks:
     - clofrp
     - criterion
     - parsec
+    - neat-interpolation
     ghc-options:
     - -w
     - -rtsopts

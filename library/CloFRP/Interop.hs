@@ -169,6 +169,9 @@ instance (ToHask c1 h1, ToHask c2 h2, ToHask c3 h3) => ToHask ('CTTuple '[c1,c2,
 execute :: (Pretty a, ToHask t r) => CloFRP t a -> r
 execute (CloFRP er st expr sing) = toHask sing $ runEvalMState (evalExprCorec expr) er st
 
+runCloFRP :: (Pretty a) => CloFRP t a -> Value a
+runCloFRP (CloFRP er st expr sing) = runEvalMState (evalExprCorec expr) er st
+
 transform :: (Pretty a, ToCloFRP hask1 clott1, ToHask clott2 hask2)
           => CloFRP (clott1 :->: clott2) a -> hask1 -> hask2
 transform (CloFRP er st expr (SArr s1 s2)) input = toHask s2 $ runEvalMState (evl expr) er st where
