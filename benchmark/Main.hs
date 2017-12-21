@@ -95,10 +95,11 @@ instance ToHask c h => ToHask (CTFree "Tree" :@: c) (Tree ()) where
 data BinTree a = Branch a (BinTree a) (BinTree a) | Done deriving (Eq, Show)
 
 instance ToHask c h => ToHask (CTBinTree :@: c) (BinTree h) where
-  toHask (_ `SApp` s1) v = go v where
-    go (Fold (Constr "Branch" (x : l : r : _))) = 
-      Branch (toHask s1 x) (go l) (go r)
-    go v = error $ "did not expect " ++ pps v
+  toHask (_ `SApp` s1) v = go 10 v where
+    go 0 _ = Done
+    go n (Fold (Constr "Branch" (x : l : r : _))) = 
+      Branch (toHask s1 x) (go (n-1) l) (go (n-1) r)
+    go n v = error $ "did not expect " ++ pps v
   -- toHask s@(_ `SApp` _ `SApp` s1) (Fold (Constr "Branch" (x : l : r : _))) =
   --   Branch (toHask s1 x) (toHask s l) (toHask s r)
   -- toHask s v = error $ "did not expect" ++ pps v
@@ -533,8 +534,13 @@ bench_replaceMin =
 
 bench_binTree :: IO ()
 bench_binTree = do
-  let n = 2
-  putStrLn . show $ takeBinTree n $ execute binTree
+  let n = 10
+  putStrLn . show $ runCloFRP binTree
+  where
+    takeBinTreeVal 0 _ = Done
+    takeBinTreeVal !n (Fold (Constr "Branch" (x : l : r : _))) =
+      Branch () (takeBinTreeVal (n-1) l) (takeBinTreeVal (n-1) l)
+    takeBinTreeVal !n _ = Done
 
 bench_clott_add :: IO ()
 bench_clott_add = do

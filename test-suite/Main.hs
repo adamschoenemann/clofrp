@@ -21,7 +21,7 @@ import CloFRP.Check.ClockSpec
 import CloFRP.Check.RecSpec
 import CloFRP.Check.HigherKinded
 import CloFRP.AST.PrettySpec
-import CloFRP.EvalSpec
+import CloFRP.EvalSpec (evalSpec)
 import CloFRP.DeriveSpec
 import CloFRP.InteropSpec
 
@@ -42,3 +42,28 @@ main = do
   interop <- testSpec "interop" interopSpec
   let group = Test.Tasty.testGroup "tests" [parser, quasi, typecheck, decl, pretty, checkProg, clocks, recursive, higherKinded, eval, derive, interop]
   Test.Tasty.defaultMain group
+
+data Tree a = Leaf | Branch a (Tree a) (Tree a) deriving (Eq, Show)
+
+getChildren :: [Tree a] -> [Tree a]
+getChildren xs = concatMap children xs where
+  children Leaf = []
+  children (Branch x l r) = [l,r]
+
+rebuild :: [Tree a] -> [Tree a] -> [Tree a]
+rebuild [] _ = []
+rebuild _ [] = []
+rebuild (Leaf : ps) cs = Leaf : rebuild ps cs
+rebuild (Branch x l r : ps) (l' : r' : cs) = Branch x l' r' : rebuild ps cs
+
+idTree :: Tree a -> Tree a
+idTree t = let cs = getChildren [t]
+           in  head $ rebuild [t] cs
+
+mkTree :: Int -> Int -> (Tree Int, Int)
+mkTree i n 
+  | n <= 0 = (Leaf, i)
+  | otherwise = 
+    let (l, li) = mkTree (i+1) (n-1) 
+        (r, ri) = mkTree li (n-1)
+    in  (Branch i l r, ri)

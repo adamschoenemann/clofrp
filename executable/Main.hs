@@ -2,5 +2,6 @@
 -- and only use it in the executable. Doing so allows others to use what you
 -- wrote in their libraries.
 
+
 main :: IO ()
 main = putStrLn "main"

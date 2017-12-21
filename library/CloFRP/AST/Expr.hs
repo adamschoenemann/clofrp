@@ -32,6 +32,7 @@ import CloFRP.AST.Type
 import CloFRP.AST.Pat
 import CloFRP.AST.Utils
 
+
 type Expr a = Annotated a (Expr' a)
 
 data Expr' a

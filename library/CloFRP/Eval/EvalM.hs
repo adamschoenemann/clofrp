@@ -11,13 +11,9 @@
 module CloFRP.Eval.EvalM where
 
 import Control.Monad.RWS.Lazy hiding ((<>))
-import Control.Monad.Reader
-import Control.Monad.Except
 import Control.Monad.State ()
-import Data.Text.Prettyprint.Doc 
-import Control.Applicative
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Lazy as M
 import Data.Data
 
 import CloFRP.Eval.Value
@@ -25,6 +21,7 @@ import CloFRP.AST.Name
 import qualified CloFRP.AST.Expr as E
 import CloFRP.AST.Expr (Expr)
 import CloFRP.Check.Contexts (InstanceCtx(..), HasInstances(..))
+import CloFRP.AST.Prim (Pntr)
 
 type Inputs a = Map Name (Value a)
 
@@ -42,7 +39,22 @@ instance Monoid (EvalRead a) where
 
 type EvalWrite = ()
 type Globals a = Map Name (Either (Expr a) (Value a)) -- either unevaled defs or already evaled values
-type EvalState a = Globals a
+type Thunks a = Map Pntr (Either (Env a, Name, Expr a) (Value a)) 
+data EvalState a = 
+  ES { esGlobals :: Globals a 
+     , esPntrLbl :: Pntr
+     , esThunks :: Thunks a
+     } deriving (Show, Eq, Typeable, Data)
+
+initEvalState :: EvalState a
+initEvalState = ES { esGlobals = mempty, esPntrLbl = 0, esThunks = mempty }
+
+allocThunk :: Env a -> Name -> Expr a -> EvalM a Pntr
+allocThunk env nm e = do
+  pntr <- getPntr
+  modifyThunks (M.insert pntr (Left (env, nm, e)))
+  modifyPntr succ
+  pure (succ pntr)
 
 newtype EvalM a r = Eval { unEvalM :: RWS (EvalRead a) EvalWrite (EvalState a) r }
   deriving ( Functor
@@ -59,7 +71,7 @@ instance HasInstances (EvalM a) a where
 type EvalMRes r = r
 
 runEvalM :: EvalM a r -> EvalRead a -> EvalMRes r
-runEvalM tm r = runEvalMState tm r mempty
+runEvalM tm r = runEvalMState tm r initEvalState
 
 runEvalMState :: EvalM a r -> EvalRead a -> EvalState a -> EvalMRes r
 -- runEvalM tm r = let x = runRWS (unEvalM tm) r in x
@@ -91,4 +103,16 @@ updGlobals :: (EvalState a -> EvalState a) -> EvalM a ()
 updGlobals = modify
 
 getGlobals :: EvalM a (Globals a)
-getGlobals = get
+getGlobals = gets esGlobals
+
+getThunks :: EvalM a (Thunks a)
+getThunks = gets esThunks
+
+modifyThunks :: (Thunks a -> Thunks a) -> EvalM a ()
+modifyThunks fn = modify (\es -> es { esThunks = fn (esThunks es) })
+
+modifyPntr :: (Pntr -> Pntr) -> EvalM a ()
+modifyPntr fn = modify (\es -> es { esPntrLbl = fn (esPntrLbl es) })
+
+getPntr :: EvalM a Pntr
+getPntr = gets esPntrLbl

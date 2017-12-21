@@ -23,6 +23,7 @@ import Data.Data
 import CloFRP.AST.Name
 import           CloFRP.AST.Expr (Expr)
 import qualified CloFRP.AST.Expr as E
+import CloFRP.AST.Prim (Pntr)
 
 data PrimVal
   = IntVal Integer
@@ -30,6 +31,7 @@ data PrimVal
   | RuntimeErr String
   | FoldP
   | UnfoldP
+  | Pointer Pntr
   deriving (Eq, Generic, Show, Data, Typeable)
 
 instance Pretty PrimVal where
@@ -39,6 +41,7 @@ instance Pretty PrimVal where
     FoldP     -> "foldP"
     UnfoldP     -> "unfoldP"
     RuntimeErr s -> "RUNTIMEERR:" <+> fromString s
+    Pointer p -> "&" <> pretty p
 
 -- instance Show PrimVal where show = show . pretty
 

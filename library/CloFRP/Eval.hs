@@ -23,8 +23,8 @@ import Control.Monad ((<=<))
 import Debug.Trace
 import Control.Monad.Reader
 import Control.Monad.Except
-import Data.Either
-import qualified Data.Map.Strict as M
+import Data.Char (isUpper)
+import qualified Data.Map.Lazy as M
 
 import CloFRP.AST.Name
 import CloFRP.Check.Contexts -- TODO: remove this dependency somehow, or move it so there is no deps between Eval and Check
@@ -53,6 +53,7 @@ globalLookup nm = do
     
 lookupVar :: Pretty a => Name -> EvalM a (Value a)
 lookupVar nm = do
+  -- traceM ("lookup" ++ pps nm)
   inEnv <- envLookup nm <$> getEnv 
   inGlob <- globalLookup nm 
   case (inEnv <|> inGlob) of
@@ -159,7 +160,9 @@ evalExprStep (A ann expr') =
   let ?annotation = ann
   in  case expr' of
     E.Prim p -> evalPrim p
+    E.Var (E.UName s) | isUpper (head s) -> pure $ Constr (E.UName s) []
     E.Var nm -> lookupVar nm
+
     
     E.TickVar nm -> pure $ TickVar nm
 
@@ -169,6 +172,8 @@ evalExprStep (A ann expr') =
 
     E.TickAbs x _k e -> do
       env <- getEnv
+      -- pntr <- allocThunk env x e
+      -- pure (Prim (Pointer pntr))
       pure (TickClosure env x e)
     
     E.Fmap t -> fmapFromType t
@@ -281,15 +286,27 @@ force = \case
 --     Delay v       -> parens $ "delay" <+> (pret i v)
 
 {-
-eval tree => Branch x &l &r
+eval tree => Branch x &1 &2
+=> 
 -}
+
+-- evalExprClock :: Pretty a => Expr a -> EvalM a (Value a)
+-- evalExprClock expr = do
+--   v <- evalExprStep
+--   modifyThunks forceAll
+
+
 
 {- evalExprCorec (fix (\g -> cons z g))
   => Constr "Cons" [Constr "Z" [], TickClosure _ _ e]
   => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
 -}
+-- evalExprsCorec :: Pretty a => Int -> [Expr a] -> EvalM a (Value a)
+-- evalExprsCorec n [] = runtimeErr $ "Output endeded"
+-- evalExprsCorec n (expr : exprs) = 
+
 evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
-evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
+evalExprCorec expr = go (30 :: Int) =<< evalExprStep expr where 
   go n v | n <= 0 = pure (runtimeErr $ "Evaluation limit reached")
   go n v = do
     case v of
@@ -298,18 +315,18 @@ evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where
       Tuple vs -> Tuple <$> evalMany n vs
       _ -> pure v
 
-  evalMany n vs = foldr (\x acc -> (go (n-1) =<< force x) >>= (\v' -> (v' :) <$> acc)) (pure []) vs
-  -- evalMany _ [] = pure []
-  -- evalMany n (v:vs) = do 
-  --   v' <- go (n-1) =<< force v
-  --   (v' :) <$> evalMany (n-1) vs
+  -- evalMany n vs = foldr (\x acc -> (go (n-1) =<< force x) >>= (\v' -> (v' :) <$> acc)) (pure []) vs
+  evalMany _ [] = pure []
+  evalMany n (v:vs) = do 
+    v' <- go (n-1) =<< force v
+    (v' :) <$> evalMany (n-1) vs
 
 
 progToEval :: Name -> Prog a -> TypingM a (Expr a, Type a 'Poly, EvalRead a, EvalState a)
 progToEval mainnm pr = do
   let (ElabRes {erDefs, erConstrs, erSigs}) = collectDecls pr
       vconstrs = M.mapWithKey (\k _ -> Right (Constr k [])) . unFreeCtx $ erConstrs
-      initSt = (M.map Left erDefs) `M.union` vconstrs
+      initSt = initEvalState { esGlobals = (M.map Left erDefs) `M.union` vconstrs }
   ElabProg {instances} <- elabProg pr
   let initRd = mempty { erInstances = instances }
   case M.lookup mainnm erDefs of 
