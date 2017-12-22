@@ -9,6 +9,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 
 module CloFRP.Eval 
   ( module CloFRP.Eval.EvalM
@@ -24,7 +25,7 @@ import Debug.Trace
 import Control.Monad.Reader
 import Control.Monad.Except
 import Data.Char (isUpper)
-import qualified Data.Map.Lazy as M
+import qualified Data.Map.Strict as M
 
 import CloFRP.AST.Name
 import CloFRP.Check.Contexts -- TODO: remove this dependency somehow, or move it so there is no deps between Eval and Check
@@ -53,7 +54,6 @@ globalLookup nm = do
     
 lookupVar :: Pretty a => Name -> EvalM a (Value a)
 lookupVar nm = do
-  -- traceM ("lookup" ++ pps nm)
   inEnv <- envLookup nm <$> getEnv 
   inGlob <- globalLookup nm 
   case (inEnv <|> inGlob) of
@@ -151,7 +151,7 @@ evalPrim = \case
 
   -- fix ~> \f -> f (dfix f)
   -- fix ~> \f -> f (\\(af). fix f)
-  P.Fix              -> 
+  P.Fix              -> do
     pure $ Closure mempty "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f")
   P.Undefined        -> pure . runtimeErr $ "Undefined!"
 
@@ -159,22 +159,27 @@ evalExprStep :: Pretty a => Expr a -> EvalM a (Value a)
 evalExprStep (A ann expr') = 
   let ?annotation = ann
   in  case expr' of
-    E.Prim p -> evalPrim p
+    E.Prim !p -> evalPrim p
+
     E.Var (E.UName s) | isUpper (head s) -> pure $ Constr (E.UName s) []
-    E.Var nm -> lookupVar nm
+    E.Var !nm -> lookupVar nm
 
-    
-    E.TickVar nm -> pure $ TickVar nm
+    E.TickVar !nm -> pure $ TickVar nm
 
-    E.Lam x _mty e -> do
+    E.Lam x _mty !e -> do
       env <- getEnv
       pure (Closure env x e)
 
-    E.TickAbs x _k e -> do
+    -- E.TickAbs (UName "#alpha") _k !e -> do
+    --   Just f <- envLookup "#f" <$> getEnv
+    --   pure (TickClosure (singleEnv "#f" f) "#alpha" e)
+
+    E.TickAbs x _k !e -> do
       env <- getEnv
+      -- traceM ("closing over " ++ pps env)
       -- pntr <- allocThunk env x e
       -- pure (Prim (Pointer pntr))
-      pure (TickClosure env x e)
+      trace ("closing over " ++ pps env) $ pure (TickClosure env x e)
     
     E.Fmap t -> fmapFromType t
 
@@ -204,8 +209,8 @@ evalExprStep (A ann expr') =
       evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
       
     E.App e1 e2 -> do
-      v1 <- evalExprStep e1
-      v2 <- evalExprStep e2
+      !v1 <- evalExprStep e1
+      !v2 <- evalExprStep e2
       case (v1, v2) of 
         (Closure cenv nm e1', _) -> do
           let cenv' = extendEnv nm v2 cenv
@@ -306,7 +311,7 @@ eval tree => Branch x &1 &2
 -- evalExprsCorec n (expr : exprs) = 
 
 evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
-evalExprCorec expr = go (30 :: Int) =<< evalExprStep expr where 
+evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
   go n v | n <= 0 = pure (runtimeErr $ "Evaluation limit reached")
   go n v = do
     case v of

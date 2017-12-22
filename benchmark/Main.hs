@@ -94,12 +94,19 @@ instance ToHask c h => ToHask (CTFree "Tree" :@: c) (Tree ()) where
 
 data BinTree a = Branch a (BinTree a) (BinTree a) | Done deriving (Eq, Show)
 
+mkTree :: Int -> Int -> (BinTree Int, Int)
+mkTree i n 
+  | n <= 0 = (Done, i)
+  | otherwise = 
+    let (l, li) = mkTree (i+1) (n-1) 
+        (r, ri) = mkTree li (n-1)
+    in  (Branch i l r, ri)
+
 instance ToHask c h => ToHask (CTBinTree :@: c) (BinTree h) where
-  toHask (_ `SApp` s1) v = go 10 v where
-    go 0 _ = Done
-    go n (Fold (Constr "Branch" (x : l : r : _))) = 
-      Branch (toHask s1 x) (go (n-1) l) (go (n-1) r)
-    go n v = error $ "did not expect " ++ pps v
+  toHask (_ `SApp` s1) v = go v where
+    go (Fold (Constr "Branch" (x : l : r : _))) = 
+      Branch (toHask s1 x) (go l) (go r)
+    go v = error $ "did not expect " ++ pps v
   -- toHask s@(_ `SApp` _ `SApp` s1) (Fold (Constr "Branch" (x : l : r : _))) =
   --   Branch (toHask s1 x) (toHask s l) (toHask s r)
   -- toHask s v = error $ "did not expect" ++ pps v
@@ -111,8 +118,11 @@ takeBinTree n t
       Done -> Done
       Branch x l r -> Branch x (takeBinTree (n-1) l) (takeBinTree (n-1) r)
 
-constTree :: a -> BinTree a
-constTree x = Branch x (constTree x) (constTree x)
+constBinTree :: a -> BinTree a
+constBinTree x = Branch x (constBinTree x) (constBinTree x)
+
+eitherBinTree :: a -> b -> BinTree (Either a b)
+eitherBinTree l r = Branch (Left l) (constBinTree (Left l)) (constBinTree (Right r))
 
 -- instance Show a => Show (BinTree a) where
 --   showsPrec p (Done) = shows "Done"
@@ -257,7 +267,6 @@ binTree = [clott|
   data BinTreeF (k : Clock) a f = Branch a (|>k f) (|>k f).
   type BinTree (k : Clock) a = Fix (BinTreeF k a).
   data Unit = MkUnit.
-  data Bool = True | False.
 
   data StreamF (k : Clock) a f = Cons a (|>k f).
   type Stream (k : Clock) a = Fix (StreamF k a).
@@ -266,14 +275,8 @@ binTree = [clott|
   constBinTree = \x ->
     fix (\g -> fold (Branch x g g)).
 
-  -- repeat : forall (k : Clock) a. a -> Stream k a.
-  -- repeat = \x -> fix (\g -> fold (Cons x g)).
-
   main : BinTree K0 Unit.
   main = constBinTree MkUnit.
-
-  -- main : Stream K0 Bool.
-  -- main = repeat True.
 |]
 
 replaceMin = 
@@ -484,11 +487,11 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 --     main = uncos (apply spid (Cos (const MkUnit))).
 --   |]
 
--- main = defaultMain [bench "const" (whnf const ())]
 main :: IO ()
 main = do
   putStrLn "running benchmark"
   bench_binTree
+  -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000
   -- let truefalse = (True : False : truefalse :: [Bool])
@@ -534,12 +537,15 @@ bench_replaceMin =
 
 bench_binTree :: IO ()
 bench_binTree = do
-  let n = 10
-  putStrLn . show $ runCloFRP binTree
+  let n = 12
+  -- putStrLn . show $ takeBinTree (n+2) $ fst $ mkTree 0 100
+  -- putStrLn . show $ takeBinTree (n+2) $ eitherBinTree 'a' 'b'
+  putStrLn . show $ takeBinTreeVal n $ runCloFRP binTree
+  -- putStrLn . show $ execute binTree
   where
     takeBinTreeVal 0 _ = Done
     takeBinTreeVal !n (Fold (Constr "Branch" (x : l : r : _))) =
-      Branch () (takeBinTreeVal (n-1) l) (takeBinTreeVal (n-1) l)
+      Branch () (takeBinTreeVal (n-1) l) (takeBinTreeVal (n-1) r)
     takeBinTreeVal !n _ = Done
 
 bench_clott_add :: IO ()

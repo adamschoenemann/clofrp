@@ -11,9 +11,10 @@
 module CloFRP.Eval.EvalM where
 
 import Control.Monad.RWS.Lazy hiding ((<>))
-import Control.Monad.State ()
+import Control.Monad.State.Lazy
+import Control.Monad.Reader
 import Data.Map.Strict (Map)
-import qualified Data.Map.Lazy as M
+import qualified Data.Map.Strict as M
 import Data.Data
 
 import CloFRP.Eval.Value
@@ -56,12 +57,13 @@ allocThunk env nm e = do
   modifyPntr succ
   pure (succ pntr)
 
-newtype EvalM a r = Eval { unEvalM :: RWS (EvalRead a) EvalWrite (EvalState a) r }
+-- newtype EvalM a r = Eval { unEvalM :: RWS (EvalRead a) EvalWrite (EvalState a) r }
+newtype EvalM a r = Eval { unEvalM :: ReaderT (EvalRead a) (State (EvalState a)) r }
   deriving ( Functor
            , Applicative
            , Monad
            , MonadState  (EvalState a)
-           , MonadWriter EvalWrite 
+          --  , MonadWriter EvalWrite 
            , MonadReader (EvalRead a)
            )
 
@@ -75,7 +77,9 @@ runEvalM tm r = runEvalMState tm r initEvalState
 
 runEvalMState :: EvalM a r -> EvalRead a -> EvalState a -> EvalMRes r
 -- runEvalM tm r = let x = runRWS (unEvalM tm) r in x
-runEvalMState tm r st = let (x, _, _) = runRWS (unEvalM tm) r st in x
+runEvalMState tm r st = 
+  let (x, _) = runState (runReaderT (unEvalM tm) r) st in x
+  -- let (x, _, _) = runRWS (unEvalM tm) r st in x
 
 getEnv :: EvalM a (Env a)
 getEnv = asks erEnv

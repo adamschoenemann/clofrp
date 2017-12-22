@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE BangPatterns #-}
 
 module CloFRP.AST.Name where
 
@@ -13,9 +14,9 @@ import Control.DeepSeq
 import GHC.Generics
 
 data Name 
-  = UName String
-  | MName Integer
-  | DeBruijn Integer
+  = UName !String
+  | MName !Integer
+  | DeBruijn !Integer
   deriving (Ord, Eq, Data, Typeable, Generic, NFData)
 
 instance Show Name where

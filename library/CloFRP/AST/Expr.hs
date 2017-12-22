@@ -16,6 +16,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE BangPatterns #-}
 
 module CloFRP.AST.Expr where
 
@@ -37,9 +38,9 @@ type Expr a = Annotated a (Expr' a)
 
 data Expr' a
   -- | x
-  = Var Name 
+  = Var !Name 
   -- | [x]
-  | TickVar Name 
+  | TickVar !Name 
   -- | e : A
   | Ann (Expr a) (Type a 'Poly) 
   -- | e1 e2
@@ -47,7 +48,7 @@ data Expr' a
   -- | \x -> e OR \(x : A) -> e
   | Lam Name (Maybe (Type a 'Poly)) (Expr a) 
   -- | \\(α : κ) -> e
-  | TickAbs Name Name (Expr a) 
+  | TickAbs !Name !Name (Expr a) 
   -- | n-ary tuples  
   | Tuple [Expr a] 
   -- | let p = e1 in e2  
