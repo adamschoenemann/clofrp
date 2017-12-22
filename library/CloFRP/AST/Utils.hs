@@ -1,7 +1,14 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module CloFRP.AST.Utils where
 
 import CloFRP.Annotated
+import Text.Parsec (SourcePos)
+import CloFRP.Pretty
+import Data.String (fromString)
+
+instance Pretty (SourcePos) where
+  pretty = fromString . show
 
 -- collect :: (Type' a s -> Maybe (n, Type a s)) -> Type a s -> ([n], Type a s)
 collect :: (f -> Maybe (n, Annotated a f)) -> Annotated a f -> ([n], Annotated a f)

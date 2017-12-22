@@ -89,6 +89,7 @@ data TyExcept a
   | NotWfType (Type a 'Poly)
   | NotWfContext (CtxElem a)
   | PartialAliasApp (Alias a)
+  | MutualRecursionErr Name
   | Other String
   | Decorate (TyExcept a) (TyExcept a)
   deriving (Show, Eq)
@@ -104,6 +105,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     NotWfType ty             -> NotWfType (unann ty)
     NotWfContext el          -> NotWfContext (unann el)
     PartialAliasApp al       -> PartialAliasApp (unann al)
+    MutualRecursionErr nm    -> MutualRecursionErr nm
     Other s                  -> Other s
     Decorate outer inner     -> Decorate (unann outer) (unann inner)
 
@@ -118,6 +120,7 @@ instance Pretty (TyExcept a) where
     NotWfType ty             -> pretty ty <+> "is not well-formed"
     NotWfContext el          -> "Context is not well-formed due to" <+> pretty el
     PartialAliasApp al       -> "Partial type-alias application of alias " <+> pretty al
+    MutualRecursionErr nm    -> pretty nm <+> "is mutually recursive with something else"
     Other s                  -> "Other error:" <+> fromString s
     Decorate outer inner     -> pretty outer <> hardline <> "Caused by:" <> softline <> pretty inner
 

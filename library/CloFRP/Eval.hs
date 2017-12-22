@@ -24,7 +24,7 @@ import Control.Monad ((<=<))
 import Debug.Trace
 import Control.Monad.Reader
 import Control.Monad.Except
-import Data.Char (isUpper)
+import Data.Char (isUpper, isLower)
 import qualified Data.Map.Strict as M
 
 import CloFRP.AST.Name
@@ -49,8 +49,7 @@ globalLookup nm = do
   globals <- getGlobals
   case M.lookup nm globals of
     Nothing -> pure Nothing
-    Just (Right v) -> pure . Just $ v
-    Just (Left e) -> Just <$> evalExprStep e
+    Just v -> pure . Just $ v
     
 lookupVar :: Pretty a => Name -> EvalM a (Value a)
 lookupVar nm = do
@@ -151,7 +150,8 @@ evalPrim = \case
 
   -- fix ~> \f -> f (dfix f)
   -- fix ~> \f -> f (\\(af). fix f)
-  P.Fix              -> do
+  P.Fix              -> 
+    -- evalExprStep (lam' "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f"))
     pure $ Closure mempty "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f")
   P.Undefined        -> pure . runtimeErr $ "Undefined!"
 
@@ -179,7 +179,8 @@ evalExprStep (A ann expr') =
       -- traceM ("closing over " ++ pps env)
       -- pntr <- allocThunk env x e
       -- pure (Prim (Pointer pntr))
-      trace ("closing over " ++ pps env) $ pure (TickClosure env x e)
+      -- trace ("closing over " ++ pps env) $ 
+      pure (TickClosure env x e)
     
     E.Fmap t -> fmapFromType t
 
@@ -326,23 +327,34 @@ evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where
     v' <- go (n-1) =<< force v
     (v' :) <$> evalMany (n-1) vs
 
+evalStepDefinitions :: Pretty a => EvalRead a -> UsageGraph -> Defs a -> Name -> TypingM a (EvalRead a)
+evalStepDefinitions er ug defs defnm = do
+  order <- either (tyExcept . Decorate (Other "during evalStepDefinitions")) pure $ usageClosure ug defnm
+  let orderNoConstrs = filter (isLower . head . show) order
+  foldrM folder er orderNoConstrs where
+    folder nm acc = do
+      expr <- maybe (otherErr $ show nm ++ " not found") pure $ M.lookup nm defs
+      let val = runEvalM (evalExprStep expr) acc 
+      pure (acc { erGlobals = extendGlobals nm val (erGlobals acc) })
 
-progToEval :: Name -> Prog a -> TypingM a (Expr a, Type a 'Poly, EvalRead a, EvalState a)
+
+progToEval :: Pretty a => Name -> Prog a -> TypingM a (Expr a, Type a 'Poly, EvalRead a)
 progToEval mainnm pr = do
   let (ElabRes {erDefs, erConstrs, erSigs}) = collectDecls pr
       vconstrs = M.mapWithKey (\k _ -> Right (Constr k [])) . unFreeCtx $ erConstrs
-      initSt = initEvalState { esGlobals = (M.map Left erDefs) `M.union` vconstrs }
+      -- initSt = initEvalState { esGlobals = (M.map Left erDefs) `M.union` vconstrs }
   ElabProg {instances} <- elabProg pr
-  let initRd = mempty { erInstances = instances }
+  let ug = usageGraph erDefs `M.union` constrsToUsageGraph erConstrs
+  initRd <- evalStepDefinitions (mempty { erInstances = instances }) ug erDefs mainnm
   case M.lookup mainnm erDefs of 
     Just maindef -> 
       let Just mainty = query mainnm erSigs
-      in  pure (maindef, mainty, initRd, initSt)
+      in  pure (maindef, mainty, initRd)
     Nothing -> otherErr $ "No main definition of name " ++ pps mainnm ++ " found"
 
 evalProg :: Pretty a => Name -> Prog a -> Value a
 evalProg mainnm pr =
   case runTypingM0 (progToEval mainnm pr) mempty of
-    (Right (expr, _ty, er, es), _, _) -> runEvalMState (evalExprCorec expr) er es
-    (Left (err, _), _, _)             -> runtimeErr (pps err)
+    (Right (expr, _ty, er), _, _) -> runEvalM (evalExprCorec expr) er
+    (Left (err, _), _, _)         -> runtimeErr (pps err)
 

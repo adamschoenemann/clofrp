@@ -25,6 +25,8 @@ import Data.Char (isUpper)
 import Data.Text.Prettyprint.Doc
 import Control.DeepSeq
 import GHC.Generics
+import Data.Set (Set, (\\), union)
+import qualified Data.Set as S
 
 import CloFRP.Annotated 
 import CloFRP.AST.Name
@@ -76,3 +78,9 @@ unannPat' p = case p of
   Bind nm -> Bind nm
   Match nm ps ->  Match nm (map unannPat ps)
   PTuple ps -> PTuple (map unannPat ps)
+
+freeVarsPat :: Pat a -> Set Name
+freeVarsPat = go where
+  go (A _ (Bind nm))     = S.singleton nm
+  go (A _ (Match nm ps)) = S.unions $ S.singleton nm : map go ps
+  go (A _ (PTuple ps))   = S.unions $ map go ps

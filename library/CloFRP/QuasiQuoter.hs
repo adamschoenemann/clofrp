@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 module CloFRP.QuasiQuoter where
 
@@ -11,15 +12,16 @@ import qualified CloFRP.Parser.Lang as P
 import CloFRP.AST.Name
 import CloFRP.Interop
 import CloFRP.Utils (findMap)
-import CloFRP.Eval (progToEval)
+import CloFRP.Eval (progToEval, initEvalState)
 import CloFRP.Check.Prog (runCheckProg)
 import CloFRP.Check.TypingM (runTypingM0)
 import CloFRP.Annotated
 import CloFRP.Pretty (ppsw, pps)
+import CloFRP.Utils ()
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
-import Text.Parsec (parse)
+import Text.Parsec (parse, SourcePos)
 import Text.Parsec.Combinator (eof)
 import Text.Parsec.String (Parser)
 
@@ -85,11 +87,11 @@ clott = QuasiQuoter
       case runCheckProg mempty prog of
         (Left err, _, _) -> fail (ppsw 200 err)
         (Right _,  _, _) -> 
-          case runTypingM0 (progToEval (UName "main") prog) mempty of
-            (Right (expr, ty, rd, st), _, _) -> do
+          case runTypingM0 (progToEval @(SourcePos) (UName "main") prog) mempty of
+            (Right (expr, ty, rd), _, _) -> do
               let sing = typeToSingExp ty
               let exprQ = liftData expr
               let rdQ = liftData rd
-              let stQ = liftData st
+              let stQ = liftData (initEvalState @(SourcePos))
               [|CloFRP $(rdQ) $(stQ) $(exprQ) $(sing)|]
             (Left (err,_), _, _) -> fail (pps err)

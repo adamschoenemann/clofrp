@@ -31,13 +31,10 @@ import CloFRP.QuasiQuoter
 import CloFRP.Pretty
 import CloFRP.Examples
 
-import Text.Parsec.Pos
 import Data.Text (Text)
 import NeatInterpolation
 import Data.String (fromString)
 
-instance Pretty SourcePos where
-  pretty = fromString . show
 
 instance ToCloFRP Bool ('CTFree "Bool") where
   toCloFRP (SFree px) True  = (Constr "True" [])  
@@ -271,12 +268,13 @@ binTree = [clott|
   data StreamF (k : Clock) a f = Cons a (|>k f).
   type Stream (k : Clock) a = Fix (StreamF k a).
 
-  constBinTree : forall (k : Clock) a. a -> BinTree k a.
-  constBinTree = \x ->
-    fix (\g -> fold (Branch x g g)).
+  -- constBinTree : forall (k : Clock) a. a -> BinTree k a.
 
   main : BinTree K0 Unit.
-  main = constBinTree MkUnit.
+  main = 
+    let constBinTree = \x ->
+          fix (\g -> fold (Branch x g g))
+    in constBinTree MkUnit.
 |]
 
 replaceMin = 
@@ -489,8 +487,8 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 
 main :: IO ()
 main = do
-  putStrLn "running benchmark"
-  bench_binTree
+  putStrLn "running benchmar"
+  bench_clott_add
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000
@@ -524,21 +522,21 @@ coStreamTrans (CloFRP er st expr ((s1 `SApp` s2) `SArr` (s3 `SApp` s4 `SApp` s5)
 
 bench_everyOtherTrans :: IO ()
 bench_everyOtherTrans =
-  putStrLn . show $ take 100000 (coStreamTrans everyOtherTrans truefalse)
+  putStrLn . show $ take 1000000 (coStreamTrans everyOtherTrans truefalse)
 
 bench_everyOtherExec :: IO ()
 bench_everyOtherExec =
-  putStrLn . show $ take 100000 (execute everyOtherExec)
+  putStrLn . show $ take 1000000 (execute everyOtherExec)
 
 bench_replaceMin :: IO ()
 bench_replaceMin = 
-  putStrLn . show $ replaceMinHask (ofHeight 9)
-  -- putStrLn . show $ execute replaceMin
+  -- putStrLn . show $ replaceMinHask (ofHeight 9)
+  putStrLn . show $ execute replaceMin
 
 bench_binTree :: IO ()
 bench_binTree = do
-  let n = 12
-  -- putStrLn . show $ takeBinTree (n+2) $ fst $ mkTree 0 100
+  let n = 22
+  -- putStrLn . show $ takeBinTree (n2) $ fst $ mkTree 0 100
   -- putStrLn . show $ takeBinTree (n+2) $ eitherBinTree 'a' 'b'
   putStrLn . show $ takeBinTreeVal n $ runCloFRP binTree
   -- putStrLn . show $ execute binTree
@@ -550,7 +548,7 @@ bench_binTree = do
 
 bench_clott_add :: IO ()
 bench_clott_add = do
-  let n = 200000
+  let n = 800000
   let inputs = zip (repeat 1) (repeat 1)
   let output = take n (streamTrans clott_add inputs)
   putStrLn . show $ output

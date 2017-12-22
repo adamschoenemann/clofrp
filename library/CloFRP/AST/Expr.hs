@@ -26,6 +26,8 @@ import qualified CloFRP.AST.Prim as P
 import Data.Text.Prettyprint.Doc
 import Control.DeepSeq
 import GHC.Generics
+import Data.Set (Set, (\\), union)
+import qualified Data.Set as S
 
 import CloFRP.Annotated
 import CloFRP.AST.Name
@@ -174,3 +176,20 @@ substExpr new old = go where
     Fmap t -> Fmap t
     PrimRec t -> PrimRec t
     Prim p -> Prim p
+
+freeVarsExpr :: Expr a -> Set Name
+freeVarsExpr = go where
+  go (A _ expr') = case expr' of
+    Var nm -> S.singleton nm
+    TickVar nm -> S.singleton nm
+    Ann e t -> go e
+    App e1 e2 -> go e1 `union` go e2
+    Lam nm mty e -> go e \\ S.singleton nm
+    TickAbs nm kappa e -> go e \\ S.singleton nm
+    Tuple es -> S.unions (map go es)
+    Let p e1 e2 -> go e1 `union` (go e2 \\ freeVarsPat p)
+    Case e clauses -> go e `union` (S.unions $ map (\(p,e') -> go e' \\ freeVarsPat p) clauses)
+    TypeApp e t -> go e
+    Fmap t -> S.empty
+    PrimRec t -> S.empty
+    Prim p -> S.empty

@@ -7,10 +7,12 @@ This way, the CloFRP programs are parsed lazily
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 
 module CloFRP.Check.ProgSpec where
 
 import Test.Tasty.Hspec
+import           Data.String (fromString)
 
 import           CloFRP.Check.TestUtils
 import           CloFRP.Parser.Prog (parseProg)
@@ -20,11 +22,43 @@ import           CloFRP.Pretty
 import           CloFRP.AST.Name
 import           CloFRP.Annotated (unann)
 import           CloFRP.TestUtils
+import           CloFRP.Utils
 
 
 progSpec :: Spec 
 progSpec = do
   let errs e x = (unann (fst x)) `shouldBe` e
+
+  describe "usageClosure" $ do
+    it "works on positive x (1)" $ do
+      let ug = ["x" |-> ["y","z"], "y" |-> [], "z" |-> []]
+      usageClosure @() ug "x" `shouldBe` Right ["x","z","y"]
+    it "works on positive x (2)" $ do
+      let ug = ["x" |-> ["y","z"], "y" |-> [], "z" |-> ["y"]]
+      usageClosure @() ug "x" `shouldBe` Right ["x","z","y"]
+    it "works on positive x (3)" $ do
+      let ug = 
+            [ "1" |-> ["2", "6", "8"]
+            , "2" |-> ["3", "4"]
+            , "3" |-> []
+            , "4" |-> ["5"]
+            , "5" |-> []
+            , "6" |-> ["7"]
+            , "7" |-> ["5"]
+            , "8" |-> ["5"]
+            ]
+      usageClosure @() ug "1" `shouldBe` Right (map (fromString . show) [1,8,6,7,2,4,5,3])
+    it "fails on negative ex" $ do
+      let ug = 
+            [ "1" |-> ["2", "6", "5"]
+            , "2" |-> ["3"]
+            , "3" |-> ["4"]
+            , "4" |-> ["5"]
+            , "5" |-> ["3"]
+            , "6" |-> ["3"]
+            ]
+      usageClosure @() ug "1" `shouldBe` Left (MutualRecursionErr "3")
+
   describe "checkProg" $ do
     it "fails programs with invalid types (1)" $ do
       let Right prog = pprog [text|
@@ -402,7 +436,7 @@ progSpec = do
           in y [af].
       |]
       -- runCheckProg mempty prog `shouldYield` ()
-      runCheckProg mempty prog `shouldFailWith` (errs $ Decorate (Other "TickVar") $  NameNotFound "af")
+      runCheckProg mempty prog `shouldFailWith` (errs $ NameNotFound "af")
 
     it "accepts generalized let bindings" $ do
       let Right prog = pprog [text|
@@ -891,6 +925,17 @@ progSpec = do
         
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    it "disallows mutual recursion" $ do
+      let Right prog = pprog [text|
+        data Unit = MkUnit.
+        foo : Unit -> Unit.
+        foo = \x -> bar x.
+
+        bar : Unit -> Unit.
+        bar = \x -> foo x.
+      |]
+      shouldFail $ runCheckProg mempty prog 
     
     it "succeeds for superfluous quantifiers" $ do
       let Right prog = pprog [text|

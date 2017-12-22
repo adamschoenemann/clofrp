@@ -27,19 +27,20 @@ import CloFRP.AST.Prim (Pntr)
 type Inputs a = Map Name (Value a)
 
 data EvalRead a = 
-  EvalRead { erEnv :: Env a, erInstances :: InstanceCtx a, erInputs :: Inputs a }
+  EvalRead { erEnv :: Env a, erGlobals :: Globals a, erInstances :: InstanceCtx a, erInputs :: Inputs a }
   deriving (Show, Eq, Typeable, Data)
 
 instance Monoid (EvalRead a) where
-  mempty = EvalRead mempty mempty mempty
+  mempty = EvalRead mempty mempty mempty mempty
   er1 `mappend` er2 = 
     EvalRead { erEnv       = erEnv er1 `mappend` erEnv er2 
+             , erGlobals   = erGlobals er1 `mappend` erGlobals er2 
              , erInstances = erInstances er1 `mappend` erInstances er2 
              , erInputs    = erInputs er1 `mappend` erInputs er2 
              }
 
 type EvalWrite = ()
-type Globals a = Map Name (Either (Expr a) (Value a)) -- either unevaled defs or already evaled values
+type Globals a = Map Name (Value a)
 type Thunks a = Map Pntr (Either (Env a, Name, Expr a) (Value a)) 
 data EvalState a = 
   ES { esGlobals :: Globals a 
@@ -50,19 +51,19 @@ data EvalState a =
 initEvalState :: EvalState a
 initEvalState = ES { esGlobals = mempty, esPntrLbl = 0, esThunks = mempty }
 
-allocThunk :: Env a -> Name -> Expr a -> EvalM a Pntr
-allocThunk env nm e = do
-  pntr <- getPntr
-  modifyThunks (M.insert pntr (Left (env, nm, e)))
-  modifyPntr succ
-  pure (succ pntr)
+-- allocThunk :: Env a -> Name -> Expr a -> EvalM a Pntr
+-- allocThunk env nm e = do
+--   pntr <- getPntr
+--   modifyThunks (M.insert pntr (Left (env, nm, e)))
+--   modifyPntr succ
+--   pure (succ pntr)
 
 -- newtype EvalM a r = Eval { unEvalM :: RWS (EvalRead a) EvalWrite (EvalState a) r }
-newtype EvalM a r = Eval { unEvalM :: ReaderT (EvalRead a) (State (EvalState a)) r }
+newtype EvalM a r = Eval { unEvalM :: Reader (EvalRead a) r }
   deriving ( Functor
            , Applicative
            , Monad
-           , MonadState  (EvalState a)
+          --  , MonadState  (EvalState a)
           --  , MonadWriter EvalWrite 
            , MonadReader (EvalRead a)
            )
@@ -78,7 +79,7 @@ runEvalM tm r = runEvalMState tm r initEvalState
 runEvalMState :: EvalM a r -> EvalRead a -> EvalState a -> EvalMRes r
 -- runEvalM tm r = let x = runRWS (unEvalM tm) r in x
 runEvalMState tm r st = 
-  let (x, _) = runState (runReaderT (unEvalM tm) r) st in x
+  let x = runReader (unEvalM tm) r in x
   -- let (x, _, _) = runRWS (unEvalM tm) r st in x
 
 getEnv :: EvalM a (Env a)
@@ -103,20 +104,23 @@ withInputs f = local (\e -> e { erInputs = f (erInputs e) })
 withInput :: Value a -> EvalM a r -> EvalM a r
 withInput x = withInputs (M.insert "#INPUT" x)
 
-updGlobals :: (EvalState a -> EvalState a) -> EvalM a ()
-updGlobals = modify
+-- updGlobals :: (EvalState a -> EvalState a) -> EvalM a ()
+-- updGlobals = modify
 
 getGlobals :: EvalM a (Globals a)
-getGlobals = gets esGlobals
+getGlobals = asks erGlobals
 
-getThunks :: EvalM a (Thunks a)
-getThunks = gets esThunks
+extendGlobals :: Name -> Value a -> Globals a -> Globals a
+extendGlobals = M.insert
 
-modifyThunks :: (Thunks a -> Thunks a) -> EvalM a ()
-modifyThunks fn = modify (\es -> es { esThunks = fn (esThunks es) })
+-- getThunks :: EvalM a (Thunks a)
+-- getThunks = gets esThunks
 
-modifyPntr :: (Pntr -> Pntr) -> EvalM a ()
-modifyPntr fn = modify (\es -> es { esPntrLbl = fn (esPntrLbl es) })
+-- modifyThunks :: (Thunks a -> Thunks a) -> EvalM a ()
+-- modifyThunks fn = modify (\es -> es { esThunks = fn (esThunks es) })
 
-getPntr :: EvalM a Pntr
-getPntr = gets esPntrLbl
+-- modifyPntr :: (Pntr -> Pntr) -> EvalM a ()
+-- modifyPntr fn = modify (\es -> es { esPntrLbl = fn (esPntrLbl es) })
+
+-- getPntr :: EvalM a Pntr
+-- getPntr = gets esPntrLbl

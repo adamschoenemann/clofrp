@@ -26,6 +26,9 @@ import           CloFRP.TestUtils
 import           CloFRP.Pretty
 import           CloFRP.Eval
 import           CloFRP.Annotated (unann, Annotated(..))
+import           CloFRP.Check.TypingM
+import           CloFRP.Check.TestUtils
+import           CloFRP.Check.Prog (runCheckProg, progToUseGraph, usageClosure)
 
 evalSpec :: Spec
 evalSpec = do
@@ -268,7 +271,10 @@ evalSpec = do
         nats = fix (\g -> cons z (map (strmap s) g)).
 
       |]
+      -- let (expr, _typ, er) = runTypingM0 (progToEval "nats" p) mempty
+      -- putStrLn . show $ er
 
+      -- True `shouldBe` True
       takeValueList vnatToInt 10 (evalProg "nats" p) `shouldBe` [0..9]
 
     it "evals the constant stream" $ do
@@ -313,6 +319,9 @@ evalSpec = do
 
         data Bool = True | False.
 
+        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+        cons = \x xs -> fold (Cons x xs).
+
         truefalse : forall (k : Clock). Stream k Bool.
         truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
 
@@ -323,8 +332,6 @@ evalSpec = do
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-        cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-        cons = \x xs -> fold (Cons x xs).
 
         hd : forall a. CoStream a -> a.
         hd = \xs -> 
@@ -355,6 +362,10 @@ evalSpec = do
           let Cos xs = eo (Cos truefalse) in
           xs.
       |]
+      -- let ug = progToUseGraph prog
+      -- putStrLn . show $ usageClosure @() ug "trues"
+      -- putStrLn . show $ ug
+      runCheckProg mempty prog `shouldYield` ()
       takeValueList vboolToBool 10 (evalProg "trues" prog) `shouldBe` (replicate 10 True)
     
     it "evals fmap" $ do

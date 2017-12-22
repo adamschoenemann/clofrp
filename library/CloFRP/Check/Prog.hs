@@ -23,6 +23,10 @@ import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
 import Control.Monad.Writer (censor)
 import CloFRP.Pretty hiding ((<>))
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
+import Data.Set (Set)
+import qualified Data.Set as S
 
 import CloFRP.Annotated (Annotated(..))
 import CloFRP.AST
@@ -252,8 +256,50 @@ elabInstances inject derivs = InstanceCtx <$> M.traverseWithKey traverseDerivs d
   --       expty <- expandAliases aliases ty
   --       pure (expty, expr)
 
+type UsageGraph = Map Name (Set Name)
+
+usageGraph :: Defs a -> UsageGraph
+usageGraph m = 
+  M.mapWithKey mapping m where
+    mapping k e = freeVarsExpr e
+
+progToUseGraph :: Prog a -> UsageGraph
+progToUseGraph (Prog decls) = M.fromList $ concat $ map mapping decls where
+  mapping (A _ decl') = 
+    case decl' of 
+      FunD nm expr -> [(nm, freeVarsExpr expr)]
+      DataD (Datatype {dtConstrs}) ->
+         map (\(A _ (Constr nm _)) -> (nm, S.empty)) dtConstrs
+      _                    -> []
+  
+data RoseTree a = Leaf | Node a [RoseTree a] deriving (Show, Eq)
+
+-- takes a usage graph and a starting node and returns its dependencies
+-- as a linearized list. Basically, it is just topological sort!
+-- the head of the list is the given node
+usageClosure :: UsageGraph -> Name -> Either (TyExcept a) [Name]
+usageClosure ug nm = fst <$> visit S.empty S.empty nm where
+  -- visit :: Set Name -> Set Name -> Name -> Either (TyExcept a) ([Name], Set Name)
+  visit explored stack node
+    | node `S.member` explored = pure ([], explored)
+    | node `S.member` stack = Left (MutualRecursionErr node)
+    | otherwise = do
+      children <- maybe (Left $ NameNotFound node) Right $ M.lookup node ug
+      (xs, e) <- recur explored (S.insert node stack) (S.toList children)
+      pure (node : xs, S.insert node e)
+
+  recur explored stack [] = pure ([], explored)
+  recur explored stack (n:ns) = do
+    (xs, explored') <- visit explored stack n
+    (xs', explored'') <- recur explored' stack ns
+    pure (xs' ++ xs, explored'')
+
+constrsToUsageGraph :: FreeCtx a -> UsageGraph
+constrsToUsageGraph (FreeCtx m) = M.map (const S.empty) m
+
 
 -- TODO: modularize this
+-- TODO: Check that data-types are not mutually recursive
 elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg program = do
   let ElabRes kinds funds sigds cnstrs destrs aliases derivs = collectDecls program 
@@ -271,6 +317,7 @@ elabProg program = do
             expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
             expDerivs <- traverse (expandDerivs aliases) derivs
             expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
+            checkForMutualRecursiveDefs expFunds cnstrs
             instances <- elabInstances fromEither expDerivs
             let allFree = FreeCtx $ expFree -- <> M.fromList derivTyps
             let allDefs = expFunds -- <> M.fromList derivDefs
@@ -288,6 +335,12 @@ elabProg program = do
       typ' <- expandAliases als typ
       args' <- traverse (expandAliases als) args
       pure (d {typ = typ', args = args'})
+    
+    checkForMutualRecursiveDefs defs constrs =
+      let ug = usageGraph defs `M.union` constrsToUsageGraph constrs
+      in  M.traverseWithKey (traversal ug) ug where
+        traversal ug k deps = 
+          either tyExcept pure (usageClosure ug k)
 
 -- "Elaborate" the constructors of a type, return a mapping from constructor names
 -- to their types, e.g.

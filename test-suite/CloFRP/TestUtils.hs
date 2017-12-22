@@ -13,10 +13,6 @@ import CloFRP.Parser.Expr (parseExpr)
 import CloFRP.AST
 import qualified CloFRP.Eval.Value as V
 
-instance Pretty (SourcePos) where
-  pretty = fromString . show
-
-
 success :: Expectation
 success = pure ()
 
