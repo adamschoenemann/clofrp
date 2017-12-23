@@ -399,12 +399,18 @@ progSpec = do
       runCheckProg mempty prog `shouldYield` ()
 
     it "succeeds for built-in types" $ do
-      let Right prog = pprog [text|
+      let progEith = pprog [text|
         data Maybe a = Nothing | Just a. 
+
+        double : Int -> Int.
+        double = \x -> x + x.
+
         main : Maybe Int.
-        main = Just 10.
+        main = Just (double 10).
       |]
-      runCheckProg mempty prog `shouldYield` ()
+      case progEith of 
+        Right prog -> runCheckProg mempty prog `shouldYield` ()
+        Left  err -> failure (show err)
     
     
     it "succeeds for let bindings" $ do

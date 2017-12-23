@@ -112,8 +112,13 @@ expr :: Parser Expr
 expr = try tickabs <|> lam <|> buildExpressionParser table atom where
   table = 
     [ [Infix spacef AssocLeft, Postfix typeapp]
+    , [binary' "+" plusp AssocLeft]
     , [Postfix tanno]
     ]
+  
+  plusp = do
+    p <- getPosition
+    pure (\e1 -> A.A p . E.BinOp "+" e1)
 
   spacef :: Parser (Expr -> Expr -> Expr)
   spacef =

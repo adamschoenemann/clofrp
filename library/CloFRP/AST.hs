@@ -306,6 +306,7 @@ traverseAnnos fn = go where
       TypeApp e t -> A a <<< TypeApp <$> go e <*> fn t 
       Fmap t -> A a . Fmap <$> fn t
       PrimRec t -> A a . PrimRec <$> fn t
+      BinOp nm e1 e2 -> A a <<< BinOp nm <$> go e1 <*> go e2
       Prim p -> pure $ A a e'
     (<<<) = (.) . (.)
 

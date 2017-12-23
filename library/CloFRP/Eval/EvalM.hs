@@ -26,24 +26,27 @@ import CloFRP.AST.Prim (Pntr)
 
 type Inputs a = Map Name (Value a)
 
-data EvalRead a = 
-  EvalRead { erEnv :: Env a, erGlobals :: Globals a, erInstances :: InstanceCtx a, erInputs :: Inputs a }
-  deriving (Show, Eq, Typeable, Data)
+data EvalRead a =
+  EvalRead { erEnv :: Env a
+           , erGlobals :: Globals a
+           , erInstances :: InstanceCtx a
+           , erInputs :: Inputs a
+           } deriving (Show, Eq, Typeable, Data)
 
 instance Monoid (EvalRead a) where
   mempty = EvalRead mempty mempty mempty mempty
-  er1 `mappend` er2 = 
-    EvalRead { erEnv       = erEnv er1 `mappend` erEnv er2 
-             , erGlobals   = erGlobals er1 `mappend` erGlobals er2 
-             , erInstances = erInstances er1 `mappend` erInstances er2 
-             , erInputs    = erInputs er1 `mappend` erInputs er2 
+  er1 `mappend` er2 =
+    EvalRead { erEnv       = erEnv er1 `mappend` erEnv er2
+             , erGlobals   = erGlobals er1 `mappend` erGlobals er2
+             , erInstances = erInstances er1 `mappend` erInstances er2
+             , erInputs    = erInputs er1 `mappend` erInputs er2
              }
 
 type EvalWrite = ()
 type Globals a = Map Name (Value a)
-type Thunks a = Map Pntr (Either (Env a, Name, Expr a) (Value a)) 
-data EvalState a = 
-  ES { esGlobals :: Globals a 
+type Thunks a = Map Pntr (Either (Env a, Name, Expr a) (Value a))
+data EvalState a =
+  ES { esGlobals :: Globals a
      , esPntrLbl :: Pntr
      , esThunks :: Thunks a
      } deriving (Show, Eq, Typeable, Data)
@@ -64,7 +67,7 @@ newtype EvalM a r = Eval { unEvalM :: Reader (EvalRead a) r }
            , Applicative
            , Monad
           --  , MonadState  (EvalState a)
-          --  , MonadWriter EvalWrite 
+          --  , MonadWriter EvalWrite
            , MonadReader (EvalRead a)
            )
 
@@ -78,7 +81,7 @@ runEvalM tm r = runEvalMState tm r initEvalState
 
 runEvalMState :: EvalM a r -> EvalRead a -> EvalState a -> EvalMRes r
 -- runEvalM tm r = let x = runRWS (unEvalM tm) r in x
-runEvalMState tm r st = 
+runEvalMState tm r st =
   let x = runReader (unEvalM tm) r in x
   -- let (x, _, _) = runRWS (unEvalM tm) r st in x
 
@@ -89,7 +92,7 @@ getInputs :: EvalM a (Inputs a)
 getInputs = asks erInputs
 
 getInput :: EvalM a (Value a)
-getInput = do 
+getInput = do
   is <- asks erInputs
   case M.lookup "#INPUT" is of
     Just v -> pure v

@@ -63,6 +63,8 @@ data Expr' a
   | Fmap (Type a 'Poly) 
   -- | primRec A  
   | PrimRec (Type a 'Poly) 
+  -- | binary operators
+  | BinOp Name (Expr a) (Expr a)
   -- | primitive (will probably just include ints in the end)  
   | Prim P.Prim 
   deriving (Eq, Data, Typeable, Generic, NFData)
@@ -102,6 +104,8 @@ prettyE' (PrettyEP {lamParens, otherParens}) = \case
   TypeApp e t -> otherParens (pretty e <+> braces (prettyT False t))
   Fmap t -> "fmap" <+> braces (pretty t)
   PrimRec t -> "primRec" <+> braces (pretty t)
+
+  BinOp op e1 e2 -> parens (pretty e1 <+> pretty op <+> pretty e2)
 
   Prim p -> fromString . show $ p
   where
@@ -152,6 +156,7 @@ unannE' = \case
   TypeApp e t -> TypeApp (unannE e) (unannT t)
   Fmap t -> Fmap (unannT t)
   PrimRec t -> PrimRec (unannT t)
+  BinOp nm e1 e2 -> BinOp nm (unannE e1) (unannE e2)
   Prim p -> Prim p
 
 substExpr :: Expr' a -> Name -> Expr a -> Expr a
@@ -175,6 +180,7 @@ substExpr new old = go where
     TypeApp e t -> TypeApp (go e) t
     Fmap t -> Fmap t
     PrimRec t -> PrimRec t
+    BinOp nm e1 e2 -> BinOp nm (go e1) (go e2) -- replace operator names?
     Prim p -> Prim p
 
 freeVarsExpr :: Expr a -> Set Name
@@ -192,4 +198,5 @@ freeVarsExpr = go where
     TypeApp e t -> go e
     Fmap t -> S.empty
     PrimRec t -> S.empty
+    BinOp nm e1 e2 -> go e1 `union` go e2
     Prim p -> S.empty

@@ -155,34 +155,53 @@ evalPrim = \case
     pure $ Closure mempty "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f")
   P.Undefined        -> pure . runtimeErr $ "Undefined!"
 
+evalPrimRec :: (Pretty a, ?annotation :: a) => Type a 'Poly -> EvalM a (Value a)
+evalPrimRec t = do
+  let (oname, ovar) = (UName "__outer__", var oname)
+  let (iname, ivar) = (UName "__inner__", var iname)
+  let (bdnm, bdvar) = (UName "__body__", var bdnm)
+
+  let conte = (primRec t `app` bdvar) `app` ivar
+  let etup = tuple [ivar, conte]
+  let fmaplam = lam' iname etup
+  let fmape = (fmapE t `app` fmaplam) `app` (unfoldE `app` ovar)
+  evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
+
 evalExprStep :: Pretty a => Expr a -> EvalM a (Value a)
 evalExprStep (A ann expr') = 
   let ?annotation = ann
   in  case expr' of
-    E.Prim !p -> evalPrim p
+    E.Prim !p       -> evalPrim p
+    E.TickVar !nm   -> pure $ TickVar nm
+    E.Lam x _mty !e -> (\env -> Closure env x e) <$> getEnv
+    E.Fmap t        -> fmapFromType t
+    E.PrimRec t     -> evalPrimRec t
+    E.Ann e _t      -> evalExprStep e
+    E.Tuple ts      -> Tuple <$> sequence (map evalExprStep ts) 
+    E.Case e1 cs    -> evalExprStep e1 >>= (\v1 -> evalClauses v1 cs)
+    E.TypeApp e _t  -> evalExprStep e
 
     E.Var (E.UName s) | isUpper (head s) -> pure $ Constr (E.UName s) []
     E.Var !nm -> lookupVar nm
 
-    E.TickVar !nm -> pure $ TickVar nm
-
-    E.Lam x _mty !e -> do
-      env <- getEnv
-      pure (Closure env x e)
-
-    -- E.TickAbs (UName "#alpha") _k !e -> do
-    --   Just f <- envLookup "#f" <$> getEnv
-    --   pure (TickClosure (singleEnv "#f" f) "#alpha" e)
+    E.TickAbs (UName "#alpha") _k !e -> do
+      Just f <- envLookup "#f" <$> getEnv
+      pure (TickClosure (singleEnv "#f" f) "#alpha" e)
 
     E.TickAbs x _k !e -> do
       env <- getEnv
-      -- traceM ("closing over " ++ pps env)
       -- pntr <- allocThunk env x e
       -- pure (Prim (Pointer pntr))
       -- trace ("closing over " ++ pps env) $ 
       pure (TickClosure env x e)
-    
-    E.Fmap t -> fmapFromType t
+
+    E.BinOp nm e1 e2 ->
+      case nm of
+        "+" -> do 
+          Prim (IntVal i1) <- evalExprStep e1
+          Prim (IntVal i2) <- evalExprStep e2
+          pure (Prim (IntVal (i1 + i2)))
+        _ -> pure $ runtimeErr ("binary operator " ++ show nm ++ " is not supported")
 
     {-
     E |- (\body outer -> body (fmap_F (\inner -> <inner, primRec_F body inner>) outer)) \\ v
@@ -195,19 +214,6 @@ evalExprStep (A ann expr') =
     primRec body
     => \x -> body (fmap (\x -> (x, primRec body x)) x)
     -}
-    E.PrimRec t -> do
-      let oname = UName "__outer__"
-      let ovar = var oname
-      let iname = UName "__inner__"
-      let ivar = var iname
-      let bdnm = UName "__body__"
-      let bdvar = var bdnm
-
-      let conte = (primRec t `app` bdvar) `app` ivar
-      let etup = tuple [ivar, conte]
-      let fmaplam = lam iname Nothing etup
-      let fmape = (fmapE t `app` fmaplam) `app` (unfoldE `app` ovar)
-      evalExprStep $ lam' bdnm $ lam' oname $ bdvar `app` fmape
       
     E.App e1 e2 -> do
       !v1 <- evalExprStep e1
@@ -237,9 +243,6 @@ evalExprStep (A ann expr') =
 
         _ -> pure . runtimeErr $ show $  pretty v1 <+> pretty v2 <+> "is not a legal application at" <+> pretty ann
 
-    E.Ann e _t -> evalExprStep e
-
-    E.Tuple ts -> Tuple <$> sequence (map evalExprStep ts) 
 
     E.Let p e1 e2 -> do
       v1 <- evalExprStep e1
@@ -248,11 +251,6 @@ evalExprStep (A ann expr') =
         Right env' -> withEnv (const env') $ evalExprStep e2
         Left err -> pure . runtimeErr $ "Let match failed: " ++ err
     
-    E.Case e1 cs -> do
-      v1 <- evalExprStep e1
-      evalClauses v1 cs
-
-    E.TypeApp e _t -> evalExprStep e
 
 
 -- proof that the except monad is not lazy
@@ -274,58 +272,42 @@ force = \case
   Delay v -> pure v
   v -> pure v
 
--- findTickAbstractions :: Value a -> [Value a -> Value a]
--- findTickAbstractions = go where
---   go v = case v of
---     Prim p -> const v
---     Var nm  -> pretty nm
---     TickVar nm  -> pretty nm
---     Closure env n e -> parens $ group $ "\\" <> pretty n <+> "->" <+> pretty e -- <> line <> indent 4 ("closed over" <+> pret i env)
---     TickClosure env n e -> 
---       let penv = if i > 0 then line <> indent 4 ("closed over" <+> prettyEnv i env)
---                           else ""
---       in  parens $ group $ "\\\\" <> pretty n <+> "->" <+> pretty e <> penv
---     Tuple vs -> tupled (map (pret i) vs)
---     Constr nm [] -> pretty nm
---     Constr nm vs -> parens $ pretty nm <+> fillSep (map (pret (i-1)) vs)
---     Fold v       -> parens $ "fold" <+> (pret i v)
---     Delay v       -> parens $ "delay" <+> (pret i v)
-
-{-
-eval tree => Branch x &1 &2
-=> 
--}
-
--- evalExprClock :: Pretty a => Expr a -> EvalM a (Value a)
--- evalExprClock expr = do
---   v <- evalExprStep
---   modifyThunks forceAll
-
-
-
 {- evalExprCorec (fix (\g -> cons z g))
   => Constr "Cons" [Constr "Z" [], TickClosure _ _ e]
   => Constr "Cons" [Constr "Z" [], Constr "Cons" [Constr "Z", TickClosure _ _ e]]
 -}
--- evalExprsCorec :: Pretty a => Int -> [Expr a] -> EvalM a (Value a)
--- evalExprsCorec n [] = runtimeErr $ "Output endeded"
--- evalExprsCorec n (expr : exprs) = 
+-- evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
+-- evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
+--   go n v | n <= 0 = pure (runtimeErr $ "Evaluation limit reached")
+--   go n v = do
+--     case v of
+--       Constr nm vs -> Constr nm <$> evalMany n vs
+--       Fold v' -> Fold <$> go n v'
+--       Tuple vs -> Tuple <$> evalMany n vs
+--       _ -> pure v
+
+--   evalMany _ [] = pure []
+--   evalMany n (v:vs) = do 
+--     v' <- go (n-1) =<< force v
+--     (v' :) <$> evalMany (n-1) vs
 
 evalExprCorec :: Pretty a => Expr a -> EvalM a (Value a)
-evalExprCorec expr = go (1000000 :: Int) =<< evalExprStep expr where 
-  go n v | n <= 0 = pure (runtimeErr $ "Evaluation limit reached")
-  go n v = do
+evalExprCorec expr = go =<< evalExprStep expr where 
+  go v = do
     case v of
-      Constr nm vs -> Constr nm <$> evalMany n vs
-      Fold v' -> Fold <$> go n v'
-      Tuple vs -> Tuple <$> evalMany n vs
+      Constr nm vs -> Constr nm <$> evalMany vs
+      Fold v' -> Fold <$> go v'
+      Tuple vs -> Tuple <$> evalMany vs
       _ -> pure v
 
-  -- evalMany n vs = foldr (\x acc -> (go (n-1) =<< force x) >>= (\v' -> (v' :) <$> acc)) (pure []) vs
-  evalMany _ [] = pure []
-  evalMany n (v:vs) = do 
-    v' <- go (n-1) =<< force v
-    (v' :) <$> evalMany (n-1) vs
+  evalMany = foldrM folder [] where
+    folder v acc = do
+      (:acc) <$> (go =<< force v)
+      
+  -- evalMany [] = pure []
+  -- evalMany (v:vs) = do 
+  --   v' <- go =<< force v
+  --   (v' :) <$> evalMany vs
 
 evalStepDefinitions :: Pretty a => EvalRead a -> UsageGraph -> Defs a -> Name -> TypingM a (EvalRead a)
 evalStepDefinitions er ug defs defnm = do

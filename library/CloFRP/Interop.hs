@@ -65,10 +65,10 @@ data CloTy
 -- using kind-promotion
 data Sing :: CloTy -> * where
   SFree   :: KnownSymbol s => Proxy s -> Sing ('CTFree s)
-  SPair   :: Sing t1 -> Sing t2           -> Sing ('CTTuple '[t1, t2])
+  SPair   :: Sing t1 -> Sing t2            -> Sing ('CTTuple '[t1, t2])
   STup    :: Sing t  -> Sing ('CTTuple ts) -> Sing ('CTTuple (t ': ts))
-  SApp    :: Sing t1 -> Sing t2           -> Sing (t1 ':@:  t2)
-  SArr    :: Sing t1 -> Sing t2           -> Sing (t1 ':->: t2)
+  SApp    :: Sing t1 -> Sing t2            -> Sing (t1 ':@:  t2)
+  SArr    :: Sing t1 -> Sing t2            -> Sing (t1 ':->: t2)
 
 instance Show (Sing ct) where
   show x = case x of
@@ -76,7 +76,7 @@ instance Show (Sing ct) where
     t1 `SArr` t2 -> show t1 ++ " -> " ++ show t2
     t1 `SApp` t2 -> "(" ++ show t1 ++ " " ++ show t2 ++ ")"
     t1 `SPair` t2 -> "(" ++ show t1 ++ ", " ++ show t2 ++ ")"
-    STup t ts -> 
+    STup t ts ->
       "(" ++ show t ++ ", " ++ tupShow ts
       where
         tupShow :: Sing ('CTTuple ts') -> String
@@ -89,7 +89,7 @@ deriving instance Eq (Sing a)
 -- deriving instance Show (Sing a)
 deriving instance Typeable (Sing a)
 
--- -- |Reify a singleton back into an FRP type
+-- |Reify a singleton back into an CloFRP type. Not used presently
 reifySing :: Sing t -> Type () 'Poly
 reifySing = \case
   SFree px -> A () $ P.TFree (P.UName $ symbolVal px)
@@ -101,7 +101,7 @@ reifySing = \case
     where
         tupleSing :: Sing (CTTuple ts') -> [Type () 'Poly]
         tupleSing (SPair x y) = [reifySing x, reifySing y]
-        tupleSing (STup t' ts') = reifySing t' : tupleSing ts' 
+        tupleSing (STup t' ts') = reifySing t' : tupleSing ts'
 
 infixr 0 `SArr`
 infixl 9 `SApp`
@@ -120,28 +120,28 @@ deriving instance Typeable a => Typeable (CloFRP t a)
 instance Show (CloFRP t a) where
   show (CloFRP er es expr sing) = pps expr
 
--- -- |Use template haskell to generate a singleton value that represents
--- -- an FRP type
+-- |Use template haskell to generate a singleton value that represents
+-- a CloFRP type
 typeToSingExp :: Type a 'Poly -> ExpQ
 typeToSingExp (A _ typ') = case typ' of
-  P.TFree (P.UName nm) -> 
+  P.TFree (P.UName nm) ->
     let nmQ = pure (S.LitT (S.StrTyLit nm))
     in  [| SFree (Proxy :: (Proxy $(nmQ))) |]
-  t1 P.:->: t2         -> 
+  t1 P.:->: t2         ->
     let s1 = typeToSingExp t1
         s2 = typeToSingExp t2
     in  [| $(s1) `SArr` $(s2) |]
-  t1 `P.TApp` t2          -> 
+  t1 `P.TApp` t2          ->
     let s1 = typeToSingExp t1
         s2 = typeToSingExp t2
     in  [| $(s1) `SApp` $(s2) |]
-  P.TTuple ts -> 
+  P.TTuple ts ->
     case ts of
       (x1 : x2 : xs) -> do
         let s1 = typeToSingExp x1
             s2 = typeToSingExp x2
             base = [| $(s1) `SPair` $(s2) |]
-        foldr (\x acc -> [| STup $(typeToSingExp x) $(acc) |]) base xs -- foldl'' here but its never gonna be a real problem
+        foldr (\x acc -> [| STup $(typeToSingExp x) $(acc) |]) base xs 
       _ -> fail $ "Cannot convert tuples of " ++ show (length ts) ++ " elements"
 
   _                    -> fail "Can only convert free types, tuples, and arrow types atm"
@@ -151,6 +151,10 @@ class ToHask (t :: CloTy) (r :: *) | t -> r where
 
 class ToCloFRP (r :: *) (t :: CloTy) | t -> r where
   toCloFRP :: Sing t -> r -> Value a
+
+instance ToHask ('CTFree "Int") Integer where
+  toHask _ (Prim (IntVal i)) = i
+  toHask _ v = error $ "expected int but got " ++ pps v
 
 instance (ToCloFRP h1 c1, ToCloFRP h2 c2) => ToCloFRP (h1, h2) ('CTTuple [c1, c2]) where
   toCloFRP (SPair s1 s2) (x1, x2) = Tuple [toCloFRP s1 x1, toCloFRP s2 x2]
@@ -178,7 +182,7 @@ stepCloFRP (CloFRP er st expr sing) = runEvalMState (evalExprStep expr) er st
 transform :: (Pretty a, ToCloFRP hask1 clott1, ToHask clott2 hask2)
           => CloFRP (clott1 :->: clott2) a -> hask1 -> hask2
 transform (CloFRP er st expr (SArr s1 s2)) input = toHask s2 $ runEvalMState (evl expr) er st where
-  evl e = do 
+  evl e = do
     Closure cenv nm ne <- evalExprStep e
     let inv = toCloFRP s1 input
     let cenv' = extendEnv nm inv cenv

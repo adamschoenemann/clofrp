@@ -489,7 +489,7 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 main :: IO ()
 main = do
   putStrLn "running benchmar"
-  bench_scaryConst  
+  bench_binTree
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000
@@ -561,10 +561,38 @@ bench_scaryConst = do
     type Stream (k : Clock) a = Fix (StreamF k a).
     data Unit = MkUnit.
 
-    const : forall (k : Clock) a. a -> Stream k a.
-    const = \x -> fix (\g -> fold (Cons x g)).
+    cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+    cons = \x xs -> fold (Cons x xs).
 
-    main : Stream K0 (Stream K0 Unit).
-    main = const (const MkUnit).
+    const : forall (k : Clock) a. a -> Stream k a.
+    const = \x -> fix (\g -> cons x g).
+
+    strmap : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+    strmap = \f -> 
+      let mapfix = \g xs ->
+            case unfold xs of
+            | Cons x xs' -> cons (f x) (\\(af : k) -> g [af] (xs' [af]))
+      in fix mapfix.
+
+    -- nats : forall (k : Clock). Stream k Int.
+    -- nats = fix (\g -> cons 0 (\\(af : k) -> strmap (\x -> x + 1) (g [af]))).
+
+    nats : forall (k : Clock). Int -> Stream k Int.
+    nats = fix (\g n -> cons n (\\(af : k) -> g [af] (n + 1))).
+
+    -- data Bool = True | False.        
+    -- truefalse : forall (k : Clock). Stream k Bool.
+    -- truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
+
+    main : Stream K0 (Stream K0 Int).
+    main = const (nats 0).
+
   |]
-  putStrLn . show $ take 500000 $ map (take 500000) $ execute sc
+  -- let nats = fix (\n -> (0::Int) : map (+1) n) 
+  -- putStrLn . show $ take 12000 nats
+  putStrLn . show $ take 50 $ map (take 500000) $ execute sc
+  -- putStrLn . show $ take 1000 $ execute sc
+
+fix :: (a -> a) -> a
+-- fix f = let x = f x in  x
+fix f = f (fix f)
