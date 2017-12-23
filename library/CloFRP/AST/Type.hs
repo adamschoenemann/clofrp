@@ -242,5 +242,6 @@ extractKappa (A _ kv) =
   case kv of
     TExists k -> pure k
     TVar    k -> pure k
-    TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
+    TFree   k -> pure k
+    -- TFree  "K0" -> pure "K0" -- FIXME: K0 Hack
     _         -> Left $ show $ "Expected clock variable but got" <+> pretty kv
