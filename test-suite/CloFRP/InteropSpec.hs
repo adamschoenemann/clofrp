@@ -96,7 +96,7 @@ type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTNat = 'CTFree "Nat"
 
 clott_add :: CloFRP (CTStream :@: CTTuple [CTNat, CTNat] :->: CTStream :@: CTNat) SourcePos
-clott_add = [clott|
+clott_add = [clofrp|
   data NatF f = Z | S f deriving Functor.
   type Nat = Fix (NatF).
   s : Nat -> Nat.
@@ -141,7 +141,7 @@ interopSpec :: Spec
 interopSpec = do
   describe "execute" $ do
     it "works with bool" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data Bool = True | False.
         main : Bool.
         main = True.
@@ -149,7 +149,7 @@ interopSpec = do
       execute prog `shouldBe` True
 
     it "works with nats" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data NatF f = Z | S f deriving Functor.
         type Nat = Fix (NatF).
 
@@ -165,7 +165,7 @@ interopSpec = do
       execute prog `shouldBe` 5
     
     it "it works for every-other" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
         type Stream (k : Clock) a = Fix (StreamF k a).
         data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
@@ -218,7 +218,7 @@ interopSpec = do
 
   describe "transform" $ do
     it "works with Bool -> Bool" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data Bool = True | False.
         main : Bool -> Bool.
         main = \x -> 
@@ -229,7 +229,7 @@ interopSpec = do
       transform prog False `shouldBe` True
 
     it "works with double (Nat)" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data NatF f = Z | S f deriving Functor.
         type Nat = Fix (NatF).
 
@@ -253,7 +253,7 @@ interopSpec = do
       transform prog 5 `shouldBe` 10
     
     it "works with wrapped types" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data Wrap a = Wrap a deriving Functor.
         data Foo a = Foo (Wrap a) deriving Functor.
         data Bool = True | False.
@@ -265,7 +265,7 @@ interopSpec = do
       transform prog (Foo (Wrap True)) `shouldBe` True
     
     it "works with tuples (1)" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data Bool = True | False.
         main : Bool -> (Bool, Bool).
         main = \x -> (x, x).
@@ -273,7 +273,7 @@ interopSpec = do
       transform prog True `shouldBe` (True, True)
 
     it "works with tuples (2)" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data Bool = True | False.
         main : Bool -> (Bool, Bool, Bool).
         main = \x -> (x, x, x).
@@ -281,7 +281,7 @@ interopSpec = do
       transform prog True `shouldBe` (True, True, True)
     
     it "works with fixpoint (1)" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
         type Stream (k : Clock) a = Fix (StreamF k a).
         data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
@@ -316,7 +316,7 @@ interopSpec = do
       output `shouldBe` expected
 
     it "it works for every-other" $ do
-      let prog = [clott|
+      let prog = [clofrp|
         data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
         type Stream (k : Clock) a = Fix (StreamF k a).
         data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).

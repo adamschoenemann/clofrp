@@ -128,7 +128,7 @@ eitherBinTree l r = Branch (Left l) (constBinTree (Left l)) (constBinTree (Right
 
 -- type CTNat = 'CTFree "Nat"
 
-everyOtherExec = [clott|
+everyOtherExec = [clofrp|
   data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
   type Stream (k : Clock) a = Fix (StreamF k a).
   data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
@@ -178,7 +178,7 @@ everyOtherExec = [clott|
     xs.
 |]
 
-everyOtherTrans = [clott|
+everyOtherTrans = [clofrp|
   data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
   type Stream (k : Clock) a = Fix (StreamF k a).
   data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
@@ -226,7 +226,7 @@ everyOtherTrans = [clott|
     xs.
 |]
 
-simpleTrans = [clott|
+simpleTrans = [clofrp|
   data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
   type Stream (k : Clock) a = Fix (StreamF k a).
   data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
@@ -261,7 +261,7 @@ simpleTrans = [clott|
   main = \xs -> negate xs.
 |]
 
-binTree = [clott|
+binTree = [clofrp|
   data BinTreeF (k : Clock) a f = Branch a (|>k f) (|>k f).
   type BinTree (k : Clock) a = Fix (BinTreeF k a).
   data Unit = MkUnit.
@@ -279,7 +279,7 @@ binTree = [clott|
 |]
 
 replaceMin = 
-  [clott|
+  [clofrp|
       -- applicative structure        
       pure : forall (k : Clock) a. a -> |>k a.
       pure = \x -> \\(af : k) -> x.
@@ -395,7 +395,7 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
     in (Br l' r', min ml mr)
 
 -- streamProcessing = 
---   [clott|
+--   [clofrp|
 --     data SPF i o (k : Clock) f
 --       = Get (i -> f)
 --       | Put o (|>k f)
@@ -556,7 +556,7 @@ bench_clott_add = do
 
 bench_scaryConst :: IO ()
 bench_scaryConst = do
-  let sc = [clott|
+  let sc = [clofrp|
     data StreamF (k : Clock) a f = Cons a (|>k f).
     type Stream (k : Clock) a = Fix (StreamF k a).
     data Unit = MkUnit.

@@ -74,15 +74,15 @@ unsafeProg = QuasiQuoter
       ast <- liftParse P.prog s
       liftData ast
 
-clott :: QuasiQuoter
-clott = QuasiQuoter
-  { quoteExp  = quoteClott
+clofrp :: QuasiQuoter
+clofrp = QuasiQuoter
+  { quoteExp  = quoteclofrp
   , quotePat  = undefined
   , quoteDec  = undefined
   , quoteType = undefined
   } where
-    quoteClott :: String -> Q Exp
-    quoteClott s = do
+    quoteclofrp :: String -> Q Exp
+    quoteclofrp s = do
       prog <- liftParse P.prog s
       case runCheckProg mempty prog of
         (Left err, _, _) -> fail (ppsw 200 err)

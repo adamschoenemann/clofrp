@@ -13,7 +13,7 @@ type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTNat = 'CTFree "Nat"
 
 clott_add :: CloFRP (CTStream :@: CTTuple [CTNat, CTNat] :->: CTStream :@: CTNat) SourcePos
-clott_add = [clott|
+clott_add = [clofrp|
   data NatF f = Z | S f deriving Functor.
   type Nat = Fix (NatF).
   s : Nat -> Nat.
