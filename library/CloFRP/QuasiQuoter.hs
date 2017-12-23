@@ -84,14 +84,21 @@ clofrp = QuasiQuoter
     quoteclofrp :: String -> Q Exp
     quoteclofrp s = do
       prog <- liftParse P.prog s
+      checkProgQExp prog
+      (expr, ty, rd) <- progToEvalQExp prog 
+      let sing  = typeToSingExp ty
+      let exprQ = liftData expr
+      let rdQ   = liftData rd
+      let stQ   = liftData (initEvalState @(SourcePos))
+      [|CloFRP $(rdQ) $(stQ) $(exprQ) $(sing)|]
+    
+    checkProgQExp prog =
       case runCheckProg mempty prog of
         (Left err, _, _) -> fail (ppsw 200 err)
-        (Right _,  _, _) -> 
-          case runTypingM0 (progToEval @(SourcePos) (UName "main") prog) mempty of
-            (Right (expr, ty, rd), _, _) -> do
-              let sing = typeToSingExp ty
-              let exprQ = liftData expr
-              let rdQ = liftData rd
-              let stQ = liftData (initEvalState @(SourcePos))
-              [|CloFRP $(rdQ) $(stQ) $(exprQ) $(sing)|]
-            (Left (err,_), _, _) -> fail (pps err)
+        (Right _, _, _)  -> pure ()
+    
+    progToEvalQExp prog =
+      case runTypingM0 (progToEval @(SourcePos) (UName "main") prog) mempty of
+        (Right (expr, ty, rd), _, _) -> pure (expr, ty, rd)
+        (Left (err,_), _, _) -> fail (pps err)
+      

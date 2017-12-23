@@ -201,10 +201,10 @@ evalExprOver f = foldr mapping (const $ pure $ runtimeErr "End of input") f wher
       _ -> error (pps v)
 
 
-streamTrans :: (Pretty a, ToCloFRP hask1 clott1, ToHask clott2 hask2)
-            => CloFRP ('CTFree "Stream" ':@: 'CTFree "K0" ':@: clott1
+streamTrans :: (Pretty a, ToCloFRP hask1 clott1, ToHask clott2 hask2, KnownSymbol k)
+            => CloFRP ('CTFree "Stream" ':@: 'CTFree k ':@: clott1
                       ':->:
-                      'CTFree "Stream" ':@: 'CTFree "K0" ':@: clott2) a
+                      'CTFree "Stream" ':@: 'CTFree k ':@: clott2) a
             -> [hask1] -> [hask2]
 streamTrans (CloFRP er st expr ((s1 `SApp` _ `SApp` s2) `SArr` (s3 `SApp` s4 `SApp` s5))) input = do
   fromCloFRPStream $ runEvalMState (begin input) er st
@@ -215,7 +215,7 @@ streamTrans (CloFRP er st expr ((s1 `SApp` _ `SApp` s2) `SArr` (s3 `SApp` s4 `SA
       let inputs = map (makeInput ann) xs
       withEnv (const env) $ evalExprOver inputs e'
 
-    makeInput ann z = Fold $ Constr "Cons" [toCloFRP s2 z, TickClosure mempty "#_" $ A ann $ P.Prim P.Input]
+    makeInput ann z = Fold $ Constr "Cons" [toCloFRP s2 z, TickClosure mempty "_" $ A ann $ P.Prim P.Input]
 
     fromCloFRPStream (Fold (Constr "Cons" [v, c])) = toHask s5 v : fromCloFRPStream c
     fromCloFRPStream v = error $ "fromCloFRPStream:" ++ pps v
