@@ -261,7 +261,9 @@ kindOf ty = go ty `decorateErr` decorate where
           _    -> otherErr $ show $ pretty tau <+> "must have kind * at" <+> pretty ty <+> "but had kind" <+> pretty k'
 
     where
-      freeNotFound v = nameNotFound v `decorateErr` (Other "looking up a free variable")
+      freeNotFound v = do
+        kctx <- getKCtx
+        nameNotFound v `decorateErr` (Other $ show $ "looking up a free variable in kind-ctx" <+> pretty kctx)
 
   decorate = Other $ show $ "kindOf" <+> (pretty ty)
 
@@ -1022,7 +1024,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 inferPrim :: a -> Prim -> TypingM a (Type a 'Poly, LocalCtx a)
 inferPrim ann p = case p of
   Unit   -> (A ann (TFree $ UName "Unit"), ) <$> getCtx
-  Integer _  -> (A ann (TFree $ UName "Nat"), ) <$> getCtx
+  Integer _  -> (A ann (TFree $ UName "Int"), ) <$> getCtx
   Undefined -> (A ann $ Forall "a" Star (A ann $ TVar "a"), ) <$> getCtx
 
   -- TODO: The tick constant unifies with any clock variable?

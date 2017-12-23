@@ -9,6 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -24,6 +25,7 @@ import Control.Monad.State ()
 import Data.String (fromString)
 
 import CloFRP.AST.Name
+import CloFRP.Utils ((|->))
 import CloFRP.Annotated
 import CloFRP.AST hiding (exists)
 import CloFRP.Pretty
@@ -180,10 +182,12 @@ newtype TypingM a r = Typ { unTypingM :: ExceptT (TypingErr a) (RWS (TypingRead 
 type TypingMRes a r = (Either (TypingErr a) r, TypingState, TypingWrite a)
 
 runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
-runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) r s
+runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) (r `mappend` initRead) s
 
 initRead :: TypingRead a 
-initRead = TR { trFree = mempty, trCtx = mempty, trKinds = mempty, trDestrs = mempty, trInstances = mempty }
+initRead = 
+  let initKinds = ["Int" |-> Star, "K0" |-> ClockK]
+  in  TR { trFree = mempty, trCtx = mempty, trKinds = initKinds, trDestrs = mempty, trInstances = mempty }
 
 getCtx :: TypingM a (LocalCtx a)
 getCtx = asks trCtx

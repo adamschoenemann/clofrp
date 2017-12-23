@@ -77,6 +77,7 @@ type CTBinTree = 'CTFree "BinTree" :@: 'CTFree "K0"
 
 instance ToHask ('CTFree "Unit") () where
   toHask _ (Constr "MkUnit" []) = ()
+  toHask _ v = error $ "Unit.toHask: " ++ pps v
 
 data Tree a = Leaf a | Br (Tree a) (Tree a) deriving (Eq, Show)
 
@@ -488,7 +489,7 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 main :: IO ()
 main = do
   putStrLn "running benchmar"
-  bench_clott_add
+  bench_scaryConst  
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000
@@ -552,3 +553,18 @@ bench_clott_add = do
   let inputs = zip (repeat 1) (repeat 1)
   let output = take n (streamTrans clott_add inputs)
   putStrLn . show $ output
+
+bench_scaryConst :: IO ()
+bench_scaryConst = do
+  let sc = [clott|
+    data StreamF (k : Clock) a f = Cons a (|>k f).
+    type Stream (k : Clock) a = Fix (StreamF k a).
+    data Unit = MkUnit.
+
+    const : forall (k : Clock) a. a -> Stream k a.
+    const = \x -> fix (\g -> fold (Cons x g)).
+
+    main : Stream K0 (Stream K0 Unit).
+    main = const (const MkUnit).
+  |]
+  putStrLn . show $ take 500000 $ map (take 500000) $ execute sc

@@ -19,6 +19,7 @@ import Debug.Trace
 import Data.Data (Data, Typeable)
 import Data.Monoid
 import Data.Foldable
+import Control.Monad ((<=<))
 import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
 import Control.Monad.Writer (censor)
@@ -378,17 +379,17 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
     checkAliases = traverse traverseAlias aliases
     checkInstances = traverse traverseInstances (unInstanceCtx instances)
 
-    initKinds = extend "K0" ClockK kinds
-    ctx = TR {trKinds = initKinds, trFree = types, trDestrs = destrs, trCtx = mempty, trInstances = instances}
+    -- initKinds = extend "Int" Star $ extend "K0" ClockK kinds
+    ctx = initRead `mappend `TR {trKinds = kinds, trFree = types, trDestrs = destrs, trCtx = mempty, trInstances = instances}
 
-    traverseTypes k v = validType kinds v `decorateErr` (Other $ show $ "When checking" <+> pretty k)
+    traverseTypes k v = validType (trKinds ctx) v `decorateErr` (Other $ show $ "When checking" <+> pretty k)
 
     traverseDefs k expr = case query k types of
       Just ty -> do -- reset name state and discard old inference tree output with censor
         resetNameState
-        let ctx' = ctx {trFree = delete k (trFree ctx)}
-        -- local (const ctx') $ check expr ty
-        censor (const []) $ local (const ctx') $ check expr ty
+        let ctx' = ctx { trFree = delete k (trFree ctx) }
+        local (const ctx') $ check expr ty
+        -- censor (const []) $ local (const ctx') $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
     traverseAlias (Alias {alBound, alExpansion}) = do
@@ -405,7 +406,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
 
 
 checkProg :: Prog a -> TypingM a ()
-checkProg = (checkElabedProg =<<) . elabProg
+checkProg = checkElabedProg <=< elabProg
 
 runCheckProg :: TypingRead a -> Prog a -> TypingMRes a ()
 runCheckProg rd p = runTypingM (checkProg p) rd initState

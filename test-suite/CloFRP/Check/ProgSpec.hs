@@ -70,8 +70,8 @@ progSpec = do
 
     it "succeeds for mono-types" $ do
       let Right prog = pprog [text|
-        data Int = .
-        data IntList = Nil | Cons Int IntList.
+        data Unit = MkUnit.
+        data UnitList = Nil | Cons Unit UnitList.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -304,12 +304,12 @@ progSpec = do
     it "suceeds for polymorphic patterns (1)" $ do
       let Right prog = pprog [text|
         data Maybe a = Nothing | Just a.
-        data Int = .
-        data FooBar = Foo Int | Bar.
+        data Unit = MkUnit.
+        data FooBar = Foo Unit | Bar.
         m1 : forall a. Maybe a.
         m1 = Nothing.
 
-        isFoo : FooBar -> Maybe Int.
+        isFoo : FooBar -> Maybe Unit.
         isFoo = \x ->
           case x of
             | Bar -> Nothing
@@ -397,6 +397,15 @@ progSpec = do
             | Cons x xs' -> Just x.
       |]
       runCheckProg mempty prog `shouldYield` ()
+
+    it "succeeds for built-in types" $ do
+      let Right prog = pprog [text|
+        data Maybe a = Nothing | Just a. 
+        main : Maybe Int.
+        main = Just 10.
+      |]
+      runCheckProg mempty prog `shouldYield` ()
+    
     
     it "succeeds for let bindings" $ do
       let Right prog = pprog [text|
