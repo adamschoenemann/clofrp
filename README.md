@@ -90,7 +90,7 @@ The code is split into several folders and modules:
 ## Type Synonyms
 - Right now, type synonym expansion is kind of a mess tbh. Here is a maybe better algorithm:
   - Go through each synonym, and "fixpoint" expand them
-    - If an synonym encounters itself in its expansion, its recursive so we fail
+    - If a synonym encounters itself in its expansion, its recursive so we fail
     - If not, every synonym is expanded into its "most-expanded" (normal) form
   - After each synonym is in normal form, go through each type (signatures and annotations in expressions)
     - We know the arity n of each synonym, so we should be able to simply search for its name applied to n

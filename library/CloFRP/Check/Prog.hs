@@ -98,7 +98,7 @@ data ElabProg a = ElabProg
 data SynonymExpansion a
   = Done (Type a 'Poly) -- a fully expanded synonym
   -- | the Name is the name of the synonym
-  | Ex Name (Type a 'Poly -> SynonymExpansion a) -- an synonym that still needs at least one application
+  | Ex Name (Type a 'Poly -> SynonymExpansion a) -- a synonym that still needs at least one application
 
 instance Eq (SynonymExpansion a) where
   Done t1 == Done t2 = t1 =%= t2
