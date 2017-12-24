@@ -87,7 +87,7 @@ The code is split into several folders and modules:
   - rec types
   - tuples ✓
 
-## Type Synonymes
+## Type Synonyms
 - Right now, type synonym expansion is kind of a mess tbh. Here is a maybe better algorithm:
   - Go through each synonym, and "fixpoint" expand them
     - If an synonym encounters itself in its expansion, its recursive so we fail

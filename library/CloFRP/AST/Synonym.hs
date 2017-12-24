@@ -17,17 +17,17 @@ import CloFRP.AST.Kind
 
 data Synonym a = 
   Synonym
-    { alName :: Name
-    , alBound :: [(Name, Kind)]
-    , alExpansion :: Type a 'Poly
+    { synName :: Name
+    , synBound :: [(Name, Kind)]
+    , synExpansion :: Type a 'Poly
     } deriving (Show, Eq, Data, Typeable)
 
 
 instance Unann (Synonym a) (Synonym ()) where
-  unann al = al { alExpansion = unann (alExpansion al) }
+  unann al = al { synExpansion = unann (synExpansion al) }
 
 instance Pretty (Synonym a) where
-  pretty (Synonym {alName, alBound, alExpansion}) = "type" <+> pretty alName <> boundp <+> "=" <+> pretty alExpansion
-    where boundp = if null alBound then "" else  " " <> (sep $ map (uncurry $ prettyBound True) alBound)
+  pretty (Synonym {synName, synBound, synExpansion}) = "type" <+> pretty synName <> boundp <+> "=" <+> pretty synExpansion
+    where boundp = if null synBound then "" else  " " <> (sep $ map (uncurry $ prettyBound True) synBound)
 
   

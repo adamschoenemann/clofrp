@@ -41,7 +41,7 @@ import CloFRP.Derive
 
 -- synonym for definitions
 type Defs a = M.Map Name (Expr a)
-type Synonymes a = M.Map Name (Synonym a)
+type Synonyms a = M.Map Name (Synonym a)
 type Deriving a = M.Map Name [Datatype a] -- Class to list of data-types
 
 data ElabRes a = ElabRes
@@ -50,7 +50,7 @@ data ElabRes a = ElabRes
   , erSigs    :: FreeCtx a    -- signatures
   , erConstrs :: FreeCtx a    -- constructors
   , erDestrs  :: DestrCtx  a  -- destructors
-  , erSynonymes :: Synonymes a    -- type synonyms
+  , erSynonyms :: Synonyms a    -- type synonyms
   , erDeriving :: Deriving a  -- data-types that must derive stuff
   } deriving (Show, Eq, Data, Typeable)
 
@@ -62,7 +62,7 @@ instance Monoid (ElabRes a) where
             , erSigs     = erSigs     er1 `mappend` erSigs     er2
             , erConstrs  = erConstrs  er1 `mappend` erConstrs  er2
             , erDestrs   = erDestrs   er1 `mappend` erDestrs   er2
-            , erSynonymes  = erSynonymes  er1 `mappend` erSynonymes  er2
+            , erSynonyms = erSynonyms er1 `mappend` erSynonyms er2
             , erDeriving = erDeriving er1 `mappend` erDeriving er2
             }
 
@@ -71,7 +71,7 @@ data ElabProg a = ElabProg
   , types   :: FreeCtx a
   , defs    :: Defs a
   , destrs  :: DestrCtx a
-  , synonyms :: Synonymes a
+  , synonyms :: Synonyms a
   , instances :: InstanceCtx a
   } deriving (Show, Eq, Typeable)
 
@@ -118,15 +118,15 @@ instance Monoid a => Show (SynonymExpansion a) where
 
 synonymExpansion :: a -> Synonym a -> SynonymExpansion a
 synonymExpansion ann = go 0 . deb where 
-  deb al@(Synonym {alBound = b, alExpansion = ex}) =
-    al { alExpansion = deBruijnify ann (map fst b) ex } 
+  deb al@(Synonym { synBound = b, synExpansion = ex }) =
+    al { synExpansion = deBruijnify ann (map fst b) ex } 
 
-  go i al@(Synonym {alName = nm, alBound = b, alExpansion = ex}) =
+  go i al@(Synonym { synName = nm, synBound = b, synExpansion = ex }) =
     case b of
       [] -> Done ex
       _:xs -> Ex nm $ \t ->
           let ex' = subst t (DeBruijn i) ex
-          in  go (i+1) (al { alBound = xs, alExpansion = ex' }) 
+          in  go (i+1) (al { synBound = xs, synExpansion = ex' }) 
 
 -- Change type-variables to use debruijn indices based on the order induced
 -- by the second argument. Type-variables that do not appear in the list are
@@ -136,25 +136,25 @@ deBruijnify ann = go 0 where
   go _ []     ty = ty
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
-checkRecSynonymes :: forall a. Synonymes a -> TypingM a ()
-checkRecSynonymes als = sequence (M.map checkAl als) *> pure () where
-  checkAl (Synonym {alName, alExpansion}) = checkRecAl alName alExpansion
-  checkRecAl :: Name -> Type a 'Poly -> TypingM a ()
-  checkRecAl name (A _ ty') = 
+checkRecSynonyms :: forall a. Synonyms a -> TypingM a ()
+checkRecSynonyms als = sequence (M.map checkSyn als) *> pure () where
+  checkSyn (Synonym {synName, synExpansion}) = checkRecSyn synName synExpansion
+  checkRecSyn :: Name -> Type a 'Poly -> TypingM a ()
+  checkRecSyn name (A _ ty') = 
     case ty' of
       TFree n 
         | n == name                  -> otherErr $ show name ++ " is recursive"
-        | Just al' <- M.lookup n als -> checkRecAl name (alExpansion al')
+        | Just al' <- M.lookup n als -> checkRecSyn name (synExpansion al')
         | otherwise                  -> pure ()
 
       TVar _         -> pure ()
       TExists _      -> pure ()
-      TApp t1 t2     -> checkRecAl name t1 *> checkRecAl name t2
-      t1 :->: t2     -> checkRecAl name t1 *> checkRecAl name t2
-      Forall _n _k t -> checkRecAl name t
-      RecTy  t       -> checkRecAl name t
-      TTuple ts      -> traverse (checkRecAl name) ts *> pure ()
-      Later _k t     -> checkRecAl name t
+      TApp t1 t2     -> checkRecSyn name t1 *> checkRecSyn name t2
+      t1 :->: t2     -> checkRecSyn name t1 *> checkRecSyn name t2
+      Forall _n _k t -> checkRecSyn name t
+      RecTy  t       -> checkRecSyn name t
+      TTuple ts      -> traverse (checkRecSyn name) ts *> pure ()
+      Later _k t     -> checkRecSyn name t
             
 
 
@@ -168,14 +168,14 @@ checkRecSynonymes als = sequence (M.map checkAl als) *> pure () where
   = (Either _ a, Either b c)
   = (Either (Either b c) a)
 -}
-expandSynonymes :: forall a. Synonymes a -> Type a 'Poly -> TypingM a (Type a 'Poly)
-expandSynonymes als t = 
+expandSynonyms :: forall a. Synonyms a -> Type a 'Poly -> TypingM a (Type a 'Poly)
+expandSynonyms als t = 
   -- fixpoint it! for recursive synonym expansion
   -- recursive type synonyms will make this non-terminating, so its good
   -- that we check for those first :)
   go t >>= \case 
     Done t' | t =%= t' -> pure t'
-            | otherwise -> expandSynonymes als t'
+            | otherwise -> expandSynonyms als t'
     Ex nm _ -> wrong nm
   where
     go :: Type a 'Poly -> TypingM a (SynonymExpansion a)
@@ -232,7 +232,7 @@ collectDecls :: Prog a -> ElabRes a
 collectDecls (Prog decls) = foldr folder mempty decls where
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> ElabRes a
-    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erSynonymes = als, erDeriving = drv}) = case x of
+    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erSynonyms = als, erDeriving = drv}) = case x of
       DataD dt@(Datatype nm b cs' derivs) ->
         let (tys, dstrs) = elabCs nm b cs' 
             drv' = foldr (\x acc -> M.insertWith (++) (UName x) [dt] acc) drv derivs
@@ -240,7 +240,7 @@ collectDecls (Prog decls) = foldr folder mempty decls where
 
       FunD nm e        -> er {erDefs = M.insert nm e fs}
       SigD nm t        -> er {erSigs = extend nm t ss}
-      SynonymD synonym     -> er {erSynonymes = M.insert (alName synonym) synonym als}
+      SynonymD synonym     -> er {erSynonyms = M.insert (synName synonym) synonym als}
 
 
 -- | Elaborate instances and expand their types with synonyms with a function
@@ -254,7 +254,7 @@ elabInstances inject derivs = InstanceCtx <$> M.traverseWithKey traverseDerivs d
   --   pure ci { ciDictionary = dict }
   --   where
   --     tfn (ty,expr) = do 
-  --       expty <- expandSynonymes synonyms ty
+  --       expty <- expandSynonyms synonyms ty
   --       pure (expty, expr)
 
 type UsageGraph = Map Name (Set Name)
@@ -312,12 +312,12 @@ elabProg program = do
       _ | not defsHaveSigs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a signature.") defsNoSig
         | not sigsHaveDefs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
         | otherwise     -> do
-            _ <- checkRecSynonymes synonyms
+            _ <- checkRecSynonyms synonyms
             let FreeCtx types = sigds <> cnstrs
-            expFree <- traverse (expandSynonymes synonyms) types
+            expFree <- traverse (expandSynonyms synonyms) types
             expDestrs <- DestrCtx <$> (traverse (expandDestr synonyms) $ unDestrCtx destrs)
             expDerivs <- traverse (expandDerivs synonyms) derivs
-            expFunds <- traverse (traverseAnnos (expandSynonymes synonyms)) $ funds
+            expFunds <- traverse (traverseAnnos (expandSynonyms synonyms)) $ funds
             checkForMutualRecursiveDefs expFunds cnstrs
             instances <- elabInstances fromEither expDerivs
             let allFree = FreeCtx $ expFree -- <> M.fromList derivTyps
@@ -330,11 +330,11 @@ elabProg program = do
       pure (d {dtConstrs = constrs})
       where
         expandConstr (A ann (Constr nm args)) = 
-          A ann . Constr nm <$> traverse (expandSynonymes als) args
+          A ann . Constr nm <$> traverse (expandSynonyms als) args
 
     expandDestr als d@(Destr {typ, args}) = do
-      typ' <- expandSynonymes als typ
-      args' <- traverse (expandSynonymes als) args
+      typ' <- expandSynonyms als typ
+      args' <- traverse (expandSynonyms als) args
       pure (d {typ = typ', args = args'})
     
     checkForMutualRecursiveDefs defs constrs =
@@ -370,13 +370,13 @@ checkElabedProg :: ElabProg a -> TypingM a ()
 checkElabedProg (ElabProg {kinds, types, defs, destrs, synonyms, instances}) = do
   _ <- checkTypes
   _ <- checkDefs
-  _ <- checkSynonymes
+  _ <- checkSynonyms
   _ <- local (const ctx) checkInstances
   pure ()
   where 
     checkTypes = M.traverseWithKey traverseTypes (unFreeCtx types)
     checkDefs  = M.traverseWithKey traverseDefs defs
-    checkSynonymes = traverse traverseSynonym synonyms
+    checkSynonyms = traverse traverseSynonym synonyms
     checkInstances = traverse traverseInstances (unInstanceCtx instances)
 
     -- initKinds = extend "Int" Star $ extend "K0" ClockK kinds
@@ -392,9 +392,9 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, synonyms, instances}) = d
         -- censor (const []) $ local (const ctx') $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
-    traverseSynonym (Synonym {alBound, alExpansion}) = do
-      expanded <- expandSynonymes synonyms alExpansion
-      validType kinds (quantify alBound expanded)
+    traverseSynonym (Synonym {synBound, synExpansion}) = do
+      expanded <- expandSynonyms synonyms synExpansion
+      validType kinds (quantify synBound expanded)
     
     traverseInstances xs = traverse checkInstance xs where
       checkInstance (ClassInstance {ciDictionary = dict, ciClassName = cnm, ciInstanceTypeName = inm}) = M.traverseWithKey (checkDict cnm inm) dict

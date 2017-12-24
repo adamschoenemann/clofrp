@@ -80,16 +80,16 @@ typecheckSpec = do
       runmsu (nil <+ "x" .: E.later "k" "Nat") "k" `shouldYield` ()
 
   
-  describe "checkRecSynonymes" $ do
-    let checkAl x = runTypingM0 @() (checkRecSynonymes x) mempty
+  describe "checkRecSynonyms" $ do
+    let checkSyn x = runTypingM0 @() (checkRecSynonyms x) mempty
     it "rejects recursive type synonyms" $ do
-      checkAl [al "Foo" [] "Foo"]                             `shouldFailWith` errs (Other "Foo is recursive")
-      checkAl [al "Foo" ["a"] $ "Foo" @@: "a"]                `shouldFailWith` errs (Other "Foo is recursive")
-      checkAl [al "Units" [] $ "Pair" @@: "Unit" @@: "Units"] `shouldFailWith` errs (Other "Units is recursive")
+      checkSyn [al "Foo" [] "Foo"]                             `shouldFailWith` errs (Other "Foo is recursive")
+      checkSyn [al "Foo" ["a"] $ "Foo" @@: "a"]                `shouldFailWith` errs (Other "Foo is recursive")
+      checkSyn [al "Units" [] $ "Pair" @@: "Unit" @@: "Units"] `shouldFailWith` errs (Other "Units is recursive")
 
     it "rejects mutually recursive type synonyms" $ do
-      shouldFailWith (checkAl [al "Bar" [] "Foo", al "Foo" [] $ "Unit" @->: "Bar"]) (errs $ Other "Bar is recursive")
-      shouldFailWith (checkAl [al "Foo" [] $ "Unit" @->: "Bar", al "Bar" [] $ "Id" @@: "Foo", al "Id" ["a"] "a"]) (errs $ Other "Bar is recursive")
+      shouldFailWith (checkSyn [al "Bar" [] "Foo", al "Foo" [] $ "Unit" @->: "Bar"]) (errs $ Other "Bar is recursive")
+      shouldFailWith (checkSyn [al "Foo" [] $ "Unit" @->: "Bar", al "Bar" [] $ "Id" @@: "Foo", al "Id" ["a"] "a"]) (errs $ Other "Bar is recursive")
 
   describe "deBruijnify" $ do
     it "does nothing with no bound vars" $ do
@@ -112,43 +112,43 @@ typecheckSpec = do
       let (Done t) = f2 ("FlipSum" @@: "b" @@: "d")
       t `shouldBe` ("Either" @@: ("FlipSum" @@: "b" @@: "d") @@: "a")
 
-  describe "expandSynonymes" $ do
+  describe "expandSynonyms" $ do
     let shouldExpandTo e1 e2 =
           case runTypingM0 e1 mempty of
             (Right e2', _, _) -> e2' `shouldBe` e2
             (Left e, _, _)    -> failure (pps e)
 
     it "expands the simplest of synonyms" $ do
-      expandSynonymes @() (als [al "Foo" [] "Bar"]) "Foo" `shouldExpandTo` "Bar"
-      expandSynonymes @() (als [al "Foo" [] "Bar"]) ("Foo" @->: "Foo") `shouldExpandTo` ("Bar" @->: "Bar")
-      expandSynonymes @() (als [al "Foo" [] "Bar"]) (E.forAll ["a"] $ "a" @->: "Foo") `shouldExpandTo` (E.forAll ["a"] $ "a" @->: "Bar")
+      expandSynonyms @() (als [al "Foo" [] "Bar"]) "Foo" `shouldExpandTo` "Bar"
+      expandSynonyms @() (als [al "Foo" [] "Bar"]) ("Foo" @->: "Foo") `shouldExpandTo` ("Bar" @->: "Bar")
+      expandSynonyms @() (als [al "Foo" [] "Bar"]) (E.forAll ["a"] $ "a" @->: "Foo") `shouldExpandTo` (E.forAll ["a"] $ "a" @->: "Bar")
       -- below should actually fail, but I guess the "kind-check" should catch it instead?
-      expandSynonymes @() (als [al "Foo" [] "Bar"]) ("Foo" @@: "a" @->: "Foo") `shouldExpandTo` ("Bar" @@: "a" @->: "Bar")
+      expandSynonyms @() (als [al "Foo" [] "Bar"]) ("Foo" @@: "a" @->: "Foo") `shouldExpandTo` ("Bar" @@: "a" @->: "Bar")
 
     it "expands synonyms with one param" $ do
-      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a") `shouldExpandTo` ("a")
-      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: "Foo") `shouldExpandTo` ("Foo")
-      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: ("Id" @@: "Foo")) `shouldExpandTo` ("Foo")
-      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a" @->: "Id" @@: "b") `shouldExpandTo` ("a" @->: "b")
-      expandSynonymes @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("List" @@: ("Option" @@: "a") @->: "Option" @@: ("List" @@: "a"))
+      expandSynonyms @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a") `shouldExpandTo` ("a")
+      expandSynonyms @() (als [al "Id" ["a"] "a"]) ("Id" @@: "Foo") `shouldExpandTo` ("Foo")
+      expandSynonyms @() (als [al "Id" ["a"] "a"]) ("Id" @@: ("Id" @@: "Foo")) `shouldExpandTo` ("Foo")
+      expandSynonyms @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a" @->: "Id" @@: "b") `shouldExpandTo` ("a" @->: "b")
+      expandSynonyms @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("List" @@: ("Option" @@: "a") @->: "Option" @@: ("List" @@: "a"))
         `shouldExpandTo` ("List" @@: ("Maybe" @@: "a") @->: "Maybe" @@: ("List" @@: "a"))
-      expandSynonymes @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("Option" @@: ("Option" @@: "a"))
+      expandSynonyms @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("Option" @@: ("Option" @@: "a"))
         `shouldExpandTo` ("Maybe" @@: ("Maybe" @@: "a"))
 
     it "expands synonyms with two params" $ do
-      expandSynonymes @() (als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]) 
+      expandSynonyms @() (als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]) 
                         ("FlipSum" @@: "a" @@: "b") 
         `shouldExpandTo` ("Either" @@: "b" @@: "a")
     
     it "avoids name capture problems" $ do
       do let synonyms = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
-         expandSynonymes @() synonyms ("FlipSum" @@: "a" @@: ("FlipSum" @@: "b" @@: "c")) 
+         expandSynonyms @() synonyms ("FlipSum" @@: "a" @@: ("FlipSum" @@: "b" @@: "c")) 
            `shouldExpandTo` ("Either" @@: ("Either" @@: "c" @@: "b") @@: "a")
       do let synonyms = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
-         expandSynonymes @() synonyms ("FlipSum" @@: ("FlipSum" @@: "a" @@: "b") @@: "c") 
+         expandSynonyms @() synonyms ("FlipSum" @@: ("FlipSum" @@: "a" @@: "b") @@: "c") 
           `shouldExpandTo` ("Either" @@: "c" @@: ("Either" @@: "b" @@: "a"))
       do let synonyms = als [al "App" ["a", "b", "c"] $ "a" @@: "b" @@: "c"]
-         expandSynonymes @() synonyms ("App" @@: "c" @@: "c" @@: "a") 
+         expandSynonyms @() synonyms ("App" @@: "c" @@: "c" @@: "a") 
           `shouldExpandTo` ("c" @@: "c" @@: "a")
     
     it "fails partial applications" $ do
@@ -158,9 +158,9 @@ typecheckSpec = do
 
       -- TODO: Fix this
       do let synonyms = als [al "Arr" ["a", "b"] $ "a" @->: "b"]
-         assertPartial $ expandSynonymes @() synonyms ("Arr" @@: "Int")
+         assertPartial $ expandSynonyms @() synonyms ("Arr" @@: "Int")
       -- do let synonyms = als [al "Id" ["a"] "a", al "Arr" ["a", "b"] $ "a" @->: "b"]
-      --    assertPartial $ expandSynonymes @() synonyms ("Id" @@: ("Arr" @@: "Int"))
+      --    assertPartial $ expandSynonyms @() synonyms ("Id" @@: ("Arr" @@: "Int"))
 
 
   -- NOTE: Work in progress (for higher-kinded types)
