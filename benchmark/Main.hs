@@ -81,9 +81,9 @@ instance ToHask ('CTFree "Unit") () where
 
 data Tree a = Leaf a | Br (Tree a) (Tree a) deriving (Eq, Show)
 
-instance ToHask c h => ToHask (CTFree "Tree" :@: c) (Tree ()) where
+instance ToHask c h => ToHask (CTFree "Tree" :@: c) (Tree h) where
   toHask (_ `SApp` s1) v = go v where
-    go (Fold (Constr "Leaf" _)) = Leaf ()
+    go (Fold (Constr "Leaf" [x])) = Leaf (toHask s1 x)
     go (Fold (Constr "Br" (l : r : _))) = Br (go l) (go r)
   -- toHask s@(_ `SApp` s1) (Fold (Constr "Leaf" [x])) = Leaf (toHask s1 x)
   -- toHask s@(_ `SApp` s1) (Fold (Constr "Br" (l : r : _))) =
@@ -305,6 +305,7 @@ replaceMin =
 
       data NatF f = Z | S f deriving Functor.
       type Nat = Fix NatF.
+      data Bool = True | False.
 
       z : Nat.
       z = fold Z.
@@ -330,12 +331,14 @@ replaceMin =
       data TreeF a f = Leaf a | Br f f deriving Functor.
       type Tree a = Fix (TreeF a).
 
-      min : Nat -> Nat -> Nat.
-      min = primRec {NatF} (\m n -> 
-        case m of 
-        | Z -> fold Z
-        | S (m', r) -> fold (S (r n))
-      ).
+      ite : forall a. Bool -> a -> a -> a.
+      ite = \b x y ->
+        case b of
+        | True -> x
+        | False -> y.
+
+      min : Int -> Int -> Int.
+      min = \x y -> ite (x < y) x y.
 
       leaf : forall a. a -> Tree a.
       leaf = \x -> fold (Leaf x).
@@ -345,46 +348,51 @@ replaceMin =
 
       data Delay a (k : Clock) = Delay (|>k a).
 
-      replaceMinBody : forall (k : Clock). Tree Nat -> |>k Nat -> (Delay (Tree Nat) k, Nat).
-      replaceMinBody = primRec {TreeF Nat} (\t m ->
+      replaceMinBody : forall (k : Clock). Tree Int -> |>k Int -> (Delay (Tree Int) k, Int).
+      replaceMinBody = primRec {TreeF Int} (\t m ->
         case t of
         | Leaf x -> (Delay (map leaf m), x)
         | Br (l, lrec) (r, rrec) -> 
-          let (Delay l', ml) = lrec m {- : (Delay (Tree Nat) k, Nat) -} in
-          let (Delay r', mr) = rrec m {- : (Delay (Tree Nat) k, Nat) -} in
+          let (Delay l', ml) = lrec m {- : (Delay (Tree Int) k, Int) -} in
+          let (Delay r', mr) = rrec m {- : (Delay (Tree Int) k, Int) -} in
           let m'       = min ml mr in
           (Delay (app (map br l') r'), m')
       ).
 
-      replaceMinK : forall (k : Clock). Tree Nat -> Delay (Tree Nat) k.
+      replaceMinK : forall (k : Clock). Tree Int -> Delay (Tree Int) k.
       replaceMinK = \t -> feedback (replaceMinBody t).
 
-      replaceMin : Tree Nat -> Tree Nat.
+      replaceMin : Tree Int -> Tree Int.
       replaceMin = \t -> 
         let Delay t' = replaceMinK {K0} t
         in t' [<>].
       
-      ofHeight : Nat -> Tree Nat.
+      ofHeight : Nat -> Tree Int.
       ofHeight = \nat -> 
         fst (primRec {NatF} (\m n ->
           case m of  
-            | Z -> (leaf z, s n)
+            | Z -> (leaf n, 1 + n)
             | S (m', r) -> 
               let (t1, n1) = r n in
               let (t2, n2) = r n1
               in  (br t1 t2, n2)
-        ) nat z).
+        ) nat 0).
       
-      main : Tree Nat.
+      main : Tree Int.
       main = 
-        let five = s (s (s (s (s z))))
-        in  replaceMin (ofHeight (plus (s (s (s (s z)))) five)).
+        let five = s (s (s (s (s z)))) in
+        let four = s (s (s (s z)))
+        in  replaceMin (ofHeight (plus four five)).
     |]
 
 ofHeight :: Int -> Tree Int
-ofHeight !n
-  | n <= 0 = Leaf n
-  | otherwise = Br (ofHeight (n-1)) (ofHeight (n-1))
+ofHeight h = fst $ go h 0 where
+  go m n =
+    case m of
+      0 -> (Leaf n, succ n)
+      _ -> let (t1, n1) = go (m-1) n
+               (t2, n2) = go (m-1) n1
+           in  (Br t1 t2, n2)
 
 replaceMinHask :: Tree Int -> Tree Int
 replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
@@ -489,7 +497,7 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 main :: IO ()
 main = do
   putStrLn "running benchmar"
-  bench_binTree
+  bench_replaceMin
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000
@@ -531,7 +539,7 @@ bench_everyOtherExec =
 
 bench_replaceMin :: IO ()
 bench_replaceMin = 
-  -- putStrLn . show $ replaceMinHask (ofHeight 9)
+  -- putStrLn . show $ (ofHeight 20)
   putStrLn . show $ execute replaceMin
 
 bench_binTree :: IO ()

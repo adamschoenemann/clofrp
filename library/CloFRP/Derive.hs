@@ -75,8 +75,8 @@ deriveFunctor (Datatype {dtName, dtConstrs = []}) =
 deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann _ : _)}) = do
   let (bnm, bk) = safeLast b bs                           -- the last bound variable in bs, or b if bs = []
   checkKind (bnm, bk)                                     -- check that the kind of bnm is correct (*)
-  expr <- deriveFmapDef ann bnm cs                        -- derive the definition of the functor
   let ?annotation = ann                                   -- use ann for implicit anotations
+  expr <- deriveFmapDef bnm cs                            -- derive the definition of the functor
   let extrabs = map fst $ safeInit bs                     -- take all type-variables except the last (which we're functorial over)
   let nfa = foldl' tapp (tfree dtName) (map tvar extrabs) -- The nearly fully applied type
   -- the type for fmap
@@ -96,11 +96,10 @@ deriveFunctor (Datatype {dtName, dtBound = bs@(b:_), dtConstrs = cs@(A ann _ : _
 type TVarName = Name
 
 -- | Derive the definition of fmap
-deriveFmapDef :: a -> Name -> [Constr a] -> Either String (Expr a)
-deriveFmapDef ann tnm cs =
+deriveFmapDef :: (?annotation :: a) => Name -> [Constr a] -> Either String (Expr a)
+deriveFmapDef tnm cs =
   let vn = UName "val"
       fn = UName "f"
-  in  let ?annotation = ann
   in  lam' fn . lam' vn .
         casee (var vn) <$> traverse (deriveFmapConstr (var fn) tnm) cs
 

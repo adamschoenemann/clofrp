@@ -150,9 +150,17 @@ evalPrim = \case
 
   -- fix ~> \f -> f (dfix f)
   -- fix ~> \f -> f (\\(af). fix f)
-  P.Fix              -> 
-    -- evalExprStep (lam' "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f"))
-    pure $ Closure mempty "#f" $ var "#f" `app` (tAbs "#alpha" "#clock" $ fixE `app` var "#f")
+  -- we cannot use Haskells let x = f x trick since our let-bindings are eager
+  -- and not lazy
+
+  -- if f = (\g -> 0 : (\\af -> map (+1) (g [af]))) then
+  -- fix f
+  -- => f (\\af. fix f)
+  -- => 0 : (\\af -> map (+1) (fix f))
+  -- =*> 0 : (map (+1) (fix f))
+  P.Fix              -> do
+    let delay = tAbs "#alpha" "#clock"
+    pure $ Closure mempty "#f" $ var "#f" `app` (delay $ fixE `app` var "#f")
   P.Undefined        -> pure . runtimeErr $ "Undefined!"
 
 evalPrimRec :: (Pretty a, ?annotation :: a) => Type a 'Poly -> EvalM a (Value a)
@@ -184,9 +192,9 @@ evalExprStep (A ann expr') =
     E.Var (E.UName s) | isUpper (head s) -> pure $ Constr (E.UName s) []
     E.Var !nm -> lookupVar nm
 
-    E.TickAbs (UName "#alpha") _k !e -> do
-      Just f <- envLookup "#f" <$> getEnv
-      pure (TickClosure (singleEnv "#f" f) "#alpha" e)
+    -- E.TickAbs (UName "#alpha") _k !e -> do
+    --   Just f <- envLookup "#f" <$> getEnv
+    --   pure (TickClosure (singleEnv "#f" f) "#alpha" e)
 
     E.TickAbs x _k !e -> do
       env <- getEnv
@@ -201,6 +209,14 @@ evalExprStep (A ann expr') =
           Prim (IntVal i1) <- evalExprStep e1
           Prim (IntVal i2) <- evalExprStep e2
           pure (Prim (IntVal (i1 + i2)))
+        "<" -> do 
+          Prim (IntVal i1) <- evalExprStep e1
+          Prim (IntVal i2) <- evalExprStep e2
+          let c = if (i1 < i2)
+                  then "True"
+                  else "False"
+          pure (Constr c [])
+          
         _ -> pure $ runtimeErr ("binary operator " ++ show nm ++ " is not supported")
 
     {-
@@ -312,7 +328,8 @@ evalExprCorec expr = go =<< evalExprStep expr where
 evalStepDefinitions :: Pretty a => EvalRead a -> UsageGraph -> Defs a -> Name -> TypingM a (EvalRead a)
 evalStepDefinitions er ug defs defnm = do
   order <- either (tyExcept . Decorate (Other "during evalStepDefinitions")) pure $ usageClosure ug defnm
-  let orderNoConstrs = filter (isLower . head . show) order
+  -- filter out constructors and main definition
+  let orderNoConstrs = [nm | nm <- order, isLower . head . show $ nm, nm /= defnm] 
   foldrM folder er orderNoConstrs where
     folder nm acc = do
       expr <- maybe (otherErr $ show nm ++ " not found") pure $ M.lookup nm defs
@@ -327,6 +344,8 @@ progToEval mainnm pr = do
       -- initSt = initEvalState { esGlobals = (M.map Left erDefs) `M.union` vconstrs }
   ElabProg {instances} <- elabProg pr
   let ug = usageGraph erDefs `M.union` constrsToUsageGraph erConstrs
+  -- OK, the below should not be here, but when you actually evaluate the program.
+  -- right now, evalStepDefinitions evaluates all top-level decls at compile-time
   initRd <- evalStepDefinitions (mempty { erInstances = instances }) ug erDefs mainnm
   case M.lookup mainnm erDefs of 
     Just maindef -> 

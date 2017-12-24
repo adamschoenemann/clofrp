@@ -1005,7 +1005,15 @@ synthesize expr@(A ann expr') = synthesize' expr' where
 
       _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg <+> "of kind" <+> pretty k'
 
-  synthesize' (BinOp "+" e1 e2) = (A ann $ TFree "Int",) <$> getCtx
+  synthesize' (BinOp "+" e1 e2) = do 
+    check e1 (A ann $ TFree "Int")
+    check e2 (A ann $ TFree "Int")
+    (A ann $ TFree "Int",) <$> getCtx
+
+  synthesize' (BinOp "<" e1 e2) = do 
+    check e1 (A ann $ TFree "Int")
+    check e2 (A ann $ TFree "Int")
+    (A ann $ TFree "Bool",) <$> getCtx
 
   synthesize' _ = cannotSynthesize expr
 

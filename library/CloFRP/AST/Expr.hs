@@ -188,7 +188,7 @@ freeVarsExpr = go where
   go (A _ expr') = case expr' of
     Var nm -> S.singleton nm
     TickVar nm -> S.singleton nm
-    Ann e t -> go e
+    Ann e t -> go e 
     App e1 e2 -> go e1 `union` go e2
     Lam nm mty e -> go e \\ S.singleton nm
     TickAbs nm kappa e -> go e \\ S.singleton nm

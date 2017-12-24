@@ -181,3 +181,16 @@ tst2 =
 
 -- fun1 :: Fun Int
 -- fun1 = Fun (0, [])
+
+fib1 :: Int -> Int
+fib1 n 
+  | n <= 1 = n
+  | otherwise = fib1 (n-1) + fib1 (n-2)
+
+fib2 :: Int -> Int
+fib2 = fixd (\f n -> if n <= 1 then n else f () (n-1) + f () (n-2))
+
+fixd :: ((() -> a) -> a) -> a
+fixd f =
+  let x = f (\_ -> x)
+  in  x

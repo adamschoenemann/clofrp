@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module CloFRP.QuasiQuoter where
 
@@ -14,9 +15,9 @@ import CloFRP.Interop
 import CloFRP.Utils (findMap)
 import CloFRP.Eval (progToEval, initEvalState)
 import CloFRP.Check.Prog (runCheckProg)
-import CloFRP.Check.TypingM (runTypingM0)
+import CloFRP.Check.TypingM (runTypingM0, prettyTree)
 import CloFRP.Annotated
-import CloFRP.Pretty (ppsw, pps)
+import CloFRP.Pretty 
 import CloFRP.Utils ()
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
@@ -94,7 +95,7 @@ clofrp = QuasiQuoter
     
     checkProgQExp prog =
       case runCheckProg mempty prog of
-        (Left err, _, _) -> fail (ppsw 200 err)
+        (Left err, _, tree) -> fail (showW 200 (pretty err <> line <> "progres:" <> line <> prettyTree tree))
         (Right _, _, _)  -> pure ()
     
     progToEvalQExp prog =
