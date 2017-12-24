@@ -106,7 +106,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     CannotAppSynthesize ty e -> CannotAppSynthesize (unann ty) (unann e)
     NotWfType ty             -> NotWfType (unann ty)
     NotWfContext el          -> NotWfContext (unann el)
-    PartialSynonymApp al       -> PartialSynonymApp (unann al)
+    PartialSynonymApp syn       -> PartialSynonymApp (unann syn)
     MutualRecursionErr nm    -> MutualRecursionErr nm
     Other s                  -> Other s
     Decorate outer inner     -> Decorate (unann outer) (unann inner)
@@ -121,7 +121,7 @@ instance Pretty (TyExcept a) where
     CannotAppSynthesize ty e -> "Cannot app_synthesize" <+> pretty ty <+> "•" <+> pretty e
     NotWfType ty             -> pretty ty <+> "is not well-formed"
     NotWfContext el          -> "Context is not well-formed due to" <+> pretty el
-    PartialSynonymApp al       -> "Partial type-synonym application of synonym " <+> pretty al
+    PartialSynonymApp syn       -> "Partial type-synonym application of synonym " <+> pretty syn
     MutualRecursionErr nm    -> pretty nm <+> "is mutually recursive with something else"
     Other s                  -> "Other error:" <+> fromString s
     Decorate outer inner     -> pretty outer <> hardline <> "Caused by:" <> softline <> pretty inner
@@ -159,7 +159,7 @@ otherErr :: String -> TypingM a r
 otherErr s = tyExcept $ Other s
 
 partialSynonymApp :: Synonym a -> TypingM a r
-partialSynonymApp al = tyExcept $ PartialSynonymApp al
+partialSynonymApp syn = tyExcept $ PartialSynonymApp syn
 
 decorateErr :: TypingM a r -> TyExcept a -> TypingM a r
 decorateErr tm outer = tm `catchError` (\(inner,ctx) -> tyExcept $ Decorate outer inner)

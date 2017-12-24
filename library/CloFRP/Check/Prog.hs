@@ -118,15 +118,15 @@ instance Monoid a => Show (SynonymExpansion a) where
 
 synonymExpansion :: a -> Synonym a -> SynonymExpansion a
 synonymExpansion ann = go 0 . deb where 
-  deb al@(Synonym { synBound = b, synExpansion = ex }) =
-    al { synExpansion = deBruijnify ann (map fst b) ex } 
+  deb syn@(Synonym { synBound = b, synExpansion = ex }) =
+    syn { synExpansion = deBruijnify ann (map fst b) ex } 
 
-  go i al@(Synonym { synName = nm, synBound = b, synExpansion = ex }) =
+  go i syn@(Synonym { synName = nm, synBound = b, synExpansion = ex }) =
     case b of
       [] -> Done ex
       _:xs -> Ex nm $ \t ->
           let ex' = subst t (DeBruijn i) ex
-          in  go (i+1) (al { synBound = xs, synExpansion = ex' }) 
+          in  go (i+1) (syn { synBound = xs, synExpansion = ex' }) 
 
 -- Change type-variables to use debruijn indices based on the order induced
 -- by the second argument. Type-variables that do not appear in the list are
@@ -137,14 +137,14 @@ deBruijnify ann = go 0 where
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
 checkRecSynonyms :: forall a. Synonyms a -> TypingM a ()
-checkRecSynonyms als = sequence (M.map checkSyn als) *> pure () where
+checkRecSynonyms syns = sequence (M.map checkSyn syns) *> pure () where
   checkSyn (Synonym {synName, synExpansion}) = checkRecSyn synName synExpansion
   checkRecSyn :: Name -> Type a 'Poly -> TypingM a ()
   checkRecSyn name (A _ ty') = 
     case ty' of
       TFree n 
         | n == name                  -> otherErr $ show name ++ " is recursive"
-        | Just al' <- M.lookup n als -> checkRecSyn name (synExpansion al')
+        | Just syn' <- M.lookup n syns -> checkRecSyn name (synExpansion syn')
         | otherwise                  -> pure ()
 
       TVar _         -> pure ()
@@ -169,20 +169,20 @@ checkRecSynonyms als = sequence (M.map checkSyn als) *> pure () where
   = (Either (Either b c) a)
 -}
 expandSynonyms :: forall a. Synonyms a -> Type a 'Poly -> TypingM a (Type a 'Poly)
-expandSynonyms als t = 
+expandSynonyms syns t = 
   -- fixpoint it! for recursive synonym expansion
   -- recursive type synonyms will make this non-terminating, so its good
   -- that we check for those first :)
   go t >>= \case 
     Done t' | t =%= t' -> pure t'
-            | otherwise -> expandSynonyms als t'
+            | otherwise -> expandSynonyms syns t'
     Ex nm _ -> wrong nm
   where
     go :: Type a 'Poly -> TypingM a (SynonymExpansion a)
     go (A ann ty') = 
       case ty' of
         TFree n 
-          | Just al <- M.lookup n als -> pure $ synonymExpansion ann al
+          | Just syn <- M.lookup n syns -> pure $ synonymExpansion ann syn
           | otherwise                 -> done (A ann $ ty')
 
         TVar _     -> done (A ann ty')
@@ -225,14 +225,14 @@ expandSynonyms als t =
 
     wrong :: Name -> TypingM a r
     wrong nm 
-      | Just al <- M.lookup nm als = partialSynonymApp al
+      | Just syn <- M.lookup nm syns = partialSynonymApp syn
       | otherwise                  = otherErr $ "synonym " ++ show nm ++ " not in context. Should never happen"
 
 collectDecls :: Prog a -> ElabRes a
 collectDecls (Prog decls) = foldr folder mempty decls where
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> ElabRes a
-    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erSynonyms = als, erDeriving = drv}) = case x of
+    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erSynonyms = syns, erDeriving = drv}) = case x of
       DataD dt@(Datatype nm b cs' derivs) ->
         let (tys, dstrs) = elabCs nm b cs' 
             drv' = foldr (\x acc -> M.insertWith (++) (UName x) [dt] acc) drv derivs
@@ -240,7 +240,7 @@ collectDecls (Prog decls) = foldr folder mempty decls where
 
       FunD nm e        -> er {erDefs = M.insert nm e fs}
       SigD nm t        -> er {erSigs = extend nm t ss}
-      SynonymD synonym     -> er {erSynonyms = M.insert (synName synonym) synonym als}
+      SynonymD synonym     -> er {erSynonyms = M.insert (synName synonym) synonym syns}
 
 
 -- | Elaborate instances and expand their types with synonyms with a function
@@ -324,17 +324,17 @@ elabProg program = do
             let allDefs = expFunds -- <> M.fromList derivDefs
             pure $ ElabProg kinds allFree allDefs expDestrs synonyms instances
   where 
-    expandDerivs als ds = traverse (expandDeriv als) ds
-    expandDeriv als d@(Datatype {dtConstrs}) = do
+    expandDerivs syns ds = traverse (expandDeriv syns) ds
+    expandDeriv syns d@(Datatype {dtConstrs}) = do
       constrs <- traverse expandConstr dtConstrs
       pure (d {dtConstrs = constrs})
       where
         expandConstr (A ann (Constr nm args)) = 
-          A ann . Constr nm <$> traverse (expandSynonyms als) args
+          A ann . Constr nm <$> traverse (expandSynonyms syns) args
 
-    expandDestr als d@(Destr {typ, args}) = do
-      typ' <- expandSynonyms als typ
-      args' <- traverse (expandSynonyms als) args
+    expandDestr syns d@(Destr {typ, args}) = do
+      typ' <- expandSynonyms syns typ
+      args' <- traverse (expandSynonyms syns) args
       pure (d {typ = typ', args = args'})
     
     checkForMutualRecursiveDefs defs constrs =

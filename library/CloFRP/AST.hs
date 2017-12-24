@@ -58,7 +58,7 @@ instance Pretty (Decl a) where
       FunD nm e  -> pretty nm <+> "=" <+> pretty e <> "."
       DataD dt   -> pretty dt <> "."
       SigD nm ty -> pretty nm <+> ":" <+> pretty ty <> "."
-      SynonymD al  -> pretty al <> "."
+      SynonymD syn  -> pretty syn <> "."
 
 deriving instance Show a     => Show (Decl' a)
 deriving instance Eq a       => Eq (Decl' a)
@@ -268,7 +268,7 @@ unannD = help go where
     FunD nm c -> FunD nm (unannE c) 
     DataD dt  -> DataD $ unann dt 
     SigD nm t -> SigD nm (unannT t)
-    SynonymD al -> SynonymD $ unann al
+    SynonymD syn -> SynonymD $ unann syn
 
 instance Unann (Prog a) (Prog ()) where
   unann = unannP

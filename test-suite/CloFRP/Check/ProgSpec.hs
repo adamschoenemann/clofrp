@@ -47,7 +47,7 @@ progSpec = do
             , "7" |-> ["5"]
             , "8" |-> ["5"]
             ]
-      usageClosure @() ug "1" `shouldBe` Right (map (fromString . show) [1,8,6,7,2,4,5,3])
+      usageClosure @() ug "1" `shouldBe` Right (map (fromString . show) [1::Int,8,6,7,2,4,5,3])
     it "fails on negative ex" $ do
       let ug = 
             [ "1" |-> ["2", "6", "5"]

@@ -11,7 +11,7 @@ and guarded-recursive definitions. On top of that, the "guardedness" of a recurs
 in its type signature.
 
 Aside from these ideas, CloFRP resembles an ordinary Haskell-inspired language. As such it features:
-- Datatype declarations alá vanilla Haskell
+- Datatype declarations syná vanilla Haskell
 - Type synonyms 
 - Automatic derivation of fmap (functor map) for strictly-positive types
 - Bi-directional type higher-rank inference - polymorphic functions must be annotated, but everything else should

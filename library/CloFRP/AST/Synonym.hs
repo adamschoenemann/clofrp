@@ -24,7 +24,7 @@ data Synonym a =
 
 
 instance Unann (Synonym a) (Synonym ()) where
-  unann al = al { synExpansion = unann (synExpansion al) }
+  unann syn = syn { synExpansion = unann (synExpansion syn) }
 
 instance Pretty (Synonym a) where
   pretty (Synonym {synName, synBound, synExpansion}) = "type" <+> pretty synName <> boundp <+> "=" <+> pretty synExpansion
