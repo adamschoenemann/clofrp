@@ -849,7 +849,7 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "succeeds for church lists (alias)" $ do
+    it "succeeds for church lists (synonym)" $ do
       let Right prog = pprog [text|
         data List a = Nil | Cons a (List a).
         type ChurchList a = forall r. (a -> r -> r) -> r -> r.
@@ -1047,7 +1047,7 @@ progSpec = do
     --   |]
     --   runCheckProg mempty prog `shouldYield` ()
     
-    it "checks and expands type-aliases (1) " $ do
+    it "checks and expands type-synonyms (1) " $ do
       let Right prog = pprog [text|
         data Bar = Bar.
         type Foo = Bar.
@@ -1056,7 +1056,7 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "checks and expands type-aliases (2) " $ do
+    it "checks and expands type-synonyms (2) " $ do
       let Right prog = pprog [text|
         type Id a = a.
         id : forall a. Id a -> Id a.
@@ -1064,7 +1064,7 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "checks and expands type-aliases (3) " $ do
+    it "checks and expands type-synonyms (3) " $ do
       let Right prog = pprog [text|
         data Either a b = Left a | Right b.
         type FlipSum a b = Either b a.
@@ -1077,7 +1077,7 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "checks and expands '2nd-order' type-aliases (4)" $ do
+    it "checks and expands '2nd-order' type-synonyms (4)" $ do
       let Right prog = pprog [text|
         data ListF a f = Nil | Cons a f deriving Functor.
         type List a = Fix (ListF a).
@@ -1102,20 +1102,20 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "fails incorrect aliases (1)" $ do
+    it "fails incorrect synonyms (1)" $ do
       let Right prog = pprog [text|
         type Foo = Bar.
       |]
       shouldFail $ runCheckProg mempty prog 
 
-    it "fails incorrect aliases (2)" $ do
+    it "fails incorrect synonyms (2)" $ do
       let Right prog = pprog [text|
         type A1 = Foo.
         type A2 = A1.
       |]
       shouldFail $ runCheckProg mempty prog 
 
-    it "fails incorrect aliases (3)" $ do
+    it "fails incorrect synonyms (3)" $ do
       let Right prog = pprog [text|
         data Unit = MkUnit.
         data Foo a = Foo a.
@@ -1125,7 +1125,7 @@ progSpec = do
 
 
 
-    it "rejects recursive type aliases" $ do
+    it "rejects recursive type synonyms" $ do
       let Right prog = pprog [text|
         data Unit = MkUnit.
         data Pair a b = MkPair a b.
@@ -1141,7 +1141,7 @@ progSpec = do
       |]
       runCheckProg mempty prog `shouldFailWith` (\(e,_) -> e `shouldBe` Other "Units is recursive")
 
-    it "rejects mutually recursive type aliases" $ do
+    it "rejects mutually recursive type synonyms" $ do
       let Right prog = pprog [text|
         data Unit = MkUnit.
         data Bool = True | False.

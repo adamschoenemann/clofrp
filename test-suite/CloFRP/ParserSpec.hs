@@ -320,12 +320,12 @@ declSpec = do
     do let Right decl = E.unannD <$> parse P.decl "" "map : (a -> b) -> f a -> f b."
        decl `shouldBe` E.sigd "map" (("a" @->: "b") @->: "f" @@: "a" @->: "f" @@: "b")
 
-  it "parses type aliases" $ do
+  it "parses type synonyms" $ do
     do let Right decl = E.unannD <$> parse P.decl "" "type Seconds = Int."
-       decl `shouldBe` E.aliasd "Seconds" [] "Int"
+       decl `shouldBe` E.synonymd "Seconds" [] "Int"
     do let Right decl = E.unannD <$> parse P.decl "" "type Option a = Maybe a."
-       decl `shouldBe` E.aliasd "Option" ["a"] ("Maybe" @@: "a")
+       decl `shouldBe` E.synonymd "Option" ["a"] ("Maybe" @@: "a")
     do let Right decl = E.unannD <$> parse P.decl "" "type Sum a b = Either a b."
-       decl `shouldBe` E.aliasd "Sum" ["a", "b"] ("Either" @@: "a" @@: "b")
+       decl `shouldBe` E.synonymd "Sum" ["a", "b"] ("Either" @@: "a" @@: "b")
     do let Right decl = E.unannD <$> parse P.decl "" "type CList a = forall r. (a -> r -> r) -> r -> r."
-       decl `shouldBe` E.aliasd "CList" ["a"] (E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")
+       decl `shouldBe` E.synonymd "CList" ["a"] (E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")

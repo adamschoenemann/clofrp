@@ -329,7 +329,7 @@ deriveSpec = do
       |]
       runCheckProg mempty prog `shouldYield` ()
 
-    it "works for nested functors and type aliases" $ do
+    it "works for nested functors and type synonyms" $ do
       let prog = [unsafeProg|
         data F1 a = F1 a deriving Functor.
         type F1' a = F1 a.

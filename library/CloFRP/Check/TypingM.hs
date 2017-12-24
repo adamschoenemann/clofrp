@@ -90,7 +90,7 @@ data TyExcept a
   | CannotAppSynthesize (Type a 'Poly) (Expr a)
   | NotWfType (Type a 'Poly)
   | NotWfContext (CtxElem a)
-  | PartialAliasApp (Alias a)
+  | PartialSynonymApp (Synonym a)
   | MutualRecursionErr Name
   | Other String
   | Decorate (TyExcept a) (TyExcept a)
@@ -106,7 +106,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     CannotAppSynthesize ty e -> CannotAppSynthesize (unann ty) (unann e)
     NotWfType ty             -> NotWfType (unann ty)
     NotWfContext el          -> NotWfContext (unann el)
-    PartialAliasApp al       -> PartialAliasApp (unann al)
+    PartialSynonymApp al       -> PartialSynonymApp (unann al)
     MutualRecursionErr nm    -> MutualRecursionErr nm
     Other s                  -> Other s
     Decorate outer inner     -> Decorate (unann outer) (unann inner)
@@ -121,7 +121,7 @@ instance Pretty (TyExcept a) where
     CannotAppSynthesize ty e -> "Cannot app_synthesize" <+> pretty ty <+> "•" <+> pretty e
     NotWfType ty             -> pretty ty <+> "is not well-formed"
     NotWfContext el          -> "Context is not well-formed due to" <+> pretty el
-    PartialAliasApp al       -> "Partial type-alias application of alias " <+> pretty al
+    PartialSynonymApp al       -> "Partial type-synonym application of synonym " <+> pretty al
     MutualRecursionErr nm    -> pretty nm <+> "is mutually recursive with something else"
     Other s                  -> "Other error:" <+> fromString s
     Decorate outer inner     -> pretty outer <> hardline <> "Caused by:" <> softline <> pretty inner
@@ -158,8 +158,8 @@ cannotSplit el ctx = tyExcept $ CannotSplit el ctx
 otherErr :: String -> TypingM a r
 otherErr s = tyExcept $ Other s
 
-partialAliasApp :: Alias a -> TypingM a r
-partialAliasApp al = tyExcept $ PartialAliasApp al
+partialSynonymApp :: Synonym a -> TypingM a r
+partialSynonymApp al = tyExcept $ PartialSynonymApp al
 
 decorateErr :: TypingM a r -> TyExcept a -> TypingM a r
 decorateErr tm outer = tm `catchError` (\(inner,ctx) -> tyExcept $ Decorate outer inner)

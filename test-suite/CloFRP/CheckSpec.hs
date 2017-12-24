@@ -59,7 +59,7 @@ typecheckSpec = do
         ]
 
   let als = M.fromList 
-  let al x b e = (x, E.Alias x (map (,Star) b) e)
+  let al x b e = (x, E.Synonym x (map (,Star) b) e)
   let errs e x = (unann (fst x)) `shouldBe` e
 
   describe "mustBeStableUnder" $ do
@@ -80,14 +80,14 @@ typecheckSpec = do
       runmsu (nil <+ "x" .: E.later "k" "Nat") "k" `shouldYield` ()
 
   
-  describe "checkRecAliases" $ do
-    let checkAl x = runTypingM0 @() (checkRecAliases x) mempty
-    it "rejects recursive type aliases" $ do
+  describe "checkRecSynonymes" $ do
+    let checkAl x = runTypingM0 @() (checkRecSynonymes x) mempty
+    it "rejects recursive type synonyms" $ do
       checkAl [al "Foo" [] "Foo"]                             `shouldFailWith` errs (Other "Foo is recursive")
       checkAl [al "Foo" ["a"] $ "Foo" @@: "a"]                `shouldFailWith` errs (Other "Foo is recursive")
       checkAl [al "Units" [] $ "Pair" @@: "Unit" @@: "Units"] `shouldFailWith` errs (Other "Units is recursive")
 
-    it "rejects mutually recursive type aliases" $ do
+    it "rejects mutually recursive type synonyms" $ do
       shouldFailWith (checkAl [al "Bar" [] "Foo", al "Foo" [] $ "Unit" @->: "Bar"]) (errs $ Other "Bar is recursive")
       shouldFailWith (checkAl [al "Foo" [] $ "Unit" @->: "Bar", al "Bar" [] $ "Id" @@: "Foo", al "Id" ["a"] "a"]) (errs $ Other "Bar is recursive")
 
@@ -100,67 +100,67 @@ typecheckSpec = do
       deBruijnify () ["a", "b", "c"] ("a" @@: ("b" @@: "c")) `shouldBe` (E.debrjn 0 @@: (E.debrjn 1 @@: E.debrjn 2))
       deBruijnify () ["a"] ("a" @@: ("a" @@: "a")) `shouldBe` (E.debrjn 0 @@: (E.debrjn 0 @@: E.debrjn 0))
 
-  describe "aliasExpansion" $ do
+  describe "synonymExpansion" $ do
     it "should work with flipsum" $ do
-      let (Ex _ f) = aliasExpansion () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f) = synonymExpansion () (E.Synonym "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
       let (Ex _ f') = f ("a")
       f' "b" `shouldBe` Done ("Either" @@: "b" @@: "a")
 
     it "should work with nested flipsum" $ do
-      let (Ex _ f1) = aliasExpansion () (E.Alias "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
+      let (Ex _ f1) = synonymExpansion () (E.Synonym "FlipSum" [("a", Star), ("b", Star)] $ "Either" @@: "b" @@: "a")
       let (Ex _ f2) = f1 ("a")
       let (Done t) = f2 ("FlipSum" @@: "b" @@: "d")
       t `shouldBe` ("Either" @@: ("FlipSum" @@: "b" @@: "d") @@: "a")
 
-  describe "expandAliases" $ do
+  describe "expandSynonymes" $ do
     let shouldExpandTo e1 e2 =
           case runTypingM0 e1 mempty of
             (Right e2', _, _) -> e2' `shouldBe` e2
             (Left e, _, _)    -> failure (pps e)
 
-    it "expands the simplest of aliases" $ do
-      expandAliases @() (als [al "Foo" [] "Bar"]) "Foo" `shouldExpandTo` "Bar"
-      expandAliases @() (als [al "Foo" [] "Bar"]) ("Foo" @->: "Foo") `shouldExpandTo` ("Bar" @->: "Bar")
-      expandAliases @() (als [al "Foo" [] "Bar"]) (E.forAll ["a"] $ "a" @->: "Foo") `shouldExpandTo` (E.forAll ["a"] $ "a" @->: "Bar")
+    it "expands the simplest of synonyms" $ do
+      expandSynonymes @() (als [al "Foo" [] "Bar"]) "Foo" `shouldExpandTo` "Bar"
+      expandSynonymes @() (als [al "Foo" [] "Bar"]) ("Foo" @->: "Foo") `shouldExpandTo` ("Bar" @->: "Bar")
+      expandSynonymes @() (als [al "Foo" [] "Bar"]) (E.forAll ["a"] $ "a" @->: "Foo") `shouldExpandTo` (E.forAll ["a"] $ "a" @->: "Bar")
       -- below should actually fail, but I guess the "kind-check" should catch it instead?
-      expandAliases @() (als [al "Foo" [] "Bar"]) ("Foo" @@: "a" @->: "Foo") `shouldExpandTo` ("Bar" @@: "a" @->: "Bar")
+      expandSynonymes @() (als [al "Foo" [] "Bar"]) ("Foo" @@: "a" @->: "Foo") `shouldExpandTo` ("Bar" @@: "a" @->: "Bar")
 
-    it "expands aliases with one param" $ do
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a") `shouldExpandTo` ("a")
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "Foo") `shouldExpandTo` ("Foo")
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: ("Id" @@: "Foo")) `shouldExpandTo` ("Foo")
-      expandAliases @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a" @->: "Id" @@: "b") `shouldExpandTo` ("a" @->: "b")
-      expandAliases @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("List" @@: ("Option" @@: "a") @->: "Option" @@: ("List" @@: "a"))
+    it "expands synonyms with one param" $ do
+      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a") `shouldExpandTo` ("a")
+      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: "Foo") `shouldExpandTo` ("Foo")
+      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: ("Id" @@: "Foo")) `shouldExpandTo` ("Foo")
+      expandSynonymes @() (als [al "Id" ["a"] "a"]) ("Id" @@: "a" @->: "Id" @@: "b") `shouldExpandTo` ("a" @->: "b")
+      expandSynonymes @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("List" @@: ("Option" @@: "a") @->: "Option" @@: ("List" @@: "a"))
         `shouldExpandTo` ("List" @@: ("Maybe" @@: "a") @->: "Maybe" @@: ("List" @@: "a"))
-      expandAliases @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("Option" @@: ("Option" @@: "a"))
+      expandSynonymes @() (als [al "Option" ["a"] $ "Maybe" @@: "a"]) ("Option" @@: ("Option" @@: "a"))
         `shouldExpandTo` ("Maybe" @@: ("Maybe" @@: "a"))
 
-    it "expands aliases with two params" $ do
-      expandAliases @() (als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]) 
+    it "expands synonyms with two params" $ do
+      expandSynonymes @() (als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]) 
                         ("FlipSum" @@: "a" @@: "b") 
         `shouldExpandTo` ("Either" @@: "b" @@: "a")
     
     it "avoids name capture problems" $ do
-      do let aliases = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
-         expandAliases @() aliases ("FlipSum" @@: "a" @@: ("FlipSum" @@: "b" @@: "c")) 
+      do let synonyms = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
+         expandSynonymes @() synonyms ("FlipSum" @@: "a" @@: ("FlipSum" @@: "b" @@: "c")) 
            `shouldExpandTo` ("Either" @@: ("Either" @@: "c" @@: "b") @@: "a")
-      do let aliases = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
-         expandAliases @() aliases ("FlipSum" @@: ("FlipSum" @@: "a" @@: "b") @@: "c") 
+      do let synonyms = als [al "FlipSum" ["a", "b"] $ "Either" @@: "b" @@: "a"]
+         expandSynonymes @() synonyms ("FlipSum" @@: ("FlipSum" @@: "a" @@: "b") @@: "c") 
           `shouldExpandTo` ("Either" @@: "c" @@: ("Either" @@: "b" @@: "a"))
-      do let aliases = als [al "App" ["a", "b", "c"] $ "a" @@: "b" @@: "c"]
-         expandAliases @() aliases ("App" @@: "c" @@: "c" @@: "a") 
+      do let synonyms = als [al "App" ["a", "b", "c"] $ "a" @@: "b" @@: "c"]
+         expandSynonymes @() synonyms ("App" @@: "c" @@: "c" @@: "a") 
           `shouldExpandTo` ("c" @@: "c" @@: "a")
     
     it "fails partial applications" $ do
       let assertPartial x = case runTypingM0 x mempty of
-            (Left (PartialAliasApp _, _), _, _) -> success
+            (Left (PartialSynonymApp _, _), _, _) -> success
             (e, _, _)                           -> failure (show e) 
 
       -- TODO: Fix this
-      do let aliases = als [al "Arr" ["a", "b"] $ "a" @->: "b"]
-         assertPartial $ expandAliases @() aliases ("Arr" @@: "Int")
-      -- do let aliases = als [al "Id" ["a"] "a", al "Arr" ["a", "b"] $ "a" @->: "b"]
-      --    assertPartial $ expandAliases @() aliases ("Id" @@: ("Arr" @@: "Int"))
+      do let synonyms = als [al "Arr" ["a", "b"] $ "a" @->: "b"]
+         assertPartial $ expandSynonymes @() synonyms ("Arr" @@: "Int")
+      -- do let synonyms = als [al "Id" ["a"] "a", al "Arr" ["a", "b"] $ "a" @->: "b"]
+      --    assertPartial $ expandSynonymes @() synonyms ("Id" @@: ("Arr" @@: "Int"))
 
 
   -- NOTE: Work in progress (for higher-kinded types)

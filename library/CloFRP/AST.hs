@@ -22,7 +22,7 @@ module CloFRP.AST
   , module CloFRP.AST.Type
   , module CloFRP.AST.Pat
   , module CloFRP.AST.Expr
-  , module CloFRP.AST.Alias
+  , module CloFRP.AST.Synonym
   , module CloFRP.AST.Kind
   , module CloFRP.AST.Datatype
   , P.Prim(..)
@@ -40,7 +40,7 @@ import CloFRP.AST.Name
 import CloFRP.AST.Type
 import CloFRP.AST.Pat
 import CloFRP.AST.Expr
-import CloFRP.AST.Alias
+import CloFRP.AST.Synonym
 import CloFRP.AST.Kind
 import CloFRP.AST.Datatype
 
@@ -50,7 +50,7 @@ data Decl' a
   = FunD Name (Expr a)
   | DataD (Datatype a)
   | SigD Name (Type a 'Poly)
-  | AliasD (Alias a)
+  | SynonymD (Synonym a)
 
 instance Pretty (Decl a) where
   pretty (A _ d) = prettyD d where
@@ -58,7 +58,7 @@ instance Pretty (Decl a) where
       FunD nm e  -> pretty nm <+> "=" <+> pretty e <> "."
       DataD dt   -> pretty dt <> "."
       SigD nm ty -> pretty nm <+> ":" <+> pretty ty <> "."
-      AliasD al  -> pretty al <> "."
+      SynonymD al  -> pretty al <> "."
 
 deriving instance Show a     => Show (Decl' a)
 deriving instance Eq a       => Eq (Decl' a)
@@ -171,8 +171,8 @@ fund nm e =  A () $ FunD nm e
 sigd :: Name -> Type () 'Poly -> Decl ()
 sigd nm t =  A () $ SigD nm t
 
-aliasd :: Name -> [Name] -> Type () 'Poly -> Decl ()
-aliasd nm bs t = A () $ AliasD (Alias nm (map (,Star) bs) t)
+synonymd :: Name -> [Name] -> Type () 'Poly -> Decl ()
+synonymd nm bs t = A () $ SynonymD (Synonym nm (map (,Star) bs) t)
 
 prog :: [Decl ()] -> Prog ()
 prog = Prog
@@ -268,7 +268,7 @@ unannD = help go where
     FunD nm c -> FunD nm (unannE c) 
     DataD dt  -> DataD $ unann dt 
     SigD nm t -> SigD nm (unannT t)
-    AliasD al -> AliasD $ unann al
+    SynonymD al -> SynonymD $ unann al
 
 instance Unann (Prog a) (Prog ()) where
   unann = unannP

@@ -12,7 +12,7 @@ in its type signature.
 
 Aside from these ideas, CloFRP resembles an ordinary Haskell-inspired language. As such it features:
 - Datatype declarations alá vanilla Haskell
-- Type aliases 
+- Type synonyms 
 - Automatic derivation of fmap (functor map) for strictly-positive types
 - Bi-directional type higher-rank inference - polymorphic functions must be annotated, but everything else should
   be inferrable
@@ -68,7 +68,7 @@ The code is split into several folders and modules:
 - Think of a module strategy
 - Integrate with Haskell ✓
 - Write a demo (Pong or Pacman if crazy)
-- Expand type-aliases in type annotations ✓
+- Expand type-synonyms in type annotations ✓
 - Parse (:) syntax for type annotations instead of `the (A) e` ✓
 - application-synthesis leaves solved existentials in context (as it must because of curried functions)
   but this pollutes the context after the application. We'd probably need to treat application as
@@ -79,7 +79,7 @@ The code is split into several folders and modules:
   - Add source-location to errors
   - Parsing and checking is pretty laissez faire with propagating and maintaining annotations, leading
     to possibly incorrect source-locations in errors
-- Check data decls and type aliases for well-formedness before elaboration
+- Check data decls and type synonyms for well-formedness before elaboration
 - Is OK to re-assign an existential iff it is the same type we're attempting to assign?
   - should never happen now since we maintain optimally-solved contexts
 - Improve inference for "unfold"
@@ -87,16 +87,16 @@ The code is split into several folders and modules:
   - rec types
   - tuples ✓
 
-## Type Aliases
-- Right now, type alias expansion is kind of a mess tbh. Here is a maybe better algorithm:
-  - Go through each alias, and "fixpoint" expand them
-    - If an alias encounters itself in its expansion, its recursive so we fail
-    - If not, every alias is expanded into its "most-expanded" (normal) form
-  - After each alias is in normal form, go through each type (signatures and annotations in expressions)
-    - We know the arity n of each alias, so we should be able to simply search for its name applied to n
+## Type Synonymes
+- Right now, type synonym expansion is kind of a mess tbh. Here is a maybe better algorithm:
+  - Go through each synonym, and "fixpoint" expand them
+    - If an synonym encounters itself in its expansion, its recursive so we fail
+    - If not, every synonym is expanded into its "most-expanded" (normal) form
+  - After each synonym is in normal form, go through each type (signatures and annotations in expressions)
+    - We know the arity n of each synonym, so we should be able to simply search for its name applied to n
       arguments
     - We can then substitute the arguments (after they've been expanded as well) for the bound variables in
-      the alias definition and replace it directly into the AST.
+      the synonym definition and replace it directly into the AST.
 
 ## Recursive Types
 - Is it really a good idea to expose the recursive primitives to the user?

@@ -72,13 +72,13 @@ prettySpec = do
       pps [unsafeExpr|case 10 of | x -> 0|] `shouldBe` "case 10 of | x -> 0"
       ppsw 100 [unsafeExpr|case b of | True -> 0 | False -> 1|] `shouldBe` "case b of | True -> 0 | False -> 1"
   
-  describe "type aliases" $ do
+  describe "type synonyms" $ do
     it "works lol" $ do
-      pps (E.aliasd "Seconds" [] "Int") `shouldBe` "type Seconds = Int."
-      pps (E.aliasd "Stream" ["a"] $ "List" @@: "a") `shouldBe` "type Stream a = List a."
-      pps (E.aliasd "Option" ["a"] $ "Maybe" @@: "a") `shouldBe` "type Option a = Maybe a."
-      pps (E.aliasd "Sum" ["a", "b"] $ "Either" @@: "a" @@: "b") `shouldBe` "type Sum a b = Either a b."
-      ppsw 80 (E.aliasd "CList" ["a"] $ E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")
+      pps (E.synonymd "Seconds" [] "Int") `shouldBe` "type Seconds = Int."
+      pps (E.synonymd "Stream" ["a"] $ "List" @@: "a") `shouldBe` "type Stream a = List a."
+      pps (E.synonymd "Option" ["a"] $ "Maybe" @@: "a") `shouldBe` "type Option a = Maybe a."
+      pps (E.synonymd "Sum" ["a", "b"] $ "Either" @@: "a" @@: "b") `shouldBe` "type Sum a b = Either a b."
+      ppsw 80 (E.synonymd "CList" ["a"] $ E.forAll ["r"] $ ("a" @->: "r" @->: "r") @->: "r" @->: "r")
         `shouldBe` "type CList a = ∀r. (a -> r -> r) -> r -> r."
   
   describe "programs" $ do

@@ -39,9 +39,9 @@ import CloFRP.Derive
 -- the kinds of the data-types. Also checks that all tlds have signatures and there are
 -- no orphan signatures
 
--- alias for definitions
+-- synonym for definitions
 type Defs a = M.Map Name (Expr a)
-type Aliases a = M.Map Name (Alias a)
+type Synonymes a = M.Map Name (Synonym a)
 type Deriving a = M.Map Name [Datatype a] -- Class to list of data-types
 
 data ElabRes a = ElabRes
@@ -50,7 +50,7 @@ data ElabRes a = ElabRes
   , erSigs    :: FreeCtx a    -- signatures
   , erConstrs :: FreeCtx a    -- constructors
   , erDestrs  :: DestrCtx  a  -- destructors
-  , erAliases :: Aliases a    -- type aliases
+  , erSynonymes :: Synonymes a    -- type synonyms
   , erDeriving :: Deriving a  -- data-types that must derive stuff
   } deriving (Show, Eq, Data, Typeable)
 
@@ -62,7 +62,7 @@ instance Monoid (ElabRes a) where
             , erSigs     = erSigs     er1 `mappend` erSigs     er2
             , erConstrs  = erConstrs  er1 `mappend` erConstrs  er2
             , erDestrs   = erDestrs   er1 `mappend` erDestrs   er2
-            , erAliases  = erAliases  er1 `mappend` erAliases  er2
+            , erSynonymes  = erSynonymes  er1 `mappend` erSynonymes  er2
             , erDeriving = erDeriving er1 `mappend` erDeriving er2
             }
 
@@ -71,7 +71,7 @@ data ElabProg a = ElabProg
   , types   :: FreeCtx a
   , defs    :: Defs a
   , destrs  :: DestrCtx a
-  , aliases :: Aliases a
+  , synonyms :: Synonymes a
   , instances :: InstanceCtx a
   } deriving (Show, Eq, Typeable)
 
@@ -95,33 +95,33 @@ data ElabProg a = ElabProg
 -}
 
 -- is this just a free monad?
-data AliasExpansion a
-  = Done (Type a 'Poly) -- a fully expanded alias
-  -- | the Name is the name of the alias
-  | Ex Name (Type a 'Poly -> AliasExpansion a) -- an alias that still needs at least one application
+data SynonymExpansion a
+  = Done (Type a 'Poly) -- a fully expanded synonym
+  -- | the Name is the name of the synonym
+  | Ex Name (Type a 'Poly -> SynonymExpansion a) -- an synonym that still needs at least one application
 
-instance Eq (AliasExpansion a) where
+instance Eq (SynonymExpansion a) where
   Done t1 == Done t2 = t1 =%= t2
   _       == _       = False
 
-instance Monoid a => Show (AliasExpansion a) where
+instance Monoid a => Show (SynonymExpansion a) where
   show e = showex 0 e where
     showex i (Ex _ f) = showex (i+1) (f (A mempty $ TFree (DeBruijn i)))
     showex _ (Done t) = show . pretty $ t
 
 {-
-  ae (Alias FlipSum [a,b] (Either b a))
-  = Ex (\x -> ae (Alias FlipSum [b] (Either b x)))
-  = Ex (\x -> Ex (\y -> ae (Alias [] FlipSum (Either y x))))
+  ae (Synonym FlipSum [a,b] (Either b a))
+  = Ex (\x -> ae (Synonym FlipSum [b] (Either b x)))
+  = Ex (\x -> Ex (\y -> ae (Synonym [] FlipSum (Either y x))))
   = Ex (\x -> Ex (\y -> Done (Either y x)))
 -}
 
-aliasExpansion :: a -> Alias a -> AliasExpansion a
-aliasExpansion ann = go 0 . deb where 
-  deb al@(Alias {alBound = b, alExpansion = ex}) =
+synonymExpansion :: a -> Synonym a -> SynonymExpansion a
+synonymExpansion ann = go 0 . deb where 
+  deb al@(Synonym {alBound = b, alExpansion = ex}) =
     al { alExpansion = deBruijnify ann (map fst b) ex } 
 
-  go i al@(Alias {alName = nm, alBound = b, alExpansion = ex}) =
+  go i al@(Synonym {alName = nm, alBound = b, alExpansion = ex}) =
     case b of
       [] -> Done ex
       _:xs -> Ex nm $ \t ->
@@ -136,9 +136,9 @@ deBruijnify ann = go 0 where
   go _ []     ty = ty
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
 
-checkRecAliases :: forall a. Aliases a -> TypingM a ()
-checkRecAliases als = sequence (M.map checkAl als) *> pure () where
-  checkAl (Alias {alName, alExpansion}) = checkRecAl alName alExpansion
+checkRecSynonymes :: forall a. Synonymes a -> TypingM a ()
+checkRecSynonymes als = sequence (M.map checkAl als) *> pure () where
+  checkAl (Synonym {alName, alExpansion}) = checkRecAl alName alExpansion
   checkRecAl :: Name -> Type a 'Poly -> TypingM a ()
   checkRecAl name (A _ ty') = 
     case ty' of
@@ -168,21 +168,21 @@ checkRecAliases als = sequence (M.map checkAl als) *> pure () where
   = (Either _ a, Either b c)
   = (Either (Either b c) a)
 -}
-expandAliases :: forall a. Aliases a -> Type a 'Poly -> TypingM a (Type a 'Poly)
-expandAliases als t = 
-  -- fixpoint it! for recursive alias expansion
-  -- recursive type aliases will make this non-terminating, so its good
+expandSynonymes :: forall a. Synonymes a -> Type a 'Poly -> TypingM a (Type a 'Poly)
+expandSynonymes als t = 
+  -- fixpoint it! for recursive synonym expansion
+  -- recursive type synonyms will make this non-terminating, so its good
   -- that we check for those first :)
   go t >>= \case 
     Done t' | t =%= t' -> pure t'
-            | otherwise -> expandAliases als t'
+            | otherwise -> expandSynonymes als t'
     Ex nm _ -> wrong nm
   where
-    go :: Type a 'Poly -> TypingM a (AliasExpansion a)
+    go :: Type a 'Poly -> TypingM a (SynonymExpansion a)
     go (A ann ty') = 
       case ty' of
         TFree n 
-          | Just al <- M.lookup n als -> pure $ aliasExpansion ann al
+          | Just al <- M.lookup n als -> pure $ synonymExpansion ann al
           | otherwise                 -> done (A ann $ ty')
 
         TVar _     -> done (A ann ty')
@@ -225,14 +225,14 @@ expandAliases als t =
 
     wrong :: Name -> TypingM a r
     wrong nm 
-      | Just al <- M.lookup nm als = partialAliasApp al
-      | otherwise                  = otherErr $ "alias " ++ show nm ++ " not in context. Should never happen"
+      | Just al <- M.lookup nm als = partialSynonymApp al
+      | otherwise                  = otherErr $ "synonym " ++ show nm ++ " not in context. Should never happen"
 
 collectDecls :: Prog a -> ElabRes a
 collectDecls (Prog decls) = foldr folder mempty decls where
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> ElabRes a
-    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erAliases = als, erDeriving = drv}) = case x of
+    folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erSynonymes = als, erDeriving = drv}) = case x of
       DataD dt@(Datatype nm b cs' derivs) ->
         let (tys, dstrs) = elabCs nm b cs' 
             drv' = foldr (\x acc -> M.insertWith (++) (UName x) [dt] acc) drv derivs
@@ -240,10 +240,10 @@ collectDecls (Prog decls) = foldr folder mempty decls where
 
       FunD nm e        -> er {erDefs = M.insert nm e fs}
       SigD nm t        -> er {erSigs = extend nm t ss}
-      AliasD alias     -> er {erAliases = M.insert (alName alias) alias als}
+      SynonymD synonym     -> er {erSynonymes = M.insert (alName synonym) synonym als}
 
 
--- | Elaborate instances and expand their types with aliases with a function
+-- | Elaborate instances and expand their types with synonyms with a function
 -- `inject` to go from the Either representation to a monad representation
 elabInstances :: (Either String (ClassInstance a) -> TypingM a (ClassInstance a)) -> Deriving a -> TypingM a (InstanceCtx a)
 elabInstances inject derivs = InstanceCtx <$> M.traverseWithKey traverseDerivs derivs where
@@ -254,7 +254,7 @@ elabInstances inject derivs = InstanceCtx <$> M.traverseWithKey traverseDerivs d
   --   pure ci { ciDictionary = dict }
   --   where
   --     tfn (ty,expr) = do 
-  --       expty <- expandAliases aliases ty
+  --       expty <- expandSynonymes synonyms ty
   --       pure (expty, expr)
 
 type UsageGraph = Map Name (Set Name)
@@ -303,7 +303,7 @@ constrsToUsageGraph (FreeCtx m) = M.map (const S.empty) m
 -- TODO: Check that data-types are not mutually recursive
 elabProg :: Prog a -> TypingM a (ElabProg a)
 elabProg program = do
-  let ElabRes kinds funds sigds cnstrs destrs aliases derivs = collectDecls program 
+  let ElabRes kinds funds sigds cnstrs destrs synonyms derivs = collectDecls program 
   let defsNoSig = funds `M.difference` unFreeCtx sigds
       sigsNoDef = unFreeCtx sigds `M.difference` funds
       defsHaveSigs = M.null defsNoSig -- all tlds have signatures
@@ -312,17 +312,17 @@ elabProg program = do
       _ | not defsHaveSigs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a signature.") defsNoSig
         | not sigsHaveDefs -> otherErr $ unlines $ M.elems $ M.mapWithKey (\k _v -> show k ++ " lacks a binding.")   sigsNoDef
         | otherwise     -> do
-            _ <- checkRecAliases aliases
+            _ <- checkRecSynonymes synonyms
             let FreeCtx types = sigds <> cnstrs
-            expFree <- traverse (expandAliases aliases) types
-            expDestrs <- DestrCtx <$> (traverse (expandDestr aliases) $ unDestrCtx destrs)
-            expDerivs <- traverse (expandDerivs aliases) derivs
-            expFunds <- traverse (traverseAnnos (expandAliases aliases)) $ funds
+            expFree <- traverse (expandSynonymes synonyms) types
+            expDestrs <- DestrCtx <$> (traverse (expandDestr synonyms) $ unDestrCtx destrs)
+            expDerivs <- traverse (expandDerivs synonyms) derivs
+            expFunds <- traverse (traverseAnnos (expandSynonymes synonyms)) $ funds
             checkForMutualRecursiveDefs expFunds cnstrs
             instances <- elabInstances fromEither expDerivs
             let allFree = FreeCtx $ expFree -- <> M.fromList derivTyps
             let allDefs = expFunds -- <> M.fromList derivDefs
-            pure $ ElabProg kinds allFree allDefs expDestrs aliases instances
+            pure $ ElabProg kinds allFree allDefs expDestrs synonyms instances
   where 
     expandDerivs als ds = traverse (expandDeriv als) ds
     expandDeriv als d@(Datatype {dtConstrs}) = do
@@ -330,11 +330,11 @@ elabProg program = do
       pure (d {dtConstrs = constrs})
       where
         expandConstr (A ann (Constr nm args)) = 
-          A ann . Constr nm <$> traverse (expandAliases als) args
+          A ann . Constr nm <$> traverse (expandSynonymes als) args
 
     expandDestr als d@(Destr {typ, args}) = do
-      typ' <- expandAliases als typ
-      args' <- traverse (expandAliases als) args
+      typ' <- expandSynonymes als typ
+      args' <- traverse (expandSynonymes als) args
       pure (d {typ = typ', args = args'})
     
     checkForMutualRecursiveDefs defs constrs =
@@ -367,16 +367,16 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
 -- | Check an elaborated program
 -- TODO: Check derived definitions in instances
 checkElabedProg :: ElabProg a -> TypingM a ()
-checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
+checkElabedProg (ElabProg {kinds, types, defs, destrs, synonyms, instances}) = do
   _ <- checkTypes
   _ <- checkDefs
-  _ <- checkAliases
+  _ <- checkSynonymes
   _ <- local (const ctx) checkInstances
   pure ()
   where 
     checkTypes = M.traverseWithKey traverseTypes (unFreeCtx types)
     checkDefs  = M.traverseWithKey traverseDefs defs
-    checkAliases = traverse traverseAlias aliases
+    checkSynonymes = traverse traverseSynonym synonyms
     checkInstances = traverse traverseInstances (unInstanceCtx instances)
 
     -- initKinds = extend "Int" Star $ extend "K0" ClockK kinds
@@ -392,8 +392,8 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, aliases, instances}) = do
         -- censor (const []) $ local (const ctx') $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
-    traverseAlias (Alias {alBound, alExpansion}) = do
-      expanded <- expandAliases aliases alExpansion
+    traverseSynonym (Synonym {alBound, alExpansion}) = do
+      expanded <- expandSynonymes synonyms alExpansion
       validType kinds (quantify alBound expanded)
     
     traverseInstances xs = traverse checkInstance xs where

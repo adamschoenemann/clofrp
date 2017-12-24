@@ -7,7 +7,7 @@ import qualified CloFRP.AST as E
 import           CloFRP.Parser.Lang
 import qualified CloFRP.Parser.Type as P
 import qualified CloFRP.Parser.Expr as P
-import qualified CloFRP.Parser.Alias as P
+import qualified CloFRP.Parser.Synonym as P
 import           CloFRP.AST.Name
 
 type Decl = E.Decl SourcePos
@@ -18,7 +18,7 @@ decls = many decl
 -- using monadic parser style here is a bit annoying, but
 -- it improves the parser error messages significantly
 decl :: Parser Decl
-decl = datad <|> alias <|> p where
+decl = datad <|> synonym <|> p where
   p = do
     nm <- lidentifier
     op <- (oneOf [':', '=']) <* ws
@@ -27,7 +27,7 @@ decl = datad <|> alias <|> p where
               ':' -> E.SigD (UName nm) <$> P.typep
               _   -> error "the impossible happened"
     ann <*> p' <* reservedOp "."
-  alias = ann <*> (E.AliasD <$> P.alias)
+  synonym = ann <*> (E.SynonymD <$> P.synonym)
 
 -- sigd :: Parser Decl
 -- sigd = ann <*> p <* reservedOp "." where
