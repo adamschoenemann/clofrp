@@ -172,10 +172,8 @@ everyOtherExec = [clofrp|
   truefalse : forall (k : Clock). Stream k Bool.
   truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
 
-  main : Stream K0 Bool.
-  main = 
-    let Cos xs = eo (Cos truefalse) in
-    xs.
+  main : CoStream Bool.
+  main = eo (Cos truefalse).
 |]
 
 everyOtherTrans = [clofrp|
@@ -497,7 +495,7 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 main :: IO ()
 main = do
   putStrLn "running benchmar"
-  bench_replaceMin
+  bench_everyOtherExec
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000

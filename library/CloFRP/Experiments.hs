@@ -194,3 +194,7 @@ fixd :: ((() -> a) -> a) -> a
 fixd f =
   let x = f (\_ -> x)
   in  x
+
+everyOther :: [a] -> [a]
+everyOther [] = []
+everyOther (x1:x2:xs) = x1 : everyOther xs

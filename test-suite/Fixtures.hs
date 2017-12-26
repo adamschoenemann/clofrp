@@ -153,9 +153,9 @@ streamProcessing =
 
     hd : forall a. CoStream a -> a.
     hd = \xs -> 
-      let Cos s = xs
-      in case unfold s of
-          | Cons x xs' -> x.
+      let Cos s = xs in
+      let Cons x xs' = unfold s
+      in  x.
 
     -- see if you can do this better with let generalization
     tl : forall a. CoStream a -> CoStream a.
