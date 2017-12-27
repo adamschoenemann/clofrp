@@ -156,6 +156,9 @@ instance ToHask ('CTFree "Int") Integer where
   toHask _ (Prim (IntVal i)) = i
   toHask _ v = error $ "expected int but got " ++ pps v
 
+instance ToCloFRP Integer ('CTFree "Int") where
+  toCloFRP _ i = Prim (IntVal i)
+
 instance (ToCloFRP h1 c1, ToCloFRP h2 c2) => ToCloFRP (h1, h2) ('CTTuple [c1, c2]) where
   toCloFRP (SPair s1 s2) (x1, x2) = Tuple [toCloFRP s1 x1, toCloFRP s2 x2]
   toCloFRP (STup ss s)   (x1, x2) = error "impossible" -- Tuple [toCloFRP s1 x1, toCloFRP s2 x2]

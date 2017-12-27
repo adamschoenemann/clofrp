@@ -56,7 +56,13 @@ instance ToCloFRP Int ('CTFree "Nat") where
 
 instance ToHask t r => ToHask ('CTFree "Stream" :@: u :@: t) [r] where
   toHask s@((s1 `SApp` s2) `SApp` s3) (Fold (Constr "Cons" [v, c])) = toHask s3 v : toHask s c
-  toHask s@((s1 `SApp` s2) `SApp` s3) v = error ("Expected fold (Cons x ..) but got " ++ pps (takeConstr 2 v))
+  toHask s@((s1 `SApp` s2) `SApp` s3) v = error ("Expected fold (Cons x ..) but got " ++ pps v)
+
+-- coinductive streams to haskell lists
+instance ToHask t r => ToHask ('CTFree "CoStream" :@: t) [r] where
+  toHask s@(s1 `SApp` s2) (Constr "Cos" [xs]) = 
+    toHask (SFree (Proxy @"Stream") `SApp` SFree (Proxy @"K0") `SApp` s2) xs
+  toHask s@(s1 `SApp` s2) v = error ("Expected Cos (..) but got" ++ pps (takeConstr 2 v))
 
 -- haskell lists to clott streams over k₀
 instance ToCloFRP hask clott => ToCloFRP [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) where
@@ -71,7 +77,6 @@ instance ToCloFRP [hask] ('CTFree "Stream" :@: 'CTFree "K0" :@: clott) => ToCloF
   toCloFRP s@(s1 `SApp` s2) xs = 
     let strsing = SFree (Proxy @"Stream") `SApp` SFree (Proxy @"K0") `SApp` s2
     in  Constr "Cos" [toCloFRP strsing xs] where
-
 type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTBinTree = 'CTFree "BinTree" :@: 'CTFree "K0"
 
@@ -266,8 +271,6 @@ binTree = [clofrp|
 
   data StreamF (k : Clock) a f = Cons a (|>k f).
   type Stream (k : Clock) a = Fix (StreamF k a).
-
-  -- constBinTree : forall (k : Clock) a. a -> BinTree k a.
 
   main : BinTree K0 Unit.
   main = 
@@ -494,8 +497,8 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 
 main :: IO ()
 main = do
-  putStrLn "running benchmar"
-  bench_everyOtherExec
+  putStrLn "running benchmark"
+  bench_scaryConst  
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000
@@ -556,8 +559,8 @@ bench_binTree = do
 bench_clott_add :: IO ()
 bench_clott_add = do
   let n = 800000
-  let inputs = zip (repeat 1) (repeat 1)
-  let output = take n (streamTrans clott_add inputs)
+  let inputs = [0,1..] `zip` [0,2..]
+  let output = take n (streamTrans clott_add_int inputs)
   putStrLn . show $ output
 
 bench_scaryConst :: IO ()
@@ -565,7 +568,6 @@ bench_scaryConst = do
   let sc = [clofrp|
     data StreamF (k : Clock) a f = Cons a (|>k f).
     type Stream (k : Clock) a = Fix (StreamF k a).
-    data Unit = MkUnit.
 
     cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
     cons = \x xs -> fold (Cons x xs).
@@ -580,25 +582,18 @@ bench_scaryConst = do
             | Cons x xs' -> cons (f x) (\\(af : k) -> g [af] (xs' [af]))
       in fix mapfix.
 
-    -- nats : forall (k : Clock). Stream k Int.
-    -- nats = fix (\g -> cons 0 (\\(af : k) -> strmap (\x -> x + 1) (g [af]))).
-
     nats : forall (k : Clock). Int -> Stream k Int.
     nats = fix (\g n -> cons n (\\(af : k) -> g [af] (n + 1))).
 
-    -- data Bool = True | False.        
-    -- truefalse : forall (k : Clock). Stream k Bool.
-    -- truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
-
     main : Stream K0 (Stream K0 Int).
     main = const (nats 0).
-
   |]
-  -- let nats = fix (\n -> (0::Int) : map (+1) n) 
+  -- let nats = fix (\n -> (0::Integer) : map (+1) n) 
+  -- putStrLn . show $ take 2 $ map (take 1000000) $ repeat nats
   -- putStrLn . show $ take 12000 nats
-  putStrLn . show $ take 50 $ map (take 500000) $ execute sc
+  putStrLn . show $ take 10 $ map (take 500000) $ execute sc 
   -- putStrLn . show $ take 1000 $ execute sc
 
 fix :: (a -> a) -> a
--- fix f = let x = f x in  x
-fix f = f (fix f)
+fix f = let x = f x in  x
+-- fix f = f (fix f)
