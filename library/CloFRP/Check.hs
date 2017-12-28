@@ -84,7 +84,7 @@ substCtx ctx (A a ty) =
         Just tau -> substCtx ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
         Nothing
           | ctx `containsEVar` x -> pure $ A a $ TExists x
-          | otherwise            -> otherErr $ show $ "existential" <+> pretty x <+> "not in context"
+          | otherwise            -> otherErr $ show $ "existential" <+> pretty x <+> "not in context" <> line <> pretty ctx
 
     t1 `TApp` t2 -> do
       t1' <- substCtx ctx t1
@@ -827,7 +827,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
         rule "CheckClause" ("|" <+> pretty pat <+> "->" <+> pretty expr <+> "<=" <+> pretty expected)
         (expected', ctx') <- checkClause pty (pat, expr) expected
         let nextCtx =  (dropTil (Marker markerName) ctx') <+ Marker markerName
-        pty' <- substCtx ctx' pty -- more substCtx for (hopefully) better inference
+        pty' <- substCtx ctx' pty `decorateErr` (Other "[checkCaseClauses]")  -- more substCtx for (hopefully) better inference
         withCtx (const nextCtx) $
             checkCaseClauses markerName pty' clauses' expected'
       [] -> getCtx
@@ -837,9 +837,9 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
   checkClause :: Type a 'Poly -> (Pat a, Expr a) -> Type a 'Poly -> TypingM a (Type a 'Poly, LocalCtx a)
   checkClause pty (pat, expr) expected = do
     ctx' <- branch $ checkPat pat pty
-    expected' <- substCtx ctx' expected
+    expected' <- substCtx ctx' expected `decorateErr` (Other "[checkClause.1]")
     ctx'' <- withCtx (const ctx') $ branch $ check expr expected'
-    expected'' <- substCtx ctx'' expected'
+    expected'' <- substCtx ctx'' expected' `decorateErr` (Other "[checkClause.2]")
     pure (expected'', ctx'')
 
   -- here with no substCtx
@@ -965,7 +965,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   synthesize' (Let p e1 e2) = do
     root $ "[Let=>]" <+> pretty expr <+> "=>" 
     (e1ty, theta) <- branch $ synthesize e1
-    e1tys <- substCtx theta e1ty
+    e1tys <- substCtx theta e1ty `decorateErr` (Other "[Let=>]")
     theta' <- withCtx (const theta) $ branch $ checkPat p e1tys
     withCtx (const theta') $ branch $ synthesize e2
 
@@ -986,7 +986,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     let kt = A ann $ TVar k
     let c = (LamB, nm) `HasType` kt
     (ety, ctx') <- withCtx (\g -> g <+ c) $ branch $ synthesize e
-    ety' <- substCtx ctx' ety
+    ety' <- substCtx ctx' ety `decorateErr` (Other "[TickAbs=>]")
     (delta, _, _) <- splitCtx c ctx'
     let lty = A ann $ Later kt ety'
     pure (lty, delta)
@@ -995,7 +995,7 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   synthesize' (TypeApp ex arg) = do
     root $ "[TypeApp=>]" <+> pretty expr
     (exty, theta) <- branch $ synthesize ex
-    extys <- substCtx theta exty
+    extys <- substCtx theta exty `decorateErr` (Other "[TypeApp=>]")
     checkWfType arg
     -- _ <- asMonotypeTM arg
     k' <- kindOf arg

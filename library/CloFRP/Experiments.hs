@@ -198,3 +198,9 @@ fixd f =
 everyOther :: [a] -> [a]
 everyOther [] = []
 everyOther (x1:x2:xs) = x1 : everyOther xs
+
+maap :: (a -> b) -> [a] -> [b]
+maap f (x1 : x2 : xs) = f x1 : f x2 : maap f xs
+
+badnats :: [Int]
+badnats = 0 : maap (+1) badnats

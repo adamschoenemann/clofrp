@@ -241,7 +241,7 @@ clockSpec = do
 
         cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with dmap :(
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
@@ -259,9 +259,9 @@ clockSpec = do
                   in cons x xs'
           in fix fn.
 
-        strmap : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
-        strmap = \f -> 
-          --  mapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
+        map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+        map = \f -> 
+          --  dmapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
           let mapfix = \g xs ->
                 case unfold xs of
                 | Cons x xs' -> 
@@ -281,8 +281,8 @@ clockSpec = do
           f a.
 
         -- functor
-        map : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-        map = \f la -> app (pure f) la.
+        dmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+        dmap = \f la -> app (pure f) la.
 
         data NatF f = Z | S f deriving Functor.
         type Nat = Fix NatF.
@@ -294,8 +294,8 @@ clockSpec = do
         s = \x -> fold (S x).
 
         nats : forall (k : Clock). Stream k Nat.
-        nats = fix (\g -> cons z (map (strmap s) g)).
-        -- nats = fix (\g -> cons z (\\(af : k) -> strmap (\x -> s x) (g [af]))).
+        nats = fix (\g -> cons z (dmap (map s) g)).
+        -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
 
         hdk : forall (k : Clock) a. Stream k a -> a.
         hdk = \xs ->
@@ -366,18 +366,6 @@ clockSpec = do
         take : forall a. Nat -> CoStream a -> List a.
         take = \n -> primRec {NatF} takeBody n.
 
-        -- maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
-        -- maapfix = \f r xs ->
-        --   let h = hd xs in
-        --   let t = tl xs in
-        --   cos (f h) (\\(af : k) -> 
-        --     let h' = hd t in
-        --     let t' = tl t in
-        --     cos (f h') (\\(beta : k) -> 
-        --       (r [af]) t'
-        --     )
-        --   ).
-
         maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
         maapfix = \f r xs ->
           let h = hd xs in
@@ -385,7 +373,7 @@ clockSpec = do
           let h' = hd t in 
           let t' = tl t in
           let inner = \r' -> cos (f h') (pure (r' t'))
-          in  cos (f h) (map inner r).
+          in  cos (f h) (dmap inner r).
 
         maap : forall a b. (a -> b) -> CoStream a -> CoStream b.
         maap = \f -> fix (maapfix f).
