@@ -182,9 +182,9 @@ streamProcessing =
       let a = la [af] in
       f a.
 
-    -- functor
-    map : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
-    map = \f la -> app (pure f) la.
+    -- |>k functor
+    dmap : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
+    dmap = \f la -> app (pure f) la.
 
     -- fixpoint above with full types
     applyfix : forall (k : Clock) i o. |>k (SP i o k -> CoStream i -> CoStream o) -> SP i o k -> CoStream i -> CoStream o.
@@ -193,7 +193,7 @@ streamProcessing =
         case x of
         | Get f -> let (sp', g) = f (hd s) in g (tl s)
         | Put b sp -> 
-          let sp1 = map fst sp in
+          let sp1 = dmap fst sp in
           cos b (app (app rec sp1) (pure s))
       ).
 
@@ -204,7 +204,7 @@ streamProcessing =
         case x of
         | Get f -> (snd (f (hd s))) (tl s) 
         | Put b sp -> 
-          let sp1 = map fst sp in
+          let sp1 = dmap fst sp in
           cos b (app (app rec sp1) (pure s))
       )).
 

@@ -393,7 +393,7 @@ instL ahat ty@(A a ty') =
           let ahat1 = Exists af1 Star
           let ahat2 = Exists af2 Star
           let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat Star) [ahat1, ahat2, ahat := arr]
+          ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := arr]
           omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
           substed <- substCtx omega t2
           withCtx (const omega) $ branch (af2 `instL` substed)
@@ -419,7 +419,7 @@ instL ahat ty@(A a ty') =
           let ahat1 = Exists af1 t1k
           let ahat2 = Exists af2 t2k
           let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat tyk) [ahat1, ahat2, ahat := app]
+          ctx' <- insertAt (Exists ahat tyk) [ahat2, ahat1, ahat := app]
           omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
           substed <- substCtx omega t2
           withCtx (const omega) $ branch (af2 `instL` substed)
@@ -447,7 +447,7 @@ instL ahat ty@(A a ty') =
           let ahat1 = Exists af1 ClockK
           let ahat2 = Exists af2 Star
           let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat Star) (mempty <+ ahat1 <+ ahat2 <+ ahat := ltr)
+          ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := ltr]
           omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
           substed <- substCtx omega t2
           r <- withCtx (const omega) $ branch (af2 `instL` substed)
@@ -459,7 +459,7 @@ instL ahat ty@(A a ty') =
           a1 <- freshName
           let rt = A a $ RecTy (A a $ TExists a1)
           k <- kindOf t
-          ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 k <+ ahat := rt)
+          ctx' <- insertAt (Exists ahat Star) [Exists a1 k, ahat := rt]
           withCtx (const ctx') $ branch (a1 `instL` t)
 
         _ -> do
@@ -491,7 +491,7 @@ instR ty@(A a ty') ahat =
             let ahat1 = Exists af1 Star
             let ahat2 = Exists af2 Star
             let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-            ctx' <- insertAt (Exists ahat Star) (mempty <+ ahat1 <+ ahat2 <+ ahat := arr)
+            ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := arr]
             omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
             substed <- substCtx omega t2
             r <- withCtx (const omega) $ branch (substed `instR` af2)
@@ -517,7 +517,7 @@ instR ty@(A a ty') ahat =
             let ahat1 = Exists af1 t1k
             let ahat2 = Exists af2 t2k
             let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
-            ctx' <- insertAt (Exists ahat tyk) (mempty <+ ahat1 <+ ahat2 <+ ahat := app)
+            ctx' <- insertAt (Exists ahat tyk) [ahat2, ahat1, ahat := app]
             omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
             substed <- substCtx omega t2
             r <- withCtx (const omega) $ branch (substed `instR` af2)
@@ -529,7 +529,7 @@ instR ty@(A a ty') ahat =
             a1 <- freshName
             let rt = A a $ RecTy (A a $ TExists a1)
             k <- kindOf t
-            ctx' <- insertAt (Exists ahat Star) (mempty <+ Exists a1 k <+ ahat := rt)
+            ctx' <- insertAt (Exists ahat Star) [Exists a1 k, ahat := rt]
             withCtx (const ctx') $ branch (t `instR` a1)
 
           -- InstRTuple
@@ -555,7 +555,7 @@ instR ty@(A a ty') ahat =
             let ahat1 = Exists af1 ClockK
             let ahat2 = Exists af2 Star
             let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
-            ctx' <- insertAt (Exists ahat Star) (mempty <+ ahat1 <+ ahat2 <+ ahat := ltr)
+            ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := ltr]
             omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
             substed <- substCtx omega t2
             r <- withCtx (const omega) $ branch (substed `instR` af2)
