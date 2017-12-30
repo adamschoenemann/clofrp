@@ -69,7 +69,7 @@ replaceMin =
       snd = \x -> case x of | (y, z) -> z.
 
       feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
-      feedback = \f -> fst (fix (\x -> f (map snd x))).
+      feedback = \f -> fst (fix (\x -> f (map snd x))). -- x has type |>k (b k, u)
 
       data NatF f = Z | S f deriving Functor.
       type Nat = Fix NatF.
