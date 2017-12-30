@@ -31,6 +31,7 @@ import CloFRP.QuasiQuoter
 import CloFRP.Pretty
 import CloFRP.Examples
 
+import System.Random
 import Data.Text (Text)
 import NeatInterpolation
 import Data.String (fromString)
@@ -498,7 +499,7 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 main :: IO ()
 main = do
   putStrLn "running benchmark"
-  bench_scaryConst  
+  bench_scaryConst
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000
@@ -559,7 +560,9 @@ bench_binTree = do
 bench_clott_add :: IO ()
 bench_clott_add = do
   let n = 800000
-  let inputs = [0,1..] `zip` [0,2..]
+  -- let inputs = [0,1..] `zip` [0,2..]
+  g <- newStdGen
+  let inputs = randoms g `zip` randoms g
   let output = take n (streamTrans clott_add_int inputs)
   putStrLn . show $ output
 

@@ -9,6 +9,7 @@ executables:
     - criterion
     - parsec
     - neat-interpolation
+    - random
     ghc-options:
     - -w
     - -rtsopts
