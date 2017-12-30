@@ -10,7 +10,7 @@ import Data.Data
 -- A destructor which is elaborated from a pattern
 data Destr a = Destr
   { name   :: Name
-  , typ    :: Type a 'Poly
+  , typ    :: PolyType a
   , bound  :: [(Name, Kind)]
-  , args   :: [Type a 'Poly]
+  , args   :: [PolyType a]
   } deriving (Show, Eq, Data, Typeable)

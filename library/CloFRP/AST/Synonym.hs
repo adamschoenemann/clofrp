@@ -19,7 +19,7 @@ data Synonym a =
   Synonym
     { synName :: Name
     , synBound :: [(Name, Kind)]
-    , synExpansion :: Type a 'Poly
+    , synExpansion :: PolyType a
     } deriving (Show, Eq, Data, Typeable)
 
 

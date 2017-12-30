@@ -49,7 +49,7 @@ type Decl a = Annotated a (Decl' a)
 data Decl' a
   = FunD Name (Expr a)
   | DataD (Datatype a)
-  | SigD Name (Type a 'Poly)
+  | SigD Name (PolyType a)
   | SynonymD (Synonym a)
 
 instance Pretty (Decl a) where
@@ -277,10 +277,10 @@ unannP :: Prog a -> Prog ()
 unannP (Prog ds) = Prog (map unannD ds)
 
 -- | quantify a definition over the bound variables (or dont quantify if there are no bound)
-quantify :: [(Name, Kind)] -> Type a 'Poly -> Type a 'Poly
+quantify :: [(Name, Kind)] -> PolyType a -> PolyType a
 quantify bound = if length bound > 0 then (\(A ann t) -> foldr (\(nm,k) t' -> A ann $ Forall nm k t') (A ann t) bound) else id
 
-traverseAnnos :: Monad m => (Type a 'Poly -> m (Type a 'Poly)) -> Expr a -> m (Expr a)
+traverseAnnos :: Monad m => (PolyType a -> m (PolyType a)) -> Expr a -> m (Expr a)
 traverseAnnos fn = go where
   go (A a expr') = go' expr' where
     go' e' = case e' of
@@ -312,5 +312,5 @@ traverseAnnos fn = go where
 
 
 -- substitute type for name in expr (traverses and substitutes in annotations and type applications)
-substTVarInExpr :: Type a 'Poly -> Name -> Expr a -> Expr a 
+substTVarInExpr :: PolyType a -> Name -> Expr a -> Expr a 
 substTVarInExpr new nm = runIdentity . traverseAnnos (Identity . subst new nm)

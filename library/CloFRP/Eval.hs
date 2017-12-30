@@ -38,7 +38,7 @@ import CloFRP.AST.Helpers
 import CloFRP.Check.TypingM
 
 import qualified CloFRP.AST.Prim as P
-import           CloFRP.AST (Expr, Prog, Pat, Type, TySort(..), Datatype(..))
+import           CloFRP.AST (Expr, Prog, Pat, PolyType, Datatype(..))
 import qualified CloFRP.AST as E
 
 runtimeErr :: String -> Value a
@@ -76,7 +76,7 @@ fmapNat ann =
       ]
      ) 
 
-fmapFromType :: Pretty a => Type a 'Poly -> EvalM a (Value a)
+fmapFromType :: Pretty a => PolyType a -> EvalM a (Value a)
 fmapFromType ty = findInstanceOf "Functor" ty >>= \case
   Just (ClassInstance {ciDictionary = dict}) -> 
     maybe (pure $ runtimeErr "Functor without fmap!!") (evalExprStep . snd) (M.lookup "fmap" dict)
@@ -163,7 +163,7 @@ evalPrim = \case
     pure $ Closure mempty "#f" $ var "#f" `app` (delay $ fixE `app` var "#f")
   P.Undefined        -> pure . runtimeErr $ "Undefined!"
 
-evalPrimRec :: (Pretty a, ?annotation :: a) => Type a 'Poly -> EvalM a (Value a)
+evalPrimRec :: (Pretty a, ?annotation :: a) => PolyType a -> EvalM a (Value a)
 evalPrimRec t = do
   let (oname, ovar) = (UName "__outer__", var oname)
   let (iname, ivar) = (UName "__inner__", var iname)
@@ -337,7 +337,7 @@ evalStepDefinitions er ug defs defnm = do
       pure (acc { erGlobals = extendGlobals nm val (erGlobals acc) })
 
 
-progToEval :: Pretty a => Name -> Prog a -> TypingM a (Expr a, Type a 'Poly, EvalRead a)
+progToEval :: Pretty a => Name -> Prog a -> TypingM a (Expr a, PolyType a, EvalRead a)
 progToEval mainnm pr = do
   let (ElabRes {erDefs, erConstrs, erSigs}) = collectDecls pr
       vconstrs = M.mapWithKey (\k _ -> Right (Constr k [])) . unFreeCtx $ erConstrs

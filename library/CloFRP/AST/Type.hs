@@ -48,6 +48,8 @@ data Type' :: * -> TySort -> * where
   TTuple  :: [Type a s]                   -> Type' a s -- ⟨A₁,...,Aₙ⟩
   Later   :: Type a s     -> Type a s     -> Type' a s -- ⊳k A
 
+type PolyType a = Type a 'Poly
+type MonoType a = Type a 'Mono
 
 
 deriving instance Eq a       => Eq (Type' a s)
@@ -175,7 +177,7 @@ freeVars (A _ ty) =
 inFreeVars :: Name -> Type a s -> Bool
 inFreeVars nm t = nm `S.member` freeVars t
 
-asPolytype :: Type a s -> Type a 'Poly
+asPolytype :: Type a s -> PolyType a
 asPolytype (A a ty) = A a $
   case ty of
     TFree x      -> TFree x
@@ -188,7 +190,7 @@ asPolytype (A a ty) = A a $
     TTuple ts    -> TTuple (map asPolytype ts)
     Later t1 t2  -> Later (asPolytype t1) (asPolytype t2)
 
-asMonotype :: Type a s -> Maybe (Type a 'Mono)
+asMonotype :: Type a s -> Maybe (MonoType a)
 asMonotype (A a ty) =
   case ty of
     TFree x -> pure (A a $ TFree x)
@@ -208,7 +210,7 @@ asMonotype (A a ty) =
 
     Later t1 t2 -> (\x y -> A a $ Later x y) <$> asMonotype t1 <*> asMonotype t2
 
-subst :: Type a 'Poly -> Name -> Type a 'Poly -> Type a 'Poly
+subst :: PolyType a -> Name -> PolyType a -> PolyType a
 subst x forY (A a inTy) =
   case inTy of
     TFree y     | y == forY  -> x

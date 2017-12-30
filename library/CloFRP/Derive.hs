@@ -44,7 +44,7 @@ instance Functor NatF where
 -- maybeFRes = NoConstraints "Maybe"
 -- listFRes = Constraint [HasKind Star] "ListF"
 
--- resolveInstance :: Type a 'Poly -> InstanceResolver -> TypingM a Bool
+-- resolveInstance :: PolyType a -> InstanceResolver -> TypingM a Bool
 -- resolveInstance (A _ ty') ir =
 --   case (ty', ir) of
 --     (TFree n, NoConstraints n') -> n == n'
@@ -113,12 +113,12 @@ deriveFmapConstr f tnm constr@(A ann (Constr nm _args)) = do
   where
     folder acc darg = acc `app` darg
 
-    traversal :: (?annotation :: a) => (Name, Type a 'Poly) -> Either String (Expr a)
+    traversal :: (?annotation :: a) => (Name, PolyType a) -> Either String (Expr a)
     traversal (nm', ty) = do 
       fn <- deriveFmapArg f tnm ty
       pure $ fn `app` var nm'
 
-matchConstr :: Constr a -> (Pat a, [(Name, Type a 'Poly)])
+matchConstr :: Constr a -> (Pat a, [(Name, PolyType a)])
 matchConstr (A ann (Constr nm args)) = 
   let ?annotation = ann in
   let assocs = map (\(i, t) -> (UName ("x" ++ show i), t)) $ zip [(0::Int)..] args
@@ -126,7 +126,7 @@ matchConstr (A ann (Constr nm args)) =
 
 -- | Derive `fmap f` for functorial type variable `tnm` over type `typ`
 -- https://ghc.haskell.org/trac/ghc/wiki/Commentary/Compiler/DeriveFunctor
-deriveFmapArg :: Expr a -> TVarName -> Type a 'Poly -> Either String (Expr a)
+deriveFmapArg :: Expr a -> TVarName -> PolyType a -> Either String (Expr a)
 deriveFmapArg f tnm typ@(A anno _) = go typ where
   go typ2 | not (inFreeVars tnm typ2) = pure ide
   go (A ann typ') =
@@ -186,7 +186,7 @@ deriveFmapArg f tnm typ@(A anno _) = go typ where
   -- snde = A ?annotation $ Ann (lam' "tup" $ casee (var "tup") [ptuple [bind "_", bind "x_2"] |-> var "x_2"]) sndty where
   --   sndty = forAll ["a","b"] $ ttuple [tvar "a", tvar "b"] `arr` tvar "b"
 
-deriveFmapTuple :: (?annotation :: a) => Expr a -> TVarName -> [Type a 'Poly] -> Either String (Expr a)
+deriveFmapTuple :: (?annotation :: a) => Expr a -> TVarName -> [PolyType a] -> Either String (Expr a)
 deriveFmapTuple f tnm ts = do
   let is = [(0::Int) .. genericLength ts - 1]
   let nms = map (UName . ("x" ++) . show) is

@@ -35,7 +35,7 @@ import           Data.Data
 import           Debug.Trace
 
 import qualified CloFRP.AST as P
-import           CloFRP.AST (Type, TySort(..))
+import           CloFRP.AST (PolyType, TySort(..))
 import           CloFRP.Annotated
 import           CloFRP.AST.Helpers
 import           CloFRP.Eval
@@ -90,7 +90,7 @@ deriving instance Eq (Sing a)
 deriving instance Typeable (Sing a)
 
 -- |Reify a singleton back into an CloFRP type. Not used presently
-reifySing :: Sing t -> Type () 'Poly
+reifySing :: Sing t -> PolyType ()
 reifySing = \case
   SFree px -> A () $ P.TFree (P.UName $ symbolVal px)
   t1 `SArr` t2 -> A () $ reifySing t1 P.:->: reifySing t2
@@ -99,7 +99,7 @@ reifySing = \case
   STup t ts ->
     A () $ P.TTuple (reifySing t : tupleSing ts)
     where
-        tupleSing :: Sing (CTTuple ts') -> [Type () 'Poly]
+        tupleSing :: Sing (CTTuple ts') -> [PolyType ()]
         tupleSing (SPair x y) = [reifySing x, reifySing y]
         tupleSing (STup t' ts') = reifySing t' : tupleSing ts'
 
@@ -122,7 +122,7 @@ instance Show (CloFRP t a) where
 
 -- |Use template haskell to generate a singleton value that represents
 -- a CloFRP type
-typeToSingExp :: Type a 'Poly -> ExpQ
+typeToSingExp :: PolyType a -> ExpQ
 typeToSingExp (A _ typ') = case typ' of
   P.TFree (P.UName nm) ->
     let nmQ = pure (S.LitT (S.StrTyLit nm))

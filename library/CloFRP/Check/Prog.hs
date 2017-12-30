@@ -96,9 +96,9 @@ data ElabProg a = ElabProg
 
 -- is this just a free monad?
 data SynonymExpansion a
-  = Done (Type a 'Poly) -- a fully expanded synonym
+  = Done (PolyType a) -- a fully expanded synonym
   -- | the Name is the name of the synonym
-  | Ex Name (Type a 'Poly -> SynonymExpansion a) -- a synonym that still needs at least one application
+  | Ex Name (PolyType a -> SynonymExpansion a) -- a synonym that still needs at least one application
 
 instance Eq (SynonymExpansion a) where
   Done t1 == Done t2 = t1 =%= t2
@@ -131,7 +131,7 @@ synonymExpansion ann = go 0 . deb where
 -- Change type-variables to use debruijn indices based on the order induced
 -- by the second argument. Type-variables that do not appear in the list are
 -- not changed
-deBruijnify :: a -> [Name] -> Type a 'Poly -> Type a 'Poly
+deBruijnify :: a -> [Name] -> PolyType a -> PolyType a
 deBruijnify ann = go 0 where
   go _ []     ty = ty
   go i (x:xs) ty = subst (A ann $ TVar (DeBruijn i)) x $ (go (i+1) xs ty)
@@ -139,7 +139,7 @@ deBruijnify ann = go 0 where
 checkRecSynonyms :: forall a. Synonyms a -> TypingM a ()
 checkRecSynonyms syns = sequence (M.map checkSyn syns) *> pure () where
   checkSyn (Synonym {synName, synExpansion}) = checkRecSyn synName synExpansion
-  checkRecSyn :: Name -> Type a 'Poly -> TypingM a ()
+  checkRecSyn :: Name -> PolyType a -> TypingM a ()
   checkRecSyn name (A _ ty') = 
     case ty' of
       TFree n 
@@ -168,7 +168,7 @@ checkRecSynonyms syns = sequence (M.map checkSyn syns) *> pure () where
   = (Either _ a, Either b c)
   = (Either (Either b c) a)
 -}
-expandSynonyms :: forall a. Synonyms a -> Type a 'Poly -> TypingM a (Type a 'Poly)
+expandSynonyms :: forall a. Synonyms a -> PolyType a -> TypingM a (PolyType a)
 expandSynonyms syns t = 
   -- fixpoint it! for recursive synonym expansion
   -- recursive type synonyms will make this non-terminating, so its good
@@ -178,7 +178,7 @@ expandSynonyms syns t =
             | otherwise -> expandSynonyms syns t'
     Ex nm _ -> wrong nm
   where
-    go :: Type a 'Poly -> TypingM a (SynonymExpansion a)
+    go :: PolyType a -> TypingM a (SynonymExpansion a)
     go (A ann ty') = 
       case ty' of
         TFree n 
@@ -352,7 +352,7 @@ elabProg program = do
 elabCs :: forall a. Name -> [(Name,Kind)] -> [Constr a] -> (FreeCtx a, DestrCtx a)
 elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) where
   -- | The fully applied type e.g. Maybe a
-  fullyApplied :: a -> Type a 'Poly
+  fullyApplied :: a -> PolyType a
   fullyApplied ann = foldl' (anned ann TApp) (A ann $ TFree tyname) $ map (A ann . nameToType' . fst) bound
   -- | Convert a constructor to a function type, e.g. `Just` becomes `forall a. a -> Maybe a`
   toFn    (A ann (Constr nm args)) = (nm, quantify bound $ foldr (anned ann (:->:)) (fullyApplied ann) $ args)
