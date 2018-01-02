@@ -1,7 +1,7 @@
 # [Simply Typed Clocked Type Theory][clott]
 
 An implementation of the Simply Typed Clocked Type Theory [clocks] For my master's thesis at ITU.
-CloFRP (Clocked Type Theory) is a language that enables safe co-inductive programming. Specifically, it
+CloFRP (Clocked Functional Reactive Programming) is a language that enables safe co-inductive programming. Specifically, it
 uses guarded recursion to ensure that co-recursive definitions are productive and causal. The novel idea
 compared to ordinary nakano-style guarded recursion is that it introduces the notion of clocks and ticks
 on these clocks, which are used to unfold guarded-recursive definitions. One can quantify over clocks to
