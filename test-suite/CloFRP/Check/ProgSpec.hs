@@ -1223,8 +1223,6 @@ progSpec = do
 
     it "accepts explicit type applications correctly (impredicative)" $ do
       let Right prog = pprog [text|
-        data Unit = Unit.
-
         id : forall a. a -> a.
         id = \x -> x.
 
@@ -1253,8 +1251,8 @@ progSpec = do
 
         imp4eta : Maybe (forall a. a -> a) -> forall a. a -> a.
         imp4eta = default {forall a. a -> a} id.
-
       |]
+      -- shouldFail $ runCheckProg mempty prog 
       runCheckProg mempty prog `shouldYield` ()
     
     it "does not support pattern matching on impredicative types" $ do
@@ -1267,6 +1265,7 @@ progSpec = do
           | MkWrap id -> A.
       |]
       shouldFail $ runCheckProg mempty prog 
+      -- runCheckProg mempty prog `shouldYield` ()
 
     it "cannot do higher-order unification" $ do
       let Right prog = pprog [text|

@@ -22,7 +22,7 @@ import Data.Foldable
 import Control.Monad ((<=<))
 import GHC.Exts (fromList)
 import Control.Monad.Reader (local)
-import Control.Monad.Writer (censor)
+import Control.Monad.Writer (censor, tell)
 import CloFRP.Pretty hiding ((<>))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -388,8 +388,9 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, synonyms, instances}) = d
       Just ty -> do -- reset name state and discard old inference tree output with censor
         resetNameState
         let ctx' = ctx { trFree = delete k (trFree ctx) }
-        -- local (const ctx') $ check expr ty
-        censor (const []) $ local (const ctx') $ check expr ty
+        tell [(0, "============" <+> pretty k <+> "=============")]
+        local (const ctx') $ check expr ty
+        -- censor (const []) $ local (const ctx') $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     
     traverseSynonym (Synonym {synBound, synExpansion}) = do
