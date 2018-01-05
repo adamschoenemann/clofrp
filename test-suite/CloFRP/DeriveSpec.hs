@@ -112,6 +112,7 @@ deriveSpec = do
     it "derives peano numerals functor" $ do
       let dt = E.Datatype
             { E.dtName = "NatF"
+            , E.dtExtern = False
             , E.dtBound = [("f", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
@@ -135,6 +136,7 @@ deriveSpec = do
     it "derives list functor" $ do
       let dt = E.Datatype
             { E.dtName = "ListF"
+            , E.dtExtern = False
             , E.dtBound = [("a", E.Star), ("f", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
@@ -158,6 +160,7 @@ deriveSpec = do
     it "derives functor for tuple data-type" $ do
       let dt = E.Datatype
             { E.dtName = "Pair"
+            , E.dtExtern = False
             , E.dtBound = [("a", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
@@ -180,6 +183,7 @@ deriveSpec = do
     it "derives functor for strictly positive type-var (1)" $ do
       let dt = E.Datatype
             { E.dtName = "Pos"
+            , E.dtExtern = False
             , E.dtBound = [("f", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
@@ -209,6 +213,7 @@ deriveSpec = do
     it "cannot derive functor for negative type-var (1)" $ do
       let dt = E.Datatype
             { E.dtName = "Neg"
+            , E.dtExtern = False
             , E.dtBound = [("f", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
@@ -222,6 +227,7 @@ deriveSpec = do
     it "cannot derive functor for negative type-var (2)" $ do
       let dt = E.Datatype
             { E.dtName = "Neg"
+            , E.dtExtern = False
             , E.dtBound = [("f", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
@@ -235,6 +241,7 @@ deriveSpec = do
     it "derives functor for strictly positive type-var (2)" $ do
       let dt = E.Datatype
             { E.dtName = "Pos"
+            , E.dtExtern = False
             , E.dtBound = [("f", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =
@@ -269,6 +276,7 @@ deriveSpec = do
     it "derives functor for continuations" $ do
       let dt = E.Datatype
             { E.dtName = "Cont"
+            , E.dtExtern = False
             , E.dtBound = [("r", E.Star), ("a", E.Star)]
             , E.dtDeriving = ["Functor"]
             , E.dtConstrs =

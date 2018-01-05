@@ -40,12 +40,13 @@ decl = datad <|> synonym <|> p where
 datad :: Parser Decl
 datad = ann <*> p where
   p = do 
+    extern <- maybe False (const True) <$> optionMaybe (reserved "extern")
     nm <- E.UName <$> (reserved "data" *> uidentifier)
     bound <- many P.boundp
     constrs <- (reservedOp "=" *> (constr `sepBy` symbol "|")) 
     derivs <- option [] $ reserved "deriving" *> ((:[]) <$> uidentifier <|> parens (many1 uidentifier))
     _ <- reservedOp "."
-    pure $ E.DataD (E.Datatype nm bound constrs derivs)
+    pure $ E.DataD (E.Datatype nm extern bound constrs derivs)
 
 
 constr :: Parser (E.Constr SourcePos)

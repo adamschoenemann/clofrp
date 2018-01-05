@@ -19,14 +19,13 @@ import CloFRP.Check.TypingM (runTypingM0, prettyTree)
 import CloFRP.Annotated
 import CloFRP.Pretty 
 import CloFRP.Utils ()
+import CloFRP.Compiler
 
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax
 import Text.Parsec (parse, SourcePos)
 import Text.Parsec.Combinator (eof)
 import Text.Parsec.String (Parser)
-
-
 
 liftParse :: Monad m => Parser p -> String -> m p
 liftParse p s = either (fail . show) pure $ parse (P.ws *> p <* eof) "" s
@@ -102,4 +101,26 @@ clofrp = QuasiQuoter
       case runTypingM0 (progToEval @(SourcePos) (UName "main") prog) mempty of
         (Right (expr, ty, rd), _, _) -> pure (expr, ty, rd)
         (Left (err,_), _, _) -> fail (pps err)
-      
+
+hsclofrp :: QuasiQuoter
+hsclofrp = QuasiQuoter
+  { quoteExp  = quoteCloFRPExpr
+  , quotePat  = undefined
+  , quoteDec  = quoteclofrp
+  , quoteType = undefined
+  } where
+    quoteCloFRPExpr :: String -> Q Exp
+    quoteCloFRPExpr s = do
+      ast <- liftParse P.expr s
+      exprToHaskExpQ ast
+
+    quoteclofrp :: String -> Q [Dec]
+    quoteclofrp s = do
+      prog <- liftParse P.prog s
+      checkProgQExp prog
+      progToHaskDecls prog
+
+    checkProgQExp prog =
+      case runCheckProg mempty prog of
+        (Left err, _, tree) -> fail (showW 200 (pretty err <> line <> "progres:" <> line <> prettyTree tree))
+        (Right _, _, _)  -> pure ()

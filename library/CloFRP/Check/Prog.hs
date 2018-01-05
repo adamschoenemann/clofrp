@@ -233,7 +233,7 @@ collectDecls (Prog decls) = foldr folder mempty decls where
     -- TODO: Check for duplicate defs/signatures/datadecls
     folder :: Decl a -> ElabRes a -> ElabRes a
     folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erSynonyms = syns, erDeriving = drv}) = case x of
-      DataD dt@(Datatype nm b cs' derivs) ->
+      DataD dt@(Datatype nm _ex b cs' derivs) ->
         let (tys, dstrs) = elabCs nm b cs' 
             drv' = foldr (\x acc -> M.insertWith (++) (UName x) [dt] acc) drv derivs
         in  er {erKinds = extend nm (dtKind dt) ks, erConstrs = tys <> cs, erDestrs = dstrs <> ds, erDeriving = drv'}

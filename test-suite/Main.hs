@@ -24,6 +24,7 @@ import CloFRP.AST.PrettySpec
 import CloFRP.EvalSpec (evalSpec)
 import CloFRP.DeriveSpec
 import CloFRP.InteropSpec
+import CloFRP.CompilerSpec
 
 
 main :: IO ()
@@ -40,7 +41,8 @@ main = do
   eval <- testSpec "evaluation" evalSpec
   derive <- testSpec "derivation" deriveSpec
   interop <- testSpec "interop" interopSpec
-  let group = Test.Tasty.testGroup "tests" [parser, quasi, typecheck, decl, pretty, checkProg, clocks, recursive, higherKinded, eval, derive, interop]
+  compiler <- testSpec "compiler" compilerSpec
+  let group = Test.Tasty.testGroup "tests" [parser, quasi, typecheck, decl, pretty, checkProg, clocks, recursive, higherKinded, eval, derive, interop, compiler]
   Test.Tasty.defaultMain group
 
 data Tree a = Leaf | Branch a (Tree a) (Tree a) deriving (Eq, Show)
