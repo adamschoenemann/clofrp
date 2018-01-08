@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
@@ -91,6 +92,11 @@ toInt (Into n) =
   case n of
     Z -> 0
     S n' -> 1 + toInt n'
+
+toInt' :: Nat -> Int
+toInt' = primRec fn where
+  fn Z = 0
+  fn (S (_, !r)) = 1 + r
 
 data ListF a f = Nil | Cons a f deriving (Functor, Show)
 type List a = Fix (ListF a)

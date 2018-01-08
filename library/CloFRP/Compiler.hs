@@ -19,6 +19,13 @@ import qualified CloFRP.AST.Prim as P
 import CloFRP.Annotated
 import CloFRP.Pretty
 
+data ClockKind = ClockKind
+
+gfix :: ((() -> a) -> a) -> a
+gfix f =
+  let x = f (\_ -> x)
+  in  x
+
 -- F[μX. F[X]] -> (μX. F[X])
 data Fix f = Fold (f (Fix f))
 
@@ -42,18 +49,24 @@ progToHaskDecls :: Prog a -> Q [Dec]
 progToHaskDecls (Prog decls) = sequence (mapMaybe declToHaskDecl decls) where
   declToHaskDecl decl@(A _ decl') = 
     case decl' of
-      FunD nm e  -> Just $ valD (varP (nameToName nm)) (normalB $ exprToHaskExpQ e) []
-      SigD nm ty -> Just $ sigD (nameToName nm) (typeToHaskType ty)
-      DataD dt   -> dtToHaskDt dt
-      _         -> error $ "cannot compile " ++ pps decl
+      FunD nm e    -> Just $ valD (varP (nameToName nm)) (normalB $ exprToHaskExpQ e) []
+      SigD nm ty   -> Just $ sigD (nameToName nm) (typeToHaskType ty)
+      DataD dt     -> dtToHaskDt dt
+      SynonymD syn -> Just $ synToHaskSyn syn
 
+synToHaskSyn :: Synonym a -> DecQ
+synToHaskSyn (Synonym {synName = nm, synBound = bnd, synExpansion = ex}) =
+  tySynD (nameToName nm) (bndrsToHaskBndrs bnd) (typeToHaskType ex)
+
+bndrsToHaskBndrs :: [(Name, Kind)] -> [TH.TyVarBndr]
+bndrsToHaskBndrs = map (\(n,k) -> kindedTV (nameToName n) (kindToHaskKind k)) 
 
 dtToHaskDt :: Datatype a -> Maybe DecQ
 dtToHaskDt (Datatype {dtName = nm, dtExtern = ex, dtBound = b, dtConstrs = cs, dtDeriving = ds})
   | ex = Nothing -- extern data-types does not generate Haskell syntax
   | otherwise = Just $ dataD ctx (nameToName nm) bound kind constrs derivs where
       ctx = pure []
-      bound = map (\(n,k) -> kindedTV (nameToName n) (kindToHaskKind k)) b
+      bound = bndrsToHaskBndrs b
       kind  = Nothing
       constrs = map constrToHaskConstr cs
       derivs = map derivToHaskDeriv ds
@@ -77,14 +90,14 @@ typeToHaskType = go where
     Forall nm k tau -> forallT [kindedTV (nameToName nm) (kindToHaskKind k)] (pure []) (go tau)
     RecTy tau     -> conT ''Fix `appT` go tau
     TTuple ts     -> foldl (\acc x -> acc `appT` go x) (tupleT (length ts)) ts
-    Later x t     -> error "cannot compile later types yet"
+    Later x t     -> arrowT `appT` conT ''() `appT` go t
 
 kindToHaskKind :: Kind -> TH.Kind 
 kindToHaskKind = go where
   go = \case
     Star -> starK
     k1 :->*: k2 -> arrowK `appK` go k1 `appK` go k2
-    ClockK -> error "cannot compile clock-kinds yet"
+    ClockK -> conK ''ClockKind
 
 
 exprToHaskExpQ :: Expr a -> ExpQ
@@ -125,7 +138,7 @@ primToHaskExprQ = \case
   P.Fold           -> conE 'Fold
   P.Unfold         -> varE 'unfold
   P.Tick           -> conE '()
-  P.Fix            -> varE 'fix
+  P.Fix            -> varE 'gfix
   P.Undefined      -> varE 'undefined
   P.Input          -> error "cannot compile Input"
   P.PntrDeref p    -> error "cannot compile PntrDeref"
