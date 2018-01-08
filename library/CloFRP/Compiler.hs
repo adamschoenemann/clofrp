@@ -21,10 +21,14 @@ import CloFRP.Pretty
 
 data ClockKind = ClockKind
 
+unguard :: ((() -> a) -> a) -> a -> a
+unguard f x = f (\_ -> x)
+
 gfix :: ((() -> a) -> a) -> a
-gfix f =
+gfix f = -- fix (unguard f)
   let x = f (\_ -> x)
   in  x
+
 
 -- F[μX. F[X]] -> (μX. F[X])
 data Fix f = Fold (f (Fix f))

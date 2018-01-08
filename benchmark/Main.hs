@@ -31,6 +31,8 @@ import CloFRP.QuasiQuoter
 import CloFRP.Pretty
 import CloFRP.Examples
 
+import BenchCompiler
+
 import System.Random
 import Data.Text (Text)
 import NeatInterpolation
@@ -499,7 +501,7 @@ replaceMinHask t = let (t', m) = replaceMinBody t m in t' where
 main :: IO ()
 main = do
   putStrLn "running benchmark"
-  bench_scaryConst
+  bench_compiler 100000000
   -- putStrLn . show $ ([1 .. 10] :: [Int])
   -- bench_replaceMin
   -- let n = 500000

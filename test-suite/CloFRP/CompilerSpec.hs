@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -ddump-splices #-}
+
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE KindSignatures #-}
@@ -8,63 +10,33 @@ module CloFRP.CompilerSpec where
 
 import Prelude hiding (negate)
 import Test.Tasty.Hspec
-import CloFRP.Compiler
 import CloFRP.QuasiQuoter
+import CloFRP.Compiler
+import Data.Function (fix)
+import CloFRP.Examples
 
 
-[hsclofrp|
-  extern data Bool = True | False.
+strmap' :: (a -> b) -> Stream k a -> Stream k b
+strmap' f (Fold (Cons x xs)) = Fold (Cons (f x) (\_ -> strmap' f (xs ())))
 
-  cfp_id : forall a. a -> a.
-  cfp_id = \x -> x.
+listmap :: (a -> b) -> List a -> List b
+listmap f (Fold l) = Fold $
+  case l of
+    Nil -> Nil
+    LCons x xs -> LCons (f x) (listmap f xs)
 
-  false : Bool.
-  false = False.
+listnats :: List Int
+listnats = fix (\g -> Fold (LCons 0 (listmap (+1) g)))
 
-  negate : Bool -> Bool.
-  negate = \b ->
-    case b of
-    | True -> False
-    | False -> True.
-  
-  data NatF f = Z | S f deriving Functor.
-  type Nat = Fix NatF.
+listtake :: Int -> List a -> [a]
+listtake _ (Fold Nil) = []
+listtake n (Fold (LCons x xs))
+  | n <= 0    = []
+  | otherwise = x : listtake (n-1) xs
 
-  toInt : Nat -> Int.
-  toInt = 
-    let fn = \x -> case x of 
-                   | Z -> 0
-                   | S (n, r) -> 1 + r
-    in  primRec {NatF} fn.
-  z : Nat. z = fold Z.
-  s : Nat -> Nat. s = \x -> fold (S x).
-  five : Nat. 
-  five = s (s (s (s (s z)))).
-
-  data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
-  type Stream (k : Clock) a = Fix (StreamF k a).
-  data ListF a f = Nil | LCons a f.
-  type List a = Fix (ListF a).
-
-  cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-  cons = \x xs -> fold (Cons x xs).
-  strconst : forall (k : Clock) a. a -> Stream k a.
-  strconst = \x -> fix (\xs -> cons x xs).
-
-  strmap : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
-  strmap = \f -> fix (\g xs -> 
-                   case unfold xs of
-                   | Cons x xs' -> cons (f x) (\\(af : k) -> g [af] (xs' [af]))
-                 ).
-
-  nats : forall (k : Clock). Stream k Int.
-  nats = fix (\g -> cons 0 (\\(af : k) -> strmap (\x -> x + 1) (g [af]))).
-
-  nats' : forall (k : Clock). Stream k Int.
-  nats' = 
-    let f = fix (\g n -> cons n (\\(af : k) -> g [af] (n + 1)))
-    in  f 0.
-|]
+hasknats :: Stream k Int
+hasknats = Fold (Cons 0 (\_ -> strmap' (+1) hasknats))
+-- hasknats = gfix (\g -> Fold (Cons 0 (\_ -> strmap' (+1) $ g ())))
 
 strtake :: Int -> Stream k a -> [a]
 strtake n (Fold (Cons x xs))
@@ -92,7 +64,11 @@ compilerSpec = do
     specify "toInt" $ do
       toInt five `shouldBe` 5
     specify "strconst" $ do
-      strtake 100 (strconst 1) `shouldBe` replicate 100 (1 :: Int)
+      let n = 10000
+      strtake n (strconst 1) `shouldBe` replicate n (1 :: Int)
     specify "nats" $ do
       let n = 2000
-      strtake n nats `shouldBe` [0..(n-1)]
+      -- strtake n nats `shouldBe` [0..(n-1)]
+      strtake n hasknats `shouldBe` [0..(n-1)]
+      -- listtake n listnats `shouldBe` [0..(n-1)]
+

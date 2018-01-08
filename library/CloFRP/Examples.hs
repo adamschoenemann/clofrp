@@ -2,6 +2,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module CloFRP.Examples where
 
@@ -68,4 +70,58 @@ clott_add_int = [clofrp|
           case pair of
           | (x1, x2) -> fold (Cons (x1 + x2) (app g xs))
     ).
+|]
+
+[hsclofrp|
+  extern data Bool = True | False.
+
+  cfp_id : forall a. a -> a.
+  cfp_id = \x -> x.
+
+  false : Bool.
+  false = False.
+
+  negate : Bool -> Bool.
+  negate = \b ->
+    case b of
+    | True -> False
+    | False -> True.
+  
+  data NatF f = Z | S f deriving Functor.
+  type Nat = Fix NatF.
+
+  toInt : Nat -> Int.
+  toInt = 
+    let fn = \x -> case x of 
+                   | Z -> 0
+                   | S (n, r) -> 1 + r
+    in  primRec {NatF} fn.
+  z : Nat. z = fold Z.
+  s : Nat -> Nat. s = \x -> fold (S x).
+  five : Nat. 
+  five = s (s (s (s (s z)))).
+
+  data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+  type Stream (k : Clock) a = Fix (StreamF k a).
+  data ListF a f = Nil | LCons a f.
+  type List a = Fix (ListF a).
+
+  cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+  cons = \x xs -> fold (Cons x xs).
+  strconst : forall (k : Clock) a. a -> Stream k a.
+  strconst = \x -> fix (\xs -> cons x xs).
+
+  strmap : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
+  strmap = \f -> fix (\g xs -> 
+                   case unfold xs of
+                   | Cons x xs' -> cons (f x) (\\(af : k) -> g [af] (xs' [af]))
+                 ).
+
+  nats : forall (k : Clock). Stream k Int.
+  nats = fix (\g -> cons 0 (\\(af : k) -> strmap (\x -> x + 1) (g [af]))).
+
+  nats' : forall (k : Clock). Stream k Int.
+  nats' = 
+    let f = fix (\g n -> cons n (\\(af : k) -> g [af] (n + 1)))
+    in  f 0.
 |]
