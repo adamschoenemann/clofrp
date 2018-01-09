@@ -13,13 +13,14 @@ import Language.Haskell.TH.Syntax (Q, Dec)
 import Language.Haskell.TH.Lib
 import Data.Function (fix)
 import Data.Maybe (mapMaybe)
+import Data.Functor.Classes
 
 import CloFRP.AST hiding (match, Prim(..))
 import qualified CloFRP.AST.Prim as P
 import CloFRP.Annotated
 import CloFRP.Pretty
 
-data ClockKind = ClockKind
+data ClockKind = K0
 
 unguard :: ((() -> a) -> a) -> a -> a
 unguard f x = f (\_ -> x)
@@ -32,6 +33,12 @@ gfix f = -- fix (unguard f)
 
 -- F[μX. F[X]] -> (μX. F[X])
 data Fix f = Fold (f (Fix f))
+
+instance Show1 f => Show (Fix f) where
+  showsPrec d (Fold a) =
+    showParen (d >= 11)
+      $ showString "Fold "
+      . showsPrec1 11 a
 
 -- (μX. F[X]) -> F[μX. F[X]]
 unfold :: Fix f -> f (Fix f)
