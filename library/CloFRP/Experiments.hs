@@ -4,7 +4,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
-
+{-# LANGUAGE ImpredicativeTypes #-}
 
 module CloFRP.Experiments where
 -- This is just to keep some experiments around
@@ -210,3 +210,16 @@ maap f (x1 : x2 : xs) = f x1 : f x2 : maap f xs
 
 badnats :: [Int]
 badnats = 0 : maap (+1) badnats
+
+imp1 :: Maybe (forall a. a -> a) -> b -> b
+imp1 (Just id') b = id' b
+imp1 Nothing    b = b
+
+data Wrap a = MkWrap a
+imp2 :: Wrap (forall a. a -> a) -> A
+imp2 w =
+  case w of
+    MkWrap id -> A
+
+imp3 :: Int
+imp3 = imp1 (Just @(forall a. a -> a) id) 5

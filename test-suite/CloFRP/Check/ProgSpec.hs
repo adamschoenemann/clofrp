@@ -1264,8 +1264,8 @@ progSpec = do
           case w of
           | MkWrap id -> A.
       |]
-      shouldFail $ runCheckProg mempty prog 
-      -- runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog 
+      runCheckProg mempty prog `shouldYield` ()
 
     it "cannot do higher-order unification" $ do
       let Right prog = pprog [text|

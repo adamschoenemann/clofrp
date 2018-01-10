@@ -18,10 +18,6 @@
 
 module BenchEval where
 
--- You can benchmark your code quickly and effectively with Criterion. See its
--- website for help: <http://www.serpentine.com/criterion/>.
-import Criterion.Main
-
 import CloFRP.Interop
 import CloFRP.AST hiding (Fold, Constr, (:->:))
 import qualified CloFRP.AST as P
@@ -548,7 +544,7 @@ bench_replaceMin =
 
 bench_binTree :: IO ()
 bench_binTree = do
-  let n = 22
+  let n = 22 :: Integer
   -- putStrLn . show $ takeBinTree (n2) $ fst $ mkTree 0 100
   -- putStrLn . show $ takeBinTree (n+2) $ eitherBinTree 'a' 'b'
   putStrLn . show $ takeBinTreeVal n $ runCloFRP binTree
