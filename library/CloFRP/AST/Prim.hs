@@ -24,7 +24,7 @@ data Prim
   | Fix
   | Undefined
   | Input
-  | PntrDeref Pntr
+  | PntrDeref Pntr -- TODO: Deprecate (not used)
   deriving (Eq, Data, Typeable, Generic, NFData)
 
 instance Show Prim where

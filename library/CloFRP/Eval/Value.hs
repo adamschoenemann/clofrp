@@ -31,7 +31,7 @@ data PrimVal
   | RuntimeErr String
   | FoldP
   | UnfoldP
-  | Pointer Pntr
+  | Pointer Pntr -- TODO: Deprecate (not used)
   deriving (Eq, Generic, Show, Data, Typeable)
 
 instance Pretty PrimVal where

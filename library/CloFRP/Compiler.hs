@@ -4,6 +4,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 -- compile CloFRP programs to Haskell (denotational semantics)
 module CloFRP.Compiler where
@@ -22,10 +26,14 @@ import CloFRP.Pretty
 
 data ClockKind = K0
 
+type Later (k :: ClockKind) a = () -> a
+
+data StreamF' (k :: ClockKind) a f = Cons' !a !(Later k f) deriving Functor
+
 unguard :: ((() -> a) -> a) -> a -> a
 unguard f x = f (\_ -> x)
 
-gfix :: ((() -> a) -> a) -> a
+gfix :: (Later k a -> a) -> a
 gfix f = -- fix (unguard f)
   let x = f (\_ -> x)
   in  x
@@ -73,14 +81,14 @@ bndrsToHaskBndrs :: [(Name, Kind)] -> [TH.TyVarBndr]
 bndrsToHaskBndrs = map (\(n,k) -> kindedTV (nameToName n) (kindToHaskKind k))
 
 dtToHaskDt :: Datatype a -> Maybe DecQ
-dtToHaskDt (Datatype {dtName = nm, dtExtern = ex, dtBound = b, dtConstrs = cs, dtDeriving = ds})
+dtToHaskDt (Datatype { dtName = nm, dtExtern = ex, .. })
   | ex = Nothing -- extern data-types does not generate Haskell syntax
   | otherwise = Just $ dataD ctx (nameToName nm) bound kind constrs derivs where
       ctx = pure []
-      bound = bndrsToHaskBndrs b
+      bound = bndrsToHaskBndrs dtBound
       kind  = Nothing
-      constrs = map constrToHaskConstr cs
-      derivs = map derivToHaskDeriv ds
+      constrs = map constrToHaskConstr dtConstrs
+      derivs = map derivToHaskDeriv dtDeriving
 
 derivToHaskDeriv :: String -> DerivClauseQ
 derivToHaskDeriv clazz = derivClause Nothing [conT (TH.mkName clazz)]
@@ -93,15 +101,18 @@ constrToHaskConstr (A _ (Constr nm args)) = normalC (nameToName nm) (map argToBa
 typeToHaskType :: PolyType a -> TypeQ
 typeToHaskType = go where
   go (A _ typ') = case typ' of
-    TFree x       -> conT (nameToName x)
-    TVar x        -> varT (nameToName x)
+    TFree x       -> conT (nameToName x)                  -- ⟦𝒯⟧ = 𝒯
+    TVar x        -> varT (nameToName x)                  -- ⟦x⟧ = x
     TExists x     -> error $ "cannot compile existential " ++ show x
-    t1 `TApp` t2  -> appT (go t1) (go t2)
-    t1 :->: t2    -> arrowT `appT` go t1 `appT` go t2
-    Forall nm k tau -> forallT [kindedTV (nameToName nm) (kindToHaskKind k)] (pure []) (go tau)
-    RecTy tau     -> conT ''Fix `appT` go tau
-    TTuple ts     -> foldl (\acc x -> acc `appT` go x) (tupleT (length ts)) ts
-    Later x t     -> arrowT `appT` conT ''() `appT` go t
+    t1 `TApp` t2  -> go t1 `appT` go t2                   -- ⟦t1 t2⟧ = ⟦t1⟧ ⟦t2⟧
+    t1 :->: t2    -> arrowT `appT` go t1 `appT` go t2     -- ⟦t1 -> t2⟧ = ⟦t1⟧ -> ⟦t2⟧
+    Forall nm k tau ->                                    -- ⟦forall (a : k). t⟧ = forall (a :: k) ⟦t⟧
+      let b = kindedTV (nameToName nm) (kindToHaskKind k)
+      in  forallT [b] (pure []) (go tau)
+    RecTy tau     -> conT ''Fix `appT` go tau             -- ⟦Fix t⟧ = Fix ⟦t⟧
+    TTuple ts     ->                                      -- ⟦(t1, ..., tn)⟧ = (⟦t1⟧, ..., ⟦tn⟧)
+      foldl (\acc x -> acc `appT` go x) (tupleT (length ts)) ts
+    Later k t     -> conT ''Later `appT` go k `appT` go t -- ⟦▷k t⟧ = Later ⟦k⟧ ⟦t⟧
 
 kindToHaskKind :: Kind -> TH.Kind
 kindToHaskKind = go where
@@ -115,21 +126,30 @@ exprToHaskExpQ :: Expr a -> ExpQ
 exprToHaskExpQ = go where
   go (A _ expr') = case expr' of
     Var nm
-      | isConstrNm nm  -> conE (nameToName nm)
-      | otherwise      -> varE (nameToName nm)
-    TickVar nm         -> varE (nameToName nm)
-    Ann e t            -> sigE (go e) (typeToHaskType t)
-    App e1 e2          -> appE (go e1) (go e2) 
-    Lam nm mty e       -> lamE [bangP . varP $ nameToName nm] (go e)
-    TickAbs nm kappa e -> lamE [bangP . varP $ nameToName nm] (go e)
-    Tuple es           -> tupE (map go es)
-    Let p e1 e2        -> letE [valD (patToHaskPatQ p) (normalB (exprToHaskExpQ e1)) []] (go e2)
-    Case e clauses     -> caseE (go e) (clausesToMatchQ clauses)
-    TypeApp e t        -> appTypeE (go e) (typeToHaskType t)
-    Fmap t             -> varE 'fmap
-    PrimRec t          -> varE 'primRec
-    BinOp nm e1 e2     -> varE (nameToName nm) `appE` go e1 `appE` go e2 
+      | isConstrNm nm  -> conE (nameToName nm)               -- ⟦𝒞⟧ = 𝒞
+      | otherwise      -> varE (nameToName nm)               -- ⟦x⟧ = x
+    TickVar nm         -> varE (nameToName nm)               -- ⟦[x]⟧ = x
+    Ann e t            -> sigE (go e) (typeToHaskType t)     -- ⟦e : t⟧ = e :: t
+    App e1 e2          -> appE (go e1) (go e2)               -- ⟦e1 e2⟧ = ⟦e1⟧ ⟦e2⟧
+    Lam nm mty e       ->                                    -- ⟦λ(x : t). e⟧ = λ(!x :: ⟦t⟧). ⟦e⟧
+      lamE [lamArg (nameToName nm) (typeToHaskType <$> mty)] (go e)
+    TickAbs nm kappa e ->                                    -- ⟦γ(x : k). e⟧ = λ!x. ⟦e⟧
+      lamE [lamArg (nameToName nm) (Just $ conT ''())] (go e)
+    Tuple es           -> tupE (map go es)                   -- ⟦(e₁, ..., eₙ)⟧ = (⟦e₁⟧, ..., ⟦eₙ⟧)
+    Let p e1 e2        ->                                    -- ⟦let p = e1 in e2⟧ = let ⟦p⟧ = ⟦e1⟧ in ⟦e2⟧
+      let clause = valD (patToHaskPatQ p) (normalB (exprToHaskExpQ e1)) []
+      in  letE [clause] (go e2)
+    Case e clauses     ->                                    -- ⟦case e of cs⟧ = case ⟦e⟧ of ⟦cs⟧
+      caseE (go e) (clausesToMatchQ clauses)
+    TypeApp e t        -> appTypeE (go e) (typeToHaskType t) -- ⟦e {t}⟧ = ⟦e⟧ @⟦t⟧
+    Fmap t             -> varE 'fmap                         -- ⟦$\mathtt{fmap}_F$⟧ = fmap
+    PrimRec t          -> varE 'primRec                      -- ⟦primRec⟧ = primRec
+    BinOp nm e1 e2     ->                                    -- ⟦op e1 e2⟧ = (⟦op⟧) ⟦e1⟧ ⟦e2⟧
+      varE (nameToName nm) `appE` go e1 `appE` go e2
     Prim p             -> primToHaskExprQ p
+
+  lamArg nm mty =
+    maybe (bangP (varP nm)) (bangP . sigP (varP nm)) mty
 
 clausesToMatchQ :: [(Pat a, Expr a)] -> [MatchQ]
 clausesToMatchQ = foldr clauseToMatchQ [] where

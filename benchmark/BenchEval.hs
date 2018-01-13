@@ -592,7 +592,7 @@ bench_scaryConst = do
   -- let nats = fix (\n -> (0::Integer) : map (+1) n) 
   -- putStrLn . show $ take 2 $ map (take 1000000) $ repeat nats
   -- putStrLn . show $ take 12000 nats
-  putStrLn . show $ take 10 $ map (take 500000) $ execute sc 
+  putStrLn . show . map (take 2500000) . take 3 $ execute sc 
   -- putStrLn . show $ take 1000 $ execute sc
 
 fix :: (a -> a) -> a

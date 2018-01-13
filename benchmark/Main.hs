@@ -14,4 +14,5 @@ main = do
   -- putStrLn . show . take 1000000 $ EO.exec
   -- BenchEval.bench_everyOtherExec
   -- putStrLn . show . take 1000000 $ CoNats.main
-  putStrLn . show . map (take 2500000) . take 3 $ ScaryConst.main
+  -- putStrLn . show . map (take 2500000) . take 3 $ ScaryConst.main
+  BenchEval.bench_scaryConst  
