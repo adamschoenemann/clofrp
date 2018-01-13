@@ -1,6 +1,13 @@
-
+{-
+An experiment regarding using unification to assign types to pattern-bound
+variables, but I think it can be done a lot easier since we don't really need
+"full" unification which is tough for higher-rank types. The whole point is to
+not use the subtyping judgment for this, since it won't allow us to assign
+impredicative types to pattern-bound variables
+-}
 module CloFRP.Check.Unify where
 
+{-
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 
@@ -68,3 +75,4 @@ unifyMany (t1 : ts1) (t2 : ts2) = do
   pure (s1 `compose` s2)
 unifyMany t1 t2 = do
   unificationMismatch t2 t2
+-}

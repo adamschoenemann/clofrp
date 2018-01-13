@@ -14,6 +14,7 @@ import CloFRP.QuasiQuoter
 import CloFRP.Compiler
 import Data.Function (fix)
 import CloFRP.Examples
+import qualified CloFRP.Fixtures.Imp1 as Imp1
 
 
 strmap' :: (a -> b) -> Stream k a -> Stream k b

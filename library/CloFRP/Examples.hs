@@ -15,6 +15,18 @@ type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTNat = 'CTFree "Nat"
 type CTInt = 'CTFree "Int"
 
+clofrp_const :: CloFRP ('CTFree "Stream" ':@: 'CTFree "K0" ':@: 'CTFree "Unit") SourcePos
+clofrp_const = [clofrp|
+  data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+  type Stream (k : Clock) a = Fix (StreamF k a).
+  data Unit = MkUnit.
+  const : forall (k : Clock) a. a -> Stream k a.
+  const = \x -> fix (\g -> fold (Cons x g)).
+  main : Stream K0 Unit.
+  main = const MkUnit.
+|]
+
+
 clott_add :: CloFRP (CTStream :@: CTTuple [CTNat, CTNat] :->: CTStream :@: CTNat) SourcePos
 clott_add = [clofrp|
   data NatF f = Z | S f deriving Functor.
@@ -65,10 +77,8 @@ clott_add_int = [clofrp|
   main : Stream K0 (Int, Int) -> Stream K0 Int.
   main = 
     fix (\g pairs -> 
-      case unfold pairs of   
-        | Cons pair xs -> 
-          case pair of
-          | (x1, x2) -> fold (Cons (x1 + x2) (app g xs))
+      let Cons (x1, x2) xs = unfold pairs
+      in  fold (Cons (x1 + x2) (app g xs))
     ).
 |]
 
