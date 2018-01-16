@@ -143,6 +143,7 @@ streamProcessing =
       deriving Functor.
     
     type SP i o (k : Clock) = Fix (SPF i o k).
+    data CoSP i o = CoSP (forall (k : Clock). SP i o k).
 
     step : forall (k : Clock) i o. SP i o k -> SPF i o k (Fix (SPF i o k)).
     step = unfold.
@@ -187,36 +188,41 @@ streamProcessing =
     dmap = \f la -> app (pure f) la.
 
     -- fixpoint above with full types
-    applyfix : forall (k : Clock) i o. |>k (SP i o k -> CoStream i -> CoStream o) -> SP i o k -> CoStream i -> CoStream o.
-    applyfix = \rec -> 
-      primRec {SPF i o k} (\x s ->
-        case x of
-        | Get f -> let (sp', g) = f (hd s) in g (tl s)
-        | Put b sp -> 
-          let sp1 = dmap fst sp in
-          cos b (app (app rec sp1) (pure s))
-      ).
+    -- applyfix : forall (k : Clock) i o. |>k (SP i o k -> CoStream i -> CoStream o) -> SP i o k -> CoStream i -> CoStream o.
+    -- applyfix = \rec -> 
+    --   primRec {SPF i o k} (\x s ->
+    --     case x of
+    --     | Get f -> let (sp', g) = f (hd s) in g (tl s)
+    --     | Put b sp -> 
+    --       let sp1 = dmap fst sp in
+    --       cos b (app (app rec sp1) (pure s))
+    --   ).
+
+    uncosp : forall i o. CoSP i o -> forall (k : Clock). SP i o k.
+    uncosp = \cosp -> let CoSP x = cosp in x.
+
 
     -- it even works without annotations!
-    apply : forall (k : Clock) i o. SP i o k -> CoStream i -> CoStream o.
-    apply = fix (\rec -> 
+    applyk : forall (k : Clock) i o. SP i o k -> CoStream i -> Stream k o.
+    applyk = fix (\rec -> 
       primRec {SPF i o k} (\x s ->
         case x of
         | Get f -> (snd (f (hd s))) (tl s) 
         | Put b sp -> 
           let sp1 = dmap fst sp in
-          cos b (app (app rec sp1) (pure s))
+          fold (Cons b (app (app rec sp1) (pure s)))
       )).
 
-    cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-    cos = \x xs -> 
-      Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). 
+    apply : forall i o. CoSP i o -> CoStream i -> CoStream o.
+    apply = \cosp xs -> 
+      let CoSP sp = cosp
+      in  Cos (applyk sp xs).
 
     uncos : forall (k : Clock) a. CoStream a -> Stream k a.
     uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-    spid : forall i. SP i i K0.
-    spid = fix (\f -> fold (Get (\i -> fold (Put i f)))).
+    spid : forall i. CoSP i i.
+    spid = CoSP (fix (\f -> fold (Get (\i -> fold (Put i f))))).
 
     const : forall (k : Clock) a. a -> Stream k a.
     const = \x -> fix (\f -> fold (Cons x f)).

@@ -222,16 +222,33 @@ clockSpec = do
           let x' = uncos x : forall (k' : Clock). Stream k' a 
           in Cos x'.
         
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-        cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))).
-
         -- functor
         map : forall (k : Clock) a b. (a -> b) -> |>k a -> |>k b.
         map = \f la -> \\(af : k) -> f (la [af]).
 
       |]
       runCheckProg mempty prog `shouldYield` ()
+    
+
+    it "rejects incorrect definition of 'cos'" $ do
+      let Right prog = pprog [text|
+        data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+        type Stream (k : Clock) a = Fix (StreamF k a).
+        data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+
+        uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+        uncos = \xs -> case xs of | Cos xs' -> xs'.
+
+        -- cos' : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        -- cos' = \x xs ->
+        --         Cos {a} (fold (Cons {k} {a} x (\\(af : k) -> uncos {k} {a} (xs [af])))).
+
+        -- NOTE: This is not supposed to type-check since k is already chosen
+        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        cos = \x xs -> 
+          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). 
+      |]
+      shouldFail $ runCheckProg mempty prog
 
     it "implements some good old stream functions" $ do
       let Right prog = pprog [text|
@@ -239,15 +256,38 @@ clockSpec = do
         type Stream (k : Clock) a = Fix (StreamF k a).
         data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+        cos : forall a. a -> CoStream a -> CoStream a.
         cos = \x xs -> 
-          Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with dmap :(
+          let inner = fold (Cons x (\\(af : k) -> uncos (xs))) : forall (k : Clock). Stream k a
+          in  Cos inner. 
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
 
         cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
         cons = \x xs -> fold (Cons x xs).
+
+        hdk : forall (k : Clock) a. Stream k a -> a.
+        hdk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> x.
+
+        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+        tlk = \xs ->
+          case unfold xs of
+          | Cons x xs' -> xs'.
+
+        hd : forall a. CoStream a -> a.
+        hd = \xs -> hdk {K0} (uncos xs).
+        
+        tl : forall a. CoStream a -> CoStream a.
+        tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+
+        eok : forall (k : Clock) a. CoStream a -> Stream k a.
+        eok = fix (\g x -> cons (hd x) (\\(af : k) -> g [af] (tl (tl x)))).
+
+        eo : forall a. CoStream a -> CoStream a.
+        eo = \xs -> Cos (eok xs).
 
         -- demonstrate inference with stupid identity
         id : forall (k : Clock) a. Stream k a -> Stream k a.
@@ -297,21 +337,6 @@ clockSpec = do
         nats = fix (\g -> cons z (dmap (map s) g)).
         -- nats = fix (\g -> cons z (\\(af : k) -> map (\x -> s x) (g [af]))).
 
-        hdk : forall (k : Clock) a. Stream k a -> a.
-        hdk = \xs ->
-          case unfold xs of
-          | Cons x xs' -> x.
-
-        tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
-        tlk = \xs ->
-          case unfold xs of
-          | Cons x xs' -> xs'.
-
-        hd : forall a. CoStream a -> a.
-        hd = \xs -> hdk {K0} (uncos xs).
-        
-        tl : forall a. CoStream a -> CoStream a.
-        tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
 
         nth : Nat -> CoStream Nat -> Nat.
         nth = \n xs ->
@@ -327,15 +352,6 @@ clockSpec = do
           let h = hdk (uncos (xs [af])) in
           let t = tlk (uncos (xs [af])) in
           cons h t.
-
-        eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
-        eof = \f xs -> 
-          let tl2 = tl (tl xs) in
-          let dtl = (\\(af : k) -> (f [af]) tl2) in
-          cos (hd xs) dtl.
-
-        eo : forall a. CoStream a -> CoStream a.
-        eo = fix eof.
 
         data ListF a f = Nil | LCons a f deriving Functor.
         type List a = Fix (ListF a).
@@ -366,17 +382,17 @@ clockSpec = do
         take : forall a. Nat -> CoStream a -> List a.
         take = \n -> primRec {NatF} takeBody n.
 
-        maapfix : forall (k : Clock) a b. (a -> b) -> |>k (CoStream a -> CoStream b) -> CoStream a -> CoStream b.
-        maapfix = \f r xs ->
-          let h = hd xs in
-          let t = tl xs in
-          let h' = hd t in 
-          let t' = tl t in
-          let inner = \r' -> cos (f h') (pure (r' t'))
-          in  cos (f h) (dmap inner r).
-
+        maapk : forall (k : Clock) a b. (a -> b) -> CoStream a -> Stream k b.
+        maapk = \f ->
+          fix (\g xs -> 
+            let fhd = f (hd xs) in
+            let ftltl = \\(af : k) -> g [af] (tl (tl xs)) in
+            let ftl = \\(af : k) -> cons (f (hd (tl xs))) ftltl in
+            cons fhd ftl
+          ).
+        
         maap : forall a b. (a -> b) -> CoStream a -> CoStream b.
-        maap = \f -> fix (maapfix f).
+        maap = \f xs -> Cos (maapk f xs).
 
         data Bool = True | False.        
         truefalse : forall (k : Clock). Stream k Bool.

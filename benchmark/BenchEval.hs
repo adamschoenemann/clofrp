@@ -132,101 +132,101 @@ eitherBinTree l r = Branch (Left l) (constBinTree (Left l)) (constBinTree (Right
 
 -- type CTNat = 'CTFree "Nat"
 
-everyOtherExec = [clofrp|
-  data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
-  type Stream (k : Clock) a = Fix (StreamF k a).
-  data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+-- everyOtherExec = [clofrp|
+--   data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+--   type Stream (k : Clock) a = Fix (StreamF k a).
+--   data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
-  cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-  cos = \x xs -> 
-    Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
+--   cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+--   cos = \x xs -> 
+--     Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
 
-  uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-  uncos = \xs -> case xs of | Cos xs' -> xs'.
+--   uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+--   uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-  cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-  cons = \x xs -> fold (Cons x xs).
+--   cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+--   cons = \x xs -> fold (Cons x xs).
 
-  hdk : forall (k : Clock) a. Stream k a -> a.
-  hdk = \xs ->
-    case unfold xs of
-    | Cons x xs' -> x.
+--   hdk : forall (k : Clock) a. Stream k a -> a.
+--   hdk = \xs ->
+--     case unfold xs of
+--     | Cons x xs' -> x.
 
-  tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
-  tlk = \xs ->
-    case unfold xs of
-    | Cons x xs' -> xs'.
+--   tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+--   tlk = \xs ->
+--     case unfold xs of
+--     | Cons x xs' -> xs'.
 
-  hd : forall a. CoStream a -> a.
-  hd = \xs -> hdk {K0} (uncos xs).
+--   hd : forall a. CoStream a -> a.
+--   hd = \xs -> hdk {K0} (uncos xs).
   
-  tl : forall a. CoStream a -> CoStream a.
-  tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+--   tl : forall a. CoStream a -> CoStream a.
+--   tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
 
-  eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
-  eof = \f xs -> 
-    let tl2 = tl (tl xs) in
-    let dtl = (\\(af : k) -> (f [af]) tl2) in
-    cos (hd xs) dtl.
+--   eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
+--   eof = \f xs -> 
+--     let tl2 = tl (tl xs) in
+--     let dtl = (\\(af : k) -> (f [af]) tl2) in
+--     cos (hd xs) dtl.
 
-  eo : forall a. CoStream a -> CoStream a.
-  eo = fix eof.
+--   eo : forall a. CoStream a -> CoStream a.
+--   eo = fix eof.
 
-  data Bool = True | False.        
-  truefalse : forall (k : Clock). Stream k Bool.
-  truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
+--   data Bool = True | False.        
+--   truefalse : forall (k : Clock). Stream k Bool.
+--   truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
 
-  main : CoStream Bool.
-  main = eo (Cos truefalse).
-|]
+--   main : CoStream Bool.
+--   main = eo (Cos truefalse).
+-- |]
 
-everyOtherTrans = [clofrp|
-  data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
-  type Stream (k : Clock) a = Fix (StreamF k a).
-  data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
+-- everyOtherTrans = [clofrp|
+--   data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
+--   type Stream (k : Clock) a = Fix (StreamF k a).
+--   data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
-  cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-  cos = \x xs -> 
-    Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
+--   cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
+--   cos = \x xs -> 
+--     Cos (fold (Cons x (\\(af : k) -> uncos (xs [af])))). -- won't work with map :(
 
-  uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-  uncos = \xs -> case xs of | Cos xs' -> xs'.
+--   uncos : forall (k : Clock) a. CoStream a -> Stream k a.
+--   uncos = \xs -> case xs of | Cos xs' -> xs'.
 
-  cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
-  cons = \x xs -> fold (Cons x xs).
+--   cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
+--   cons = \x xs -> fold (Cons x xs).
 
-  hdk : forall (k : Clock) a. Stream k a -> a.
-  hdk = \xs ->
-    case unfold xs of
-    | Cons x xs' -> x.
+--   hdk : forall (k : Clock) a. Stream k a -> a.
+--   hdk = \xs ->
+--     case unfold xs of
+--     | Cons x xs' -> x.
 
-  tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
-  tlk = \xs ->
-    case unfold xs of
-    | Cons x xs' -> xs'.
+--   tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
+--   tlk = \xs ->
+--     case unfold xs of
+--     | Cons x xs' -> xs'.
 
-  hd : forall a. CoStream a -> a.
-  hd = \xs -> hdk {K0} (uncos xs).
+--   hd : forall a. CoStream a -> a.
+--   hd = \xs -> hdk {K0} (uncos xs).
   
-  tl : forall a. CoStream a -> CoStream a.
-  tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+--   tl : forall a. CoStream a -> CoStream a.
+--   tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
 
-  eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
-  eof = \f xs -> 
-    let tl2 = tl (tl xs) in
-    let dtl = (\\(af : k) -> (f [af]) tl2) in
-    cos (hd xs) dtl.
+--   eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
+--   eof = \f xs -> 
+--     let tl2 = tl (tl xs) in
+--     let dtl = (\\(af : k) -> (f [af]) tl2) in
+--     cos (hd xs) dtl.
 
-  eo : forall a. CoStream a -> CoStream a.
-  eo = fix eof.
+--   eo : forall a. CoStream a -> CoStream a.
+--   eo = fix eof.
 
-  data Bool = True | False.
+--   data Bool = True | False.
 
-  main : CoStream Bool -> Stream K0 Bool.
-  main = \input ->
-    let Cos xs = eo input in
-    xs.
-|]
+--   main : CoStream Bool -> Stream K0 Bool.
+--   main = \input ->
+--     let Cos xs = eo input in
+--     xs.
+-- |]
 
 simpleTrans = [clofrp|
   data StreamF (k : Clock) a f = Cons a (|>k f) deriving Functor.
@@ -529,13 +529,13 @@ coStreamTrans (CloFRP er st expr ((s1 `SApp` s2) `SArr` (s3 `SApp` s4 `SApp` s5)
     fromCloFRPStream (Fold (Constr "Cons" [v, c])) = toHask s5 v : fromCloFRPStream c
     fromCloFRPStream v = error $ "fromCloFRPStream:" ++ pps v
 
-bench_everyOtherTrans :: IO ()
-bench_everyOtherTrans =
-  putStrLn . show $ take 1000000 (coStreamTrans everyOtherTrans truefalse)
+-- bench_everyOtherTrans :: IO ()
+-- bench_everyOtherTrans =
+--   putStrLn . show $ take 1000000 (coStreamTrans everyOtherTrans truefalse)
 
-bench_everyOtherExec :: IO ()
-bench_everyOtherExec =
-  putStrLn . show $ take 1000000 (execute everyOtherExec)
+-- bench_everyOtherExec :: IO ()
+-- bench_everyOtherExec =
+--   putStrLn . show $ take 1000000 (execute everyOtherExec)
 
 bench_replaceMin :: IO ()
 bench_replaceMin = 

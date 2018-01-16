@@ -240,7 +240,7 @@ kindOf ty = go ty `decorateErr` decorate where
                       ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
 
       Forall v k tau -> do
-        errIf (isInContext (Uni v k) <$> getCtx) (/= False) (\v' -> Other $ show $ pretty v' <+> "is already universally quantified")
+        errIf (isInContext (Uni v k) <$> getCtx) (/= False) (\_ -> Other $ show $ pretty v <+> "is already universally quantified")
         withCtx (\g -> g <+ Uni v k) $ go tau
 
       RecTy tau -> do
@@ -726,7 +726,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     delta <- branch $ k' `subtypeOf` kty
     kty' <- substCtx delta kty
     let c = (LamB, af) `HasType` kty'
-    (theta, _, _) <- splitCtx c =<< withCtx (\g -> g <+ c) (branch $ check e2 t2)
+    (theta, _, _) <- splitCtx c =<< withCtx (const $ delta <+ c) (branch $ check e2 t2)
     pure theta
 
   -- -- FoldApp (optimization)

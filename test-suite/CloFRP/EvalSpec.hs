@@ -325,10 +325,6 @@ evalSpec = do
         truefalse : forall (k : Clock). Stream k Bool.
         truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
 
-        cos : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
-        cos = \x xs -> 
-          Cos (cons x (\\(af : k) -> uncos (xs [af]))). -- won't work with map :(
-
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
         uncos = \xs -> case xs of | Cos xs' -> xs'.
 
@@ -348,14 +344,11 @@ evalSpec = do
                   ) : forall (k : Clock). |>k (Stream k a)
           in Cos (r [<>]).
 
-        eof : forall (k : Clock) a. |>k (CoStream a -> CoStream a) -> CoStream a -> CoStream a.
-        eof = \f xs -> 
-          let tl2 = tl (tl xs) in
-          let dtl = (\\(af : k) -> (f [af]) tl2) in
-          cos (hd xs) dtl.
+        eok : forall (k : Clock) a. CoStream a -> Stream k a.
+        eok = fix (\g x -> cons (hd x) (\\(af : k) -> g [af] (tl (tl x)))).
 
         eo : forall a. CoStream a -> CoStream a.
-        eo = fix eof.
+        eo = \xs -> Cos (eok xs).
 
         trues : Stream K0 Bool.
         trues = 

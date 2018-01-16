@@ -434,6 +434,29 @@ typecheckSpec = do
       do let ctx = rd ["id" |-> E.forAll ["a"] ("a" @->: "a")] ["Nat" |-> Star] nil
          runSynth ctx (E.the ("Nat" @->: "Nat") "id") `shouldYield` ("Nat" @->: "Nat", nil)
 
+    it "synthesizes correct clock-variables from tick abstractions" $ do
+      let delay = "Delay" .: E.forAll' [("k", ClockK), ("a", Star)] (E.later "k" "a" @->: "Later" @@: "k" @@: "a")
+      let mkunit = "MkUnit" .: "Unit"
+      let lctx = [Uni "k'" ClockK, delay, mkunit]
+      let env = rd' ["Unit" |-> Star, "Later" |-> ClockK :->*: Star :->*: Star] lctx
+      let comp = do (ty, ctx) <- synthesize ("Delay" @@ (E.tAbs ("af", "k'") $ "MkUnit"))
+                    substCtx ctx ty
+      let (esynth, _, _) = runTypingM comp env initState
+      case esynth of
+        Right inferred -> inferred `shouldBe` "Later" @@: "k'" @@: "Unit"
+        Left err -> failure (show err)
+
+      -- let Right prog = pprog [text|
+      --   data StreamF (k : Clock) a f = Cons a (|>k f). 
+      --   type Stream (k : Clock) a = Fix (StreamF k a).
+      --   data Unit = MkUnit.
+        
+      --   foo : forall (k : Clock) f. StreamF k Unit f.
+      --   foo = Cons MkUnit (\\(af : k) -> undefined).
+      -- |]
+      -- runCheckProg mempty prog `shouldYield` ()
+      -- shouldFail $ runCheckProg mempty prog
+
   describe "check" $ do
 
     it "checks primitives" $ do
