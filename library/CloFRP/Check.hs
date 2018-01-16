@@ -720,6 +720,9 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     pure delta''
 
   -- TickAbsI
+  -- At the exam, I had a bug here with (const $ delta <+ c) because it was
+  -- (\g -> g <+ c) which meant that we propagated the wrong context, leading to
+  -- inferring existentials for clock variables always
   check' (TickAbs af k e2) (Later k' t2) = do
     rule "TickAbsI" (pretty e <+> "<=" <+> pretty ty)
     let kty = nameToType eann k
