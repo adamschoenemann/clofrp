@@ -278,10 +278,12 @@ clockSpec = do
           | Cons x xs' -> xs'.
 
         hd : forall a. CoStream a -> a.
-        hd = \xs -> hdk {K0} (uncos xs).
+        hd = \xs -> let Cons x xs' = unfold (uncos {K0} xs) in x.
+        -- hd = \xs -> hdk {K0} (uncos xs).
         
         tl : forall a. CoStream a -> CoStream a.
-        tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
+        tl = \xs -> Cos (let Cons x xs' = unfold (uncos xs) in xs' [<>]).
+        -- tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
 
         eok : forall (k : Clock) a. CoStream a -> Stream k a.
         eok = fix (\g x -> cons (hd x) (\\(af : k) -> g [af] (tl (tl x)))).
@@ -300,14 +302,11 @@ clockSpec = do
           in fix fn.
 
         map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
-        map = \f -> 
-          --  dmapfix : forall (k : Clock) a b. (a -> b) -> |>k (Stream k a -> Stream k b) -> Stream k a -> Stream k b.
-          let mapfix = \g xs ->
-                case unfold xs of
-                | Cons x xs' -> 
-                  let ys = \\(af : k) -> g [af] (xs' [af])
-                  in  cons (f x) ys
-          in fix mapfix.
+        map = \f -> fix (\g xs ->
+          let Cons x xs' = unfold xs in
+          let ys = \\(af : k) -> g [af] (xs' [af]) in
+          cons (f x) ys
+        ).
         
 
         -- applicative structure        
