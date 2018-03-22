@@ -262,7 +262,8 @@ clockSpec = do
           in  Cos inner. 
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+        uncos = \s -> let Cos s' = s in s' {k}.
+        -- uncos = \xs -> case xs of | Cos xs' -> xs'.
 
         cons : forall (k : Clock) a. a -> |>k (Stream k a) -> Stream k a.
         cons = \x xs -> fold (Cons x xs).

@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -130,6 +131,10 @@ clott_add_int = [clofrp|
 
   nats : forall (k : Clock). Stream k Int.
   nats = fix (\g -> cons 0 (\\(af : k) -> strmap (\x -> x + 1) (g [af]))).
+
+  data CoStream a = Cos (forall (k : Clock). Stream k a).
+  conats : CoStream Int.
+  conats = Cos (fix (\g -> cons 0 (\\(af : k) -> strmap (\x -> x + 1) (g [af])))).
 
   nats' : forall (k : Clock). Stream k Int.
   nats' = 

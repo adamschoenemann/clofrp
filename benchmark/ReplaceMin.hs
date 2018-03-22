@@ -103,6 +103,11 @@ import CloFRP.QuasiQuoter
   replaceMin = \t -> 
     let Delay t' = replaceMinK {K0} t
     in t' [<>].
+
+  replaceMin' : Tree Int -> Tree Int.
+  replaceMin' = \t -> 
+    let Delay t' = feedback (replaceMinBody t) -- replaceMinK {K0} t
+    in t' [<>].
   
   ofHeight : Nat -> Tree Int.
   ofHeight = \nat -> 
