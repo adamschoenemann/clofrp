@@ -96,17 +96,9 @@ import CloFRP.QuasiQuoter
       (Delay (app (map br l') r'), m')
   ).
 
-  replaceMinK : forall (k : Clock). Tree Int -> Delay (Tree Int) k.
-  replaceMinK = \t -> feedback (replaceMinBody t).
-
   replaceMin : Tree Int -> Tree Int.
   replaceMin = \t -> 
-    let Delay t' = replaceMinK {K0} t
-    in t' [<>].
-
-  replaceMin' : Tree Int -> Tree Int.
-  replaceMin' = \t -> 
-    let Delay t' = feedback (replaceMinBody t) -- replaceMinK {K0} t
+    let Delay t' = feedback {K0} (replaceMinBody t) 
     in t' [<>].
   
   ofHeight : Nat -> Tree Int.

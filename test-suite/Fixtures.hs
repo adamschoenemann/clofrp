@@ -115,7 +115,7 @@ replaceMin =
       replaceMin' : Tree Nat -> Tree Nat.
       replaceMin' = \t -> 
         let Delay t' = feedback (replaceMinBody t)
-        in t' 0.
+        in t' [<>].
 
       replaceMin : Tree Nat -> Tree Nat.
       replaceMin = \t -> 

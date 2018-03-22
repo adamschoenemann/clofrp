@@ -335,7 +335,6 @@ assign nm ty = do
           pure (LocalCtx xs')
         (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything"
       where
-        -- TODO: Check that kindOf ty == k
         fn (Exists nm' k) (xs', _) | nm == nm' = do 
           tyk <- kindOf $ asPolytype ty
           if (tyk /= k)
