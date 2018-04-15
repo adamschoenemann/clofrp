@@ -327,7 +327,7 @@ assign nm ty = do
       | otherwise  -> otherErr $ show $ pretty nm
                   <+> "is already assigned to" <+> pretty ty'
     Nothing ->
-      case foldr fn ([], False) xs of
+       foldrM fn ([], False) xs >>= \case
         (xs', True) -> do
           let asserr = Other $ show $ "Assigning" <+> pretty nm <+> "to"
                     <+> pretty ty
@@ -335,9 +335,13 @@ assign nm ty = do
           pure (LocalCtx xs')
         (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything"
       where
-        -- TODO: Check that kindOf ty == k
-        fn (Exists nm' k) (xs', _) | nm == nm' = (nm := ty : xs', True)
-        fn x (xs', b)                          = (x : xs', b)
+        fn (Exists nm' k) (xs', _) | nm == nm' = do 
+          tyk <- kindOf $ asPolytype ty
+          if (tyk /= k)
+            then otherErr $ show $ "Expected" <+> pretty ty <+> "to have kind" 
+                 <+> pretty k <+> "but it had kind" <+> pretty tyk
+            else pure (nm := ty : xs', True)
+        fn x (xs', b)                          = pure (x : xs', b)
 
 -- | Attempt to convert a type to a monotype and lift it to the TypingM monad
 asMonotypeTM :: Type a s -> TypingM a (MonoType a)
@@ -1177,7 +1181,7 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
 
   -- |>κApp⋄
   applysynth' (Later kappat cty) (Prim Tick) = do
-    rule "TickApp" (pretty ty <+> "•" <+> pretty e)
+    rule "|>kApp<>" (pretty ty <+> "•" <+> pretty e)
     kappa <- fromEither $ extractKappa kappat
     ctx <- getCtx
     ctx `mustBeStableUnder` kappa
@@ -1185,8 +1189,11 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
 
   -- |>κApp
   applysynth' (Later kappat cty) _ = do
-    rule "TickVarApp" (pretty ty <+> "•" <+> pretty e)
-    (cty,) <$> branch (check e kappat)
+    rule "|>kApp" (pretty ty <+> "•" <+> pretty e)
+    k <- kindOf kappat
+    if k /= ClockK
+      then otherErr $ show $ pretty kappat <> "must have the kind of clocks"
+      else (cty,) <$> branch (check e kappat)
 
   -- ->App
   applysynth' (aty :->: cty) _ = do

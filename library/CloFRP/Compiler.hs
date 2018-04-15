@@ -15,14 +15,12 @@ module CloFRP.Compiler where
 import qualified Language.Haskell.TH.Syntax as TH
 import Language.Haskell.TH.Syntax (Q, Dec)
 import Language.Haskell.TH.Lib
-import Data.Function (fix)
 import Data.Maybe (mapMaybe)
 import Data.Functor.Classes
 
 import CloFRP.AST hiding (match, Prim(..))
 import qualified CloFRP.AST.Prim as P
 import CloFRP.Annotated
-import CloFRP.Pretty
 
 data ClockKind = K0
 
@@ -37,7 +35,6 @@ gfix :: (Later k a -> a) -> a
 gfix f = -- fix (unguard f)
   let x = f (\_ -> x)
   in  x
-
 
 -- F[μX. F[X]] -> (μX. F[X])
 data Fix f = Fold (f (Fix f))
@@ -58,15 +55,12 @@ primRec :: Functor f => (f (Fix f, a) -> a) -> Fix f -> a
 primRec fn (Fold f) =
   fn (fmap (\y -> (y, primRec fn y)) f)
 
-delay :: () -> a -> a
-delay !u a = a
-
 nameToName :: Name -> TH.Name
 nameToName = TH.mkName . show
 
 progToHaskDecls :: Prog a -> Q [Dec]
 progToHaskDecls (Prog decls) = sequence (mapMaybe declToHaskDecl decls) where
-  declToHaskDecl decl@(A _ decl') =
+  declToHaskDecl (A _ decl') =
     case decl' of
       FunD nm e    -> Just $ valD (varP (nameToName nm)) (normalB $ exprToHaskExpQ e) []
       SigD nm ty   -> Just $ sigD (nameToName nm) (typeToHaskType ty)

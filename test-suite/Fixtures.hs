@@ -112,6 +112,11 @@ replaceMin =
       replaceMinK : forall (k : Clock). Tree Nat -> Delay (Tree Nat) k.
       replaceMinK = \t -> feedback (replaceMinBody t).
 
+      replaceMin' : Tree Nat -> Tree Nat.
+      replaceMin' = \t -> 
+        let Delay t' = feedback (replaceMinBody t)
+        in t' [<>].
+
       replaceMin : Tree Nat -> Tree Nat.
       replaceMin = \t -> 
         let Delay t' = replaceMinK {K0} t
