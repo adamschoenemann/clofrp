@@ -1,4 +1,4 @@
-# [Clocked Functional Reactive Programming][clofrp]
+# Clocked Functional Reactive Programming
 
 An implementation of the Simply-typed version of Clocked Type Theory (CloTT) [clocks] for my master's thesis at ITU (pdf is in the repo).
 CloFRP (also known as CloPL) is a language that enables safe co-inductive programming.
