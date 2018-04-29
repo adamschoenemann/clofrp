@@ -67,3 +67,5 @@ The primary way to use `CloFRP` is through the `QuasiQuoter`s it exposes in
 Examples are scattered around the code-base a bit. There are some in the
 `Examples` module, but most are located in the `benchmark` and `test-suite`
 directories, for example in the `Fixtures` module.
+
+[clocks]: http://cs.au.dk/~hbugge/pdfs/lics17-preprint.pdf
