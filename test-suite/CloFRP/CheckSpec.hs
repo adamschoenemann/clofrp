@@ -225,6 +225,12 @@ typecheckSpec = do
       shouldFail $ runWfContext mempty (nil <+ "a" := E.exists "b")
     specify "nil <+ ^a = b is not well-formed" $ do
       shouldFail $ runWfContext mempty (nil <+ "a" := "b")
+    specify "(nil <+ a := tau <+ a) is not well-formed" $ do 
+      let kctx = ["Unit" |-> Star]
+      shouldFail $ runWfContext kctx (nil <+ "a" := "Unit" <+ exists "a")
+    specify "(nil <+ a <+ a := tau) is not well-formed" $ do
+      let kctx = ["Unit" |-> Star]
+      shouldFail $ runWfContext kctx (nil <+ exists "a" <+ "a" := "Unit")
 
   describe "<++" $ do
     it "should work" $ do
