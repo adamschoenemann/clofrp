@@ -1138,3 +1138,18 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
   texists :: Name -> Type a s
   texists = A tann . TExists
 
+coveredBy :: Pat a -> [Pat a] -> TypingM a ()
+coveredBy _ [] = tyExcept (NotExhaustive "todo")
+coveredBy _ (A _ (Bind _) : ps) =
+  case ps of
+    [] -> pure ()
+    (p : _) -> error $ "todo: unreachable pattern " ++ pps p
+coveredBy (A _ (Match nm1 idealps)) (A _ (Match nm2 nestedps) : ps)
+    | nm1 /= nm2 =
+      error $ "todo: cannot match pattern " ++ pps nm1 ++ " with " ++ pps nm2
+    | length idealps /= length nestedps =
+      error $ "expected " ++ show (length idealps) ++ " sub-patterns but got " 
+      ++ show (length nestedps)
+    | otherwise =
+      
+

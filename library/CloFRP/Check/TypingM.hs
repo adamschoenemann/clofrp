@@ -94,6 +94,7 @@ data TyExcept a
   | MutualRecursionErr Name
   | Other String
   | Decorate (TyExcept a) (TyExcept a)
+  | NotExhaustive Name
   deriving (Show, Eq)
 
 instance Unann (TyExcept a) (TyExcept ()) where
@@ -110,6 +111,7 @@ instance Unann (TyExcept a) (TyExcept ()) where
     MutualRecursionErr nm    -> MutualRecursionErr nm
     Other s                  -> Other s
     Decorate outer inner     -> Decorate (unann outer) (unann inner)
+    NotExhaustive nm         -> NotExhaustive nm
 
 instance Pretty (TyExcept a) where
   pretty = \case
@@ -124,6 +126,7 @@ instance Pretty (TyExcept a) where
     PartialSynonymApp syn       -> "Partial type-synonym application of synonym " <+> pretty syn
     MutualRecursionErr nm    -> pretty nm <+> "is mutually recursive with something else"
     Other s                  -> "Other error:" <+> fromString s
+    NotExhaustive nm         -> "Pattern match on" <+> pretty nm <+> " is not exhaustive"
     Decorate outer inner     -> pretty outer <> hardline <> "Caused by:" <> softline <> pretty inner
 
 tyExcept :: TyExcept a -> TypingM a r
