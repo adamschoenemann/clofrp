@@ -1227,7 +1227,8 @@ foobar xs =
 
   # questions:
   - Do we need to maintain the full patterns and expand, or can't we just
-    recurse down into them based on position?
+    recurse down into them based on position? Seems like we cant
+
   #Pseudo code
   coveredBy :: Pat a -> [Pat a] -> TypingM a ()
   coveredBy _ [] = not exhaustive!
@@ -1251,8 +1252,20 @@ freshPatternsFromName nm = do
     Just ty -> do
       silentBranch $ getPatternsOfType ty
 
-refineMatch :: Int -> Pat a -> [Pat a] -> (Pat a, [Pat a])
-refineMatch index ideal covering
+substPatByIndex :: Int -> Pat a -> [Pat a] -> (Pat a, [Pat a])
+substPatByIndex index refined covering =
+  map (overCovering index) covering
+  where
+    overCovering 0 (A _ (Bind _)) = refined
+    overCovering n (A ann (Match nm subps))
+      | n > 0 && length subps <= n =
+        A ann (Match nm (replaceAt (n - 1) refined subps))
+    overCovering n pat = error $ show $ "FATAL: invalid subst index" <+> pretty n
+        <+> "for pattern" <+> pretty pat
+
+replaceAt :: Int -> a -> [a] -> []
+replaceAt i rep xs =
+  zipWith (\j x -> if i == j then rep else x) [0..] xs
 
 coveredBy :: Pat a -> [Pat a] -> TypingM a ()
 coveredBy idealPat coveringPats =
