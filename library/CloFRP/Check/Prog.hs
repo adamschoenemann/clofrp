@@ -50,7 +50,7 @@ data ElabRes a = ElabRes
   , erSigs    :: FreeCtx a    -- signatures
   , erConstrs :: FreeCtx a    -- constructors
   , erDestrs  :: DestrCtx  a  -- destructors
-  , erSynonyms :: Synonyms a    -- type synonyms
+  , erSynonyms :: Synonyms a  -- type synonyms
   , erDeriving :: Deriving a  -- data-types that must derive stuff
   } deriving (Show, Eq, Data, Typeable)
 
@@ -235,7 +235,7 @@ collectDecls (Prog decls) = foldr folder mempty decls where
     folder (A _ x) er@(ElabRes {erKinds = ks, erConstrs = cs, erDestrs = ds, erDefs = fs, erSigs = ss, erSynonyms = syns, erDeriving = drv}) = case x of
       DataD dt@(Datatype nm _ex b cs' derivs) ->
         let (tys, dstrs) = elabCs nm b cs' 
-            drv' = foldr (\x acc -> M.insertWith (++) (UName x) [dt] acc) drv derivs
+            drv' = foldr (\x' acc -> M.insertWith (++) (UName x') [dt] acc) drv derivs
         in  er {erKinds = extend nm (dtKind dt) ks, erConstrs = tys <> cs, erDestrs = dstrs <> ds, erDeriving = drv'}
 
       FunD nm e        -> er {erDefs = M.insert nm e fs}
@@ -318,7 +318,7 @@ elabProg program = do
             expDestrs <- DestrCtx <$> (traverse (expandDestr synonyms) $ unDestrCtx destrs)
             expDerivs <- traverse (expandDerivs synonyms) derivs
             expFunds <- traverse (traverseAnnos (expandSynonyms synonyms)) $ funds
-            checkForMutualRecursiveDefs expFunds cnstrs
+            _ <- checkForMutualRecursiveDefs expFunds cnstrs
             instances <- elabInstances fromEither expDerivs
             let allFree = FreeCtx $ expFree -- <> M.fromList derivTyps
             let allDefs = expFunds -- <> M.fromList derivDefs
@@ -365,7 +365,6 @@ elabCs tyname bound cs = (fromList $ map toFn cs, fromList $ map toDestr cs) whe
   anned ann fn = \x y -> A ann $ fn x y
 
 -- | Check an elaborated program
--- TODO: Check derived definitions in instances
 checkElabedProg :: ElabProg a -> TypingM a ()
 checkElabedProg (ElabProg {kinds, types, defs, destrs, synonyms, instances}) = do
   _ <- checkTypes
@@ -388,7 +387,7 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, synonyms, instances}) = d
       Just ty -> do -- reset name state and discard old inference tree output with censor
         resetNameState
         let ctx' = ctx { trFree = delete k (trFree ctx) }
-        tell [(0, "============" <+> pretty k <+> "=============")]
+        tellDebugTree [(0, "============" <+> pretty k <+> "=============")]
         local (const ctx') $ check expr ty
         -- censor (const []) $ local (const ctx') $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"

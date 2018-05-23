@@ -340,6 +340,3 @@ getUnsolved :: LocalCtx a -> [(Name, Kind)]
 getUnsolved (LocalCtx xs) = foldr fn [] xs where
   fn (Exists nm k) acc = (nm, k) : acc
   fn _ acc             = acc
-
-
-  

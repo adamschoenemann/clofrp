@@ -15,7 +15,6 @@ module CloFRP.Eval.Value where
 import Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as M
 import Data.Text.Prettyprint.Doc
-import Control.DeepSeq
 import GHC.Generics
 import GHC.Exts
 import Data.Data
@@ -31,7 +30,6 @@ data PrimVal
   | RuntimeErr String
   | FoldP
   | UnfoldP
-  | Pointer Pntr -- TODO: Deprecate (not used)
   deriving (Eq, Generic, Show, Data, Typeable)
 
 instance Pretty PrimVal where
@@ -41,7 +39,6 @@ instance Pretty PrimVal where
     FoldP     -> "foldP"
     UnfoldP     -> "unfoldP"
     RuntimeErr s -> "RUNTIMEERR:" <+> fromString s
-    Pointer p -> "&" <> pretty p
 
 -- instance Show PrimVal where show = show . pretty
 

@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-missing-signatures -fno-warn-incomplete-patterns #-}
 
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE OverloadedLists #-}
@@ -108,7 +108,7 @@ instance ToHask c h => ToHask (CTBinTree :@: c) (BinTree h) where
   toHask (_ `SApp` s1) v = go v where
     go (Fold (Constr "Branch" (x : l : r : _))) = 
       Branch (toHask s1 x) (go l) (go r)
-    go v = error $ "did not expect " ++ pps v
+    go v' = error $ "did not expect " ++ pps v'
   -- toHask s@(_ `SApp` _ `SApp` s1) (Fold (Constr "Branch" (x : l : r : _))) =
   --   Branch (toHask s1 x) (toHask s l) (toHask s r)
   -- toHask s v = error $ "did not expect" ++ pps v

@@ -340,8 +340,6 @@ evalStepDefinitions er ug defs defnm = do
 progToEval :: Pretty a => Name -> Prog a -> TypingM a (Expr a, PolyType a, EvalRead a)
 progToEval mainnm pr = do
   let (ElabRes {erDefs, erConstrs, erSigs}) = collectDecls pr
-      vconstrs = M.mapWithKey (\k _ -> Right (Constr k [])) . unFreeCtx $ erConstrs
-      -- initSt = initEvalState { esGlobals = (M.map Left erDefs) `M.union` vconstrs }
   ElabProg {instances} <- elabProg pr
   let ug = usageGraph erDefs `M.union` constrsToUsageGraph erConstrs
   -- OK, the below should not be here, but when you actually evaluate the program.

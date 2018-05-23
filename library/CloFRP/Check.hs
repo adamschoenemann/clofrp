@@ -35,8 +35,11 @@ module CloFRP.Check
   where
 
 import Data.Foldable (foldlM, foldrM)
+import Control.Monad.Writer (tell)
 import Control.Applicative ((<|>))
 import Control.Monad.Except (catchError, throwError)
+import Control.Monad (filterM)
+import GHC.Exts (toList, fromList)
 import Data.Text.Prettyprint.Doc
 import Data.List (find, genericLength)
 import Data.Maybe (isJust)
@@ -47,9 +50,11 @@ import CloFRP.Context
 import CloFRP.Annotated
 import CloFRP.AST hiding (exists)
 import CloFRP.Pretty
-import CloFRP.Check.Destr
+import CloFRP.Check.Destr (Destr)
 import CloFRP.Check.Contexts
 import CloFRP.Check.TypingM
+
+import qualified CloFRP.Check.Destr as Destr
 
 
 -- | For testing
@@ -215,7 +220,7 @@ kindOf ty = go ty `decorateErr` decorate where
       RecTy tau -> do
         k <- go tau
         case k of
-          Star :->*: k -> pure k
+          Star :->*: k' -> pure k'
           _            -> otherErr $ show $ pretty tau <+> "must have kind * -> k to be an argument to Fix"
 
       TTuple ts -> (traverse fn ts) *> pure Star where
@@ -682,7 +687,8 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     (pty'', delta') <- withCtx (const delta) $ branch $ intros pty'
     tysubst <- substCtx delta' ty
     markerName <- freshName
-    delta'' <- withCtx (const $ delta' <+ Marker markerName) $ branch $ checkCaseClauses markerName pty'' clauses tysubst
+    delta'' <- withCtx (const $ delta' <+ Marker markerName) 
+      $ branch $ checkCaseClauses markerName pty'' clauses tysubst
     pure delta''
 
   -- TickAbsI
@@ -836,8 +842,8 @@ synthesize expr@(A ann expr') = synthesize' expr' where
     let rty = A ann $ alphat :->: betat
     tau <- substCtx ctx' rty `decorateErr` (Other "in [->I=>]")
     let unsolved = getUnsolved delta'
-    let tausubst = foldr (\(x, _k) acc -> subst (A ann $ TVar x) x acc) tau unsolved
-    let quanted = foldr (\(x, k) acc -> A ann $ Forall x k acc) tausubst unsolved
+    let tausubst = foldr (\(x', _k) acc -> subst (A ann $ TVar x') x' acc) tau unsolved
+    let quanted = foldr (\(x', k) acc -> A ann $ Forall x' k acc) tausubst unsolved
     root $ "[Info] generalized" <+> pretty tau <+> "to" <+> pretty quanted
     pure (quanted, delta)
 
@@ -954,14 +960,14 @@ synthesize expr@(A ann expr') = synthesize' expr' where
       _           -> otherErr $ show $ pretty ex <+> "of type" <+> pretty exty <+> "cannot be applied to the type" <+> pretty arg <+> "of kind" <+> pretty k'
 
   synthesize' (BinOp "+" e1 e2) = do 
-    check e1 (A ann $ TFree "Int")
-    check e2 (A ann $ TFree "Int")
-    (A ann $ TFree "Int",) <$> getCtx
+    delta <- check e1 (A ann $ TFree "Int")
+    theta <- withCtx (const delta) $ check e2 (A ann $ TFree "Int")
+    pure (A ann $ TFree "Int", theta)
 
   synthesize' (BinOp "<" e1 e2) = do 
-    check e1 (A ann $ TFree "Int")
-    check e2 (A ann $ TFree "Int")
-    (A ann $ TFree "Bool",) <$> getCtx
+    delta <- check e1 (A ann $ TFree "Int")
+    theta <- withCtx (const delta) $ check e2 (A ann $ TFree "Int")
+    pure (A ann $ TFree "Bool", theta)
 
   synthesize' _ = cannotSynthesize expr
 
@@ -1007,6 +1013,8 @@ inferPrim ann p = case p of
     let kq = fall "k" ClockK
     ctx <- getCtx
     pure (kq . aq $ (ltr kappa at --> at) --> at, ctx)
+  
+  Input -> error "Input should never be present in the syntax"
 
   where
     infixr 9 -->
@@ -1014,7 +1022,6 @@ inferPrim ann p = case p of
     fall n k = A ann . Forall n k
     tv = A ann . TVar . UName
     tapp t1 = A ann . TApp t1
-    ttuple = A ann . TTuple
 
 
 -- | Check that a pattern type-checks and return a new ctx extended with bound variables
@@ -1138,18 +1145,182 @@ applysynth ty@(A tann ty') e@(A _ e') = applysynth' ty' e' where
   texists :: Name -> Type a s
   texists = A tann . TExists
 
-coveredBy :: Pat a -> [Pat a] -> TypingM a ()
-coveredBy _ [] = tyExcept (NotExhaustive "todo")
-coveredBy _ (A _ (Bind _) : ps) =
-  case ps of
-    [] -> pure ()
-    (p : _) -> error $ "todo: unreachable pattern " ++ pps p
-coveredBy (A _ (Match nm1 idealps)) (A _ (Match nm2 nestedps) : ps)
-    | nm1 /= nm2 =
-      error $ "todo: cannot match pattern " ++ pps nm1 ++ " with " ++ pps nm2
-    | length idealps /= length nestedps =
-      error $ "expected " ++ show (length idealps) ++ " sub-patterns but got " 
-      ++ show (length nestedps)
-    | otherwise =
+
+foobar :: [Bool] -> ()
+foobar xs =
+  case xs of
+    [] -> ()
+    True:_y:_xs -> ()
+    _x:_xs -> ()
+{-
+  -- solution be expanding patterns 
+
+  #Example 1. unreachable
+  case xm of
+    | Nothing
+    | Just MkUnit
+    | Just x
+  
+  xm coveredBy [Nothing, Just MkUnit]
+  v-- split xm into destructors
+  Nothing coveredBy [Nothing] -- discharge
+  Just `a coveredBy [Just MkUnit, Just x]
+  v-- first pattern covers ideal, but there is more
+  Just x unreachable!
+  -------------------
+
+  #Example 2. not exhaustive
+  case xs of
+    | Nil
+    | Cons x Nil
+  
+  xs coveredBy [Nil, Cons x Nil]
+  v-- split xs into destructors
+  Nil coveredBy [Nil] -- discharge
+  Cons `a `b coveredBy [Cons x Nil]
+  v-- `a matches x, but split `b to match Nil
+  Cons `a Nil coveredBy [Cons x Nil]
+  Cons `a (Cons `b `c) coveredBy [Cons x Nil] <-- cant cover
+  -------------------------------------------
+
+  #Example 3. correct nested patterns
+  case lst of
+    | Nil -> ...
+    | Cons True (Cons y xs) -> ...
+    | Cons x xs -> ...
+  
+  lst coveredBy [Nil, Cons True (Cons y xs), Cons x xs]
+  |
+  | split lst in destructors
+  v
+  Nil coveredBy [Nil] -- discharge
+  Cons `a `b coveredBy [Cons True (Cons y xs), Cons x xs]
+  |
+  | split on `a since x is not in constructor form
+  v
+  Cons True `b  coveredBy [Cons True (Cons y xs), Cons True xs]
+  Cons False `b coveredBy [Cons False xs]
+  |
+  | split on `b since xs is not in constructor form
+  | we could skip second split if we check that no pattern scrutinizes `b
+  |
+  v
+  Cons True Nil           coveredBy [Cons True Nil] -- discharge
+  Cons True (Cons `c `d)  coveredBy [Cons True (Cons `c `d)] -- discharge
+  Cons False Nil          coveredBy [Cons False Nil] -- discharge
+  Cons False (Cons `c `d) coveredBy [Cons False (Cons `c `d)] -- discharge
+
+  # questions:
+  - Do we need to maintain the full patterns and expand, or can't we just
+    recurse down into them based on position?
+  #Pseudo code
+  coveredBy :: Pat a -> [Pat a] -> TypingM a ()
+  coveredBy _ [] = not exhaustive!
+  coveredBy (Bind nm) patterns = do
+    idealpats <- lookupPats nm
+    foreach ipat in idealpats
+      coveredby ipat (filter matchIpat patterns)
+  coveredBy (Match nm subpats) (pat : patterns) = do
+    if null subpats
+      then if null patterns
+        then done!
+      else (head patterns) is unreachable!
+    else do
       
+
+-}
+coveredBy :: Pat a -> [Pat a] -> TypingM a ()
+coveredBy idealPat coveringPats =
+  case (idealPat, coveringPats) of
+    (_, []) -> coverRule "UncoveredPattern" >> uncoveredPattern idealPat
+
+    (_, A _ (Bind _) : ps) ->
+      case ps of
+        [] -> coverRule "Bind" >> pure ()
+        (p : _) -> coverRule "UnreachablePattern" >> unreachablePattern p
+
+    (A _ (Match nm1 []), p@(A _ (Match nm2 [])) : ps) | nm1 == nm2 -> 
+      case ps of
+        [] -> coverRule "Bind" >> pure ()
+        (p : _) -> coverRule "UnreachablePattern" >> unreachablePattern p
+
+    (A _ (Bind bnm), ps@(A _ (Match _mnm _mpts) : _)) -> do
+      mty <- lookupTy bnm <$> getCtx
+      case mty of 
+        Nothing -> otherErr $ show $ pretty bnm <+> "is not bound in local context"
+        Just ty -> do
+          coverRule "Split"
+          idealPats <- silentBranch $ getPatternsOfType ty
+          rule "GetPatternsOfType.Info" (pretty idealPats)
+          if null idealPats 
+            then error $ show $ "FATAL: empty type" <+> pretty ty <+> "encountered"
+            else do
+              let continue ip = do
+                    delta <- branch $ checkPat ip ty
+                    withCtx (const delta) $ branch $ coveredBy ip (matchesIdeal ip ps)
+              traverse continue idealPats
+              pure ()
+
+    (A matchAnn (Match nm1 idealps), A _ (Match nm2 nestedps) : ps)
+      | nm1 /= nm2 ->
+        coveredBy idealPat ps
+        -- error $ "todo: cannot match pattern " ++ pps nm1 ++ " with " ++ pps nm2
+      | length idealps /= length nestedps ->
+        error $ "FATAL: expected " ++ show (length idealps) ++ " sub-patterns but got " 
+        ++ show (length nestedps)
+      | otherwise -> do
+        coverRule "Nest"
+        let matchingps = [ ps' | A _ (Match nm1' ps') <- coveringPats, nm1 == nm1' ]
+        let catcher index = \case
+              (UncoveredPattern newpat, _) -> uncoveredPattern (updateIdeal index newpat)
+              (UnreachablePattern newpat, _) -> unreachablePattern (updateIdeal index newpat)
+              err -> throwError err
+        let zipper = \index ip -> 
+              (branch $ coveredBy ip (map (!! index) matchingps)) `catchError` catcher index
+        _ <- sequence $ zipWith zipper [0..] idealps 
+        pure ()
+        where
+          updateIdeal index newpat =
+            let newIdealPs = zipWith (\i p -> if i == index then newpat else p) [0..] idealps
+            in  A matchAnn (Match nm1 newIdealPs)
+  where
+    coverRule sub = 
+      rule ("CoveredBy." <> sub) (pretty idealPat <> indent 2 (line <> pretty coveringPats))
+
+    matchesIdeal (A _ ideal) pats =
+      case ideal of
+        Bind _ -> pats
+        Match nm _ -> 
+          filter (
+            \case 
+              A _ (Bind _) -> True
+              A _ (Match nm' _) -> nm' == nm
+          ) pats
+
+    getPatternsOfType :: PolyType a -> TypingM a [Pat a]
+    getPatternsOfType qtype@(A ann _) = do
+      rule "GetPatternsOfType" (pretty qtype)
+      destrs <- branch $ getDestrsOfType qtype
+      traverse (destrToPat ann) destrs
+    
+    destrToPat :: a -> Destr a -> TypingM a (Pat a)
+    destrToPat ann destr = do
+      let name = Destr.name destr
+      let args = Destr.args destr
+      subvars <- traverse (\_ -> A ann . Bind <$> freshName) args
+      pure (A ann (Match name subvars))
+      
+isSubtypeOf :: PolyType a -> PolyType a -> TypingM a Bool
+isSubtypeOf type1 type2 = 
+  (subtypeOf type1 type2 >> pure True) `catchError` (const $ pure False)
+
+getDestrsOfType :: PolyType a -> TypingM a [Destr a]
+getDestrsOfType qtype@(A ann _) = do
+  destrCtx <- getDCtx
+  let destrs = map snd $ toList destrCtx
+  filterM onlySubtypes destrs
+  where
+    onlySubtypes destr = do
+      (delta, edestr) <- existentialize ann destr
+      withCtx (const delta) $ Destr.typ edestr `isSubtypeOf` qtype
 

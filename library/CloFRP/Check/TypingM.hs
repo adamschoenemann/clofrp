@@ -36,18 +36,35 @@ branch comp = do
   i <- gets level
   modify $ \s -> s { level = i + 1 }
   r <- comp
-  -- tell [(i+1, "≜" <+> pretty r)]
   modify $ \s -> s { level = i }
   pure r
 
+silentBranch :: Pretty r => TypingM a r -> TypingM a r
+silentBranch comp = do
+  i <- gets level
+  t <- gets debugDerivationTree
+  modify $ \s -> s { level = i + 1 }
+  r <- comp
+  modify $ \s -> s { level = i, debugDerivationTree = t }
+  pure r
+
+tellDebugTree :: DerivationTree -> TypingM a ()
+tellDebugTree dt =
+  modify (\s -> s { debugDerivationTree = dt ++ debugDerivationTree s })
+
 root :: Doc () -> TypingM a ()
-root x = gets level >>= \l -> tell [(l,x)]
+root x = gets level >>= \l -> tellDebugTree [(l,x)]
+
+type DerivationTree = [(Integer, Doc ())]
+
+-- |I used to have a MonadWriter but moved it to state
+type TypingWrite a = DerivationTree 
 
 -- Typing state
-
 data TypingState   = 
   TS { names :: Integer -- |Just an integer for generating names
      , level :: Integer -- |For debugging
+     , debugDerivationTree :: DerivationTree -- |For debugging
      }
 
 -- Typing reader
@@ -71,13 +88,12 @@ instance Monoid (TypingRead a) where
        }
   
 
-type TypingWrite a = [(Integer, Doc ())]
 type TypingErr a = (TyExcept a, LocalCtx a)
 
-showTree :: TypingWrite a -> String
+showTree :: DerivationTree -> String
 showTree = showW 90 . prettyTree
 
-prettyTree :: TypingWrite a -> Doc ()
+prettyTree :: DerivationTree -> Doc ()
 prettyTree = vcat . map fn where
   fn (i, doc) = indent (fromInteger $ i * 2) doc
 
@@ -94,7 +110,8 @@ data TyExcept a
   | MutualRecursionErr Name
   | Other String
   | Decorate (TyExcept a) (TyExcept a)
-  | NotExhaustive Name
+  | UncoveredPattern (Pat a)
+  | UnreachablePattern (Pat a)
   deriving (Show, Eq)
 
 instance Unann (TyExcept a) (TyExcept ()) where
@@ -111,7 +128,8 @@ instance Unann (TyExcept a) (TyExcept ()) where
     MutualRecursionErr nm    -> MutualRecursionErr nm
     Other s                  -> Other s
     Decorate outer inner     -> Decorate (unann outer) (unann inner)
-    NotExhaustive nm         -> NotExhaustive nm
+    UncoveredPattern pat        -> UncoveredPattern (unann pat)
+    UnreachablePattern pat   -> UnreachablePattern (unann pat)
 
 instance Pretty (TyExcept a) where
   pretty = \case
@@ -126,7 +144,8 @@ instance Pretty (TyExcept a) where
     PartialSynonymApp syn       -> "Partial type-synonym application of synonym " <+> pretty syn
     MutualRecursionErr nm    -> pretty nm <+> "is mutually recursive with something else"
     Other s                  -> "Other error:" <+> fromString s
-    NotExhaustive nm         -> "Pattern match on" <+> pretty nm <+> " is not exhaustive"
+    UncoveredPattern pat        -> "Pattern match is not exhaustive:" <+> pretty pat <+> "is not covered."
+    UnreachablePattern pat   -> "Pattern" <+> pretty pat <+> "is unreachable"
     Decorate outer inner     -> pretty outer <> hardline <> "Caused by:" <> softline <> pretty inner
 
 tyExcept :: TyExcept a -> TypingM a r
@@ -167,25 +186,30 @@ partialSynonymApp syn = tyExcept $ PartialSynonymApp syn
 decorateErr :: TypingM a r -> TyExcept a -> TypingM a r
 decorateErr tm outer = tm `catchError` (\(inner,ctx) -> tyExcept $ Decorate outer inner)
 
+uncoveredPattern, unreachablePattern :: Pat a -> TypingM a r
+uncoveredPattern = tyExcept . UncoveredPattern
+unreachablePattern = tyExcept . UnreachablePattern
+
 errIf :: TypingM a r -> (r -> Bool) -> (r -> TyExcept a) -> TypingM a ()
 errIf c p fl = do
   r <- c
   if p r then (tyExcept $ fl r) else pure ()
 
-newtype TypingM a r = Typ { unTypingM :: ExceptT (TypingErr a) (RWS (TypingRead a) (TypingWrite a) TypingState) r }
+newtype TypingM a r = Typ { unTypingM :: ExceptT (TypingErr a) (RWS (TypingRead a) () TypingState) r }
   deriving ( Functor
            , Applicative
            , Monad
            , MonadError (TypingErr a)
            , MonadState TypingState
-           , MonadWriter (TypingWrite a)
            , MonadReader (TypingRead a)
            )
 
-type TypingMRes a r = (Either (TypingErr a) r, TypingState, TypingWrite a)
+type TypingMRes a r = (Either (TypingErr a) r, TypingState, DerivationTree)
 
 runTypingM :: TypingM a r -> TypingRead a -> TypingState -> TypingMRes a r
-runTypingM tm r s = runRWS (runExceptT (unTypingM tm)) (r `mappend` initRead) s
+runTypingM tm r s = 
+  let (res, st, _unit) = runRWS (runExceptT (unTypingM tm)) (r `mappend` initRead) s
+  in (res, st, reverse $ debugDerivationTree st)
 
 initRead :: TypingRead a 
 initRead = 
@@ -238,7 +262,9 @@ resetNameState = do
   pure ()
 
 initState :: TypingState
-initState = TS 0 0
+initState = TS 0 0 []
 
 runTypingM0 :: TypingM a r -> TypingRead a -> TypingMRes a r
 runTypingM0 tm r = runTypingM tm r initState
+
+

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GADTs #-}
@@ -7,11 +8,26 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module CloFRP.Examples where
+module CloFRP.Examples (
+  clofrp_const,
+  clott_add,
+  clott_add_int,
+  ListF(..),
+  StreamF(..),
+  Stream,
+  List,
+  cfp_id,
+  negate,
+  toInt,
+  five,
+  strconst,
+  nats
+) where
 
 import CloFRP.Interop
 import CloFRP.QuasiQuoter
 import Text.Parsec.Pos
+import Prelude hiding (negate)
 
 type CTStream = 'CTFree "Stream" :@: 'CTFree "K0"
 type CTNat = 'CTFree "Nat"
@@ -108,6 +124,7 @@ clott_add_int = [clofrp|
                    | Z -> 0
                    | S (n, r) -> 1 + r
     in  primRec {NatF} fn.
+
   z : Nat. z = fold Z.
   s : Nat -> Nat. s = \x -> fold (S x).
   five : Nat. 

@@ -57,6 +57,7 @@ rebuild [] _ = []
 rebuild _ [] = []
 rebuild (Leaf : ps) cs = Leaf : rebuild ps cs
 rebuild (Branch x l r : ps) (l' : r' : cs) = Branch x l' r' : rebuild ps cs
+rebuild _ _ = error "rebuild error"
 
 idTree :: Tree a -> Tree a
 idTree t = let cs = getChildren [t]

@@ -83,15 +83,15 @@ prettyE' (PrettyEP {lamParens, otherParens}) = \case
   Ann e t -> parens $ prettyE parlam e <+> ":" <+> pretty t
   App e1 e2 -> otherParens $ prettyE parlam e1 <+> prettyE (ep parens parens) e2
 
-  Lam nm mty e ->
-    let (ps', e') = collect pred e
-        ps = (nm, mty) : ps'
+  Lam lamnm mty e ->
+    let (ps', e') = collect collector e
+        ps = (lamnm, mty) : ps'
         params = sep $ map rndrp ps
     in  lamParens $ "\\" <> params <+> "->" <> nest 2 (softline <> prettyE nopars e') where
       rndrp (nm, Nothing) = pretty nm
       rndrp (nm, Just ty) = parens (pretty nm <+> ":" <+> pretty ty)
-      pred (Lam nm' mty' e'') = Just ((nm', mty'), e'')
-      pred _                  = Nothing
+      collector (Lam lamnm' mty' e'') = Just ((lamnm', mty'), e'')
+      collector _                     = Nothing
 
   TickAbs  nm kappa e -> lamParens $ "\\\\" <> parens (pretty nm <+> ":" <+> pretty kappa) <+> "->" <+> pretty e
 

@@ -24,7 +24,6 @@ data Prim
   | Fix
   | Undefined
   | Input
-  | PntrDeref Pntr -- TODO: Deprecate (not used)
   deriving (Eq, Data, Typeable, Generic, NFData)
 
 instance Show Prim where
@@ -37,7 +36,6 @@ instance Show Prim where
   show Fix     = "fix"
   show Undefined  = "⊥"
   show Input  = "#input"
-  show (PntrDeref p)  = "!" ++ show p
 
 instance Pretty Prim where
   pretty = fromString . show

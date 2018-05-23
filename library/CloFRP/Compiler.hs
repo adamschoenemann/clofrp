@@ -166,4 +166,3 @@ primToHaskExprQ = \case
   P.Fix            -> varE 'gfix
   P.Undefined      -> varE 'undefined
   P.Input          -> error "cannot compile Input"
-  P.PntrDeref p    -> error "cannot compile PntrDeref"
