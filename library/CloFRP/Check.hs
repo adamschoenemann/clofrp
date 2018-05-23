@@ -1210,6 +1210,21 @@ foobar xs =
   Cons False Nil          coveredBy [Cons False Nil] -- discharge
   Cons False (Cons `c `d) coveredBy [Cons False (Cons `c `d)] -- discharge
 
+  #Example 4. Same as above, but narrowing scopes (won't work)
+  
+  lst coveredBy [Nil, Cons True (Cons y xs), Cons x xs]
+  |
+  | split lst in destructors
+  v
+  Nil coveredBy [Nil] -- discharge
+  Cons `a `b coveredBy [Cons True (Cons y xs), Cons x xs]
+  |
+  | split and focus on `a since x is not in constructor form
+  v
+  True coveredBy [True, True] <-- will erroneously report an unreachable pattern!
+  False coveredBy [False]
+   
+
   # questions:
   - Do we need to maintain the full patterns and expand, or can't we just
     recurse down into them based on position?
@@ -1226,9 +1241,19 @@ foobar xs =
         then done!
       else (head patterns) is unreachable!
     else do
-      
-
 -}
+
+freshPatternsFromName :: Name -> TypingM a [Pat a]
+freshPatternsFromName nm = do 
+  mty <- lookupTy nm <$> getCtx
+  case mty of 
+    Nothing -> nameNotFound nm
+    Just ty -> do
+      silentBranch $ getPatternsOfType ty
+
+refineMatch :: Int -> Pat a -> [Pat a] -> (Pat a, [Pat a])
+refineMatch index ideal covering
+
 coveredBy :: Pat a -> [Pat a] -> TypingM a ()
 coveredBy idealPat coveringPats =
   case (idealPat, coveringPats) of
