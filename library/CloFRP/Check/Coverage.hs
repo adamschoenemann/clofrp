@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module CloFRP.Check.Coverage where
+module CloFRP.Check.Coverage (coveredBy) where
 
 import GHC.Exts (toList)
 import Data.Maybe (isJust)
 import Control.Monad (filterM)
+import Debug.Trace (trace)
 
 import CloFRP.AST.Pat (Pat, Pat'(..))
 import CloFRP.AST.Name (Name)
@@ -14,7 +15,7 @@ import CloFRP.Check.TypingM ( TypingM(..), uncoveredPattern, unreachablePattern
                             , getDCtx, getCtx, withCtx
                             )
 import CloFRP.Check.Contexts (lookupTy)
-import CloFRP.Pretty (pretty)
+import CloFRP.Pretty
 import CloFRP.AST.Type (PolyType)
 import CloFRP.Check.Destr (Destr)
 import qualified CloFRP.Check.Destr as Destr
@@ -29,7 +30,10 @@ unify (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
   unify' (Match nm1 subpats1) (Match nm2 subpats2)
     | nm1 == nm2, length subpats2 /= length subpats2 = -- sanity check
       error "FATAL: Pattern with same name but different number of subpats"
-    | nm1 == nm2 = mconcat (zipWith unify subpats1 subpats2)
+    | nm1 == nm2 = 
+      mconcat (zipWith unify subpats1 subpats2)
+    | otherwise =
+      Nothing
   
 refine :: Unifier a -> Pat a -> Pat a
 refine uni pat@(A ann pat') = refine' pat' where
@@ -52,26 +56,29 @@ isInjective = foldr folder Injective where
 
 
 coveredBy :: Pat a -> [Pat a] -> TypingM a ()
-coveredBy ideal [] = uncoveredPattern ideal
-coveredBy ideal (covering : coverings) = 
+coveredBy ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredPattern ideal
+coveredBy ideal pats@(covering : coverings) = do
+  rule "CoveredBy" (pretty (ideal, pats)) 
   let uniM = unify ideal covering
-  in  case uniM of 
+  case uniM of 
     Nothing -> 
       error "FATAL: coveredBy must be called with unifying patterns"
     Just uni ->
       case isInjective uni of
         Injective | null coverings -> pure ()
                   | otherwise -> unreachablePattern ideal
-        NotInjective binding (_constructor, pats) -> do
+        NotInjective binding (_constructor, _pats) -> do
+          branch $ rule "CoveredBy.NotInjective" (pretty binding)
           constructors <- freshPatternsFromName binding
           traverse (splitProblem binding) constructors >> pure ()
   where
     splitProblem nm constructor =
       let refined = refine [(nm, constructor)] ideal
-      in  coveredBy refined (onlyUnifying refined (covering : coverings))
+      in  branch $ coveredBy refined (onlyUnifying refined)
     
-    onlyUnifying uniWith pats =
-      filter (isJust . unify uniWith) pats
+    onlyUnifying uniWith =
+      let result = filter (isJust . unify uniWith) pats
+      in  trace (show $ "unify with" <+> pretty uniWith <+> pretty pats <+> "-->" <+> pretty result) $ result
 
 
 freshPatternsFromName :: Name -> TypingM a [Pat a]

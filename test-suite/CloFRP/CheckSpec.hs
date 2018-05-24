@@ -25,6 +25,7 @@ import           CloFRP.TestUtils
 import           CloFRP.Pretty
 import           CloFRP.Annotated 
 import           CloFRP.Utils
+import qualified CloFRP.Check.Coverage as Coverage
 
 foo :: (forall a. a -> a) -> (forall b. b -> b)
 foo f = f
@@ -669,7 +670,7 @@ typecheckSpec = do
     let destr name typ bound args = 
           name |-> Destr name typ bound args 
     specify "bind-patterns covers all" $ do
-      runTypingM0 @() ("xs" `coveredBy` ["all"]) mempty `shouldYield` ()
+      runTypingM0 @() ("xs" `Coverage.coveredBy` ["all"]) mempty `shouldYield` ()
 
     specify "unit type covered by one match" $ do
       let ctx = TR 
@@ -679,7 +680,7 @@ typecheckSpec = do
             , trDestrs = [destr "MkUnit" "Unit" [] []]
             , trInstances = mempty
             }
-      runTypingM0 @() ("one" `coveredBy` [E.match "MkUnit" []]) ctx `shouldYield` ()
+      runTypingM0 @() ("one" `Coverage.coveredBy` [E.match "MkUnit" []]) ctx `shouldYield` ()
 
     specify "succeeds for identity wrapper" $ do
       let ctx = TR 
@@ -689,8 +690,8 @@ typecheckSpec = do
             , trDestrs = [destr "MkUnit" "Unit" [] [], destr "MkId" ("Id" @@: "p") [("p", Star)] ["p"]]
             , trInstances = mempty
             }
-      runTypingM0 @() ("x" `coveredBy` [E.match "MkId" ["z"]]) ctx `shouldYield` ()
-      runTypingM0 @() ("x" `coveredBy` [E.match "MkId" [E.match "MkUnit" []]]) ctx `shouldYield` ()
+      runTypingM0 @() ("x" `Coverage.coveredBy` [E.match "MkId" ["z"]]) ctx `shouldYield` ()
+      runTypingM0 @() ("x" `Coverage.coveredBy` [E.match "MkId" [E.match "MkUnit" []]]) ctx `shouldYield` ()
 
     specify "succeeds for deeply nested maybe match" $ do
       let ctx = TR
@@ -711,7 +712,7 @@ typecheckSpec = do
             , E.match "Just"
               [ E.match "Just" ["x"] ]
             ]
-      runTypingM0 @() ("something" `coveredBy` clauses) ctx `shouldYield` ()
+      runTypingM0 @() ("something" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
 
     specify "fails for incorrect deeply nested list match" $ do
       {-
@@ -737,7 +738,7 @@ typecheckSpec = do
               , E.match "Cons" ["y", "xs"]
               ]
             ]
-      runTypingM0 @() ("lst" `coveredBy` clauses) ctx `shouldFailWith` 
+      runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldFailWith` 
         errs (UncoveredPattern $ E.match "Cons" [E.bind (E.mname 2), E.match "Nil" []])
 
     specify "succeeds for correct deeply nested list match" $ do
@@ -769,10 +770,10 @@ typecheckSpec = do
               , E.bind "xs"
               ]
             ]
-      runTypingM0 @() ("lst" `coveredBy` clauses) ctx `shouldYield` ()
+      runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
 
     specify "fails for empty clauses" $ 
-      runTypingM0 @() ("xs" `coveredBy` []) mempty `shouldFailWith` 
+      runTypingM0 @() ("xs" `Coverage.coveredBy` []) mempty `shouldFailWith` 
         errs (UncoveredPattern "xs")
 
     specify "fails for non-exhaustive match" $ do
@@ -787,7 +788,7 @@ typecheckSpec = do
             , trInstances = mempty
             }
       let clauses = [E.match "Nothing" []]
-      runTypingM0 @() ("something" `coveredBy` clauses) ctx `shouldFailWith`
+      runTypingM0 @() ("something" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
         errs (UncoveredPattern $ E.match "Just" [E.bind (E.mname 2)])
 
     specify "fails for unreachable pattern" $ do
@@ -799,7 +800,7 @@ typecheckSpec = do
             , trInstances = mempty
             }
       let clauses = [ E.match "MkUnit" [], E.bind "x" ]
-      runTypingM0 @() ("one" `coveredBy` clauses) ctx `shouldFailWith`
+      runTypingM0 @() ("one" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
         errs (UnreachablePattern $ E.bind "x")
 
     -- specify "fails for unreachable nested pattern" $ do
@@ -834,7 +835,7 @@ typecheckSpec = do
             , trInstances = mempty
             }
       let clauses = [E.match "Nil" [], E.match "Cons" ["x", "xs'"]]
-      runTypingM0 @() ("xs" `coveredBy` clauses) ctx `shouldYield` ()
+      runTypingM0 @() ("xs" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
 
   describe "kindOf" $ do
     let kinds = [ ("List"  |-> Star :->*: Star)

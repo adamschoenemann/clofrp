@@ -190,7 +190,7 @@ partialSynonymApp :: Synonym a -> TypingM a r
 partialSynonymApp syn = tyExcept $ PartialSynonymApp syn
 
 decorateErr :: TypingM a r -> TyExcept a -> TypingM a r
-decorateErr tm outer = tm `catchError` (\(inner,ctx) -> tyExcept $ Decorate outer inner)
+decorateErr tm outer = tm `catchError` (\(inner, _ctx) -> tyExcept $ Decorate outer inner)
 
 uncoveredPattern, unreachablePattern :: Pat a -> TypingM a r
 uncoveredPattern = tyExcept . UncoveredPattern
