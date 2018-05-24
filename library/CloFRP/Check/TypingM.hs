@@ -48,6 +48,12 @@ silentBranch comp = do
   modify $ \s -> s { level = i, debugDerivationTree = t }
   pure r
 
+-- | Log that a rule of some name with some info was triggered
+rule :: Doc () -> Doc () -> TypingM a ()
+rule name info = do
+  ctx <- getCtx
+  root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
+
 tellDebugTree :: DerivationTree -> TypingM a ()
 tellDebugTree dt =
   modify (\s -> s { debugDerivationTree = dt ++ debugDerivationTree s })
@@ -267,4 +273,67 @@ initState = TS 0 0 []
 runTypingM0 :: TypingM a r -> TypingRead a -> TypingMRes a r
 runTypingM0 tm r = runTypingM tm r initState
 
+-- | Lookup a type in a given context (lifted to TypingM monad)
+lookupTyTM :: Name -> LocalCtx a -> TypingM a (PolyType a)
+lookupTyTM nm c =
+  case lookupTy nm c of
+    Just t -> pure t
+    Nothing -> nameNotFound nm
 
+substCtx :: LocalCtx a -> PolyType a -> TypingM a (PolyType a)
+substCtx ctx (A a ty) =
+  case ty of
+    TFree x -> pure $ A a $ TFree x
+    TVar x  -> pure $ A a $ TVar  x
+    TExists x ->
+      case findAssigned x ctx of
+        Just tau -> substCtx ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
+        Nothing
+          | ctx `containsEVar` x -> pure $ A a $ TExists x
+          | otherwise            -> 
+              otherErr $ show $ "existential" <+> pretty x 
+              <+> "not in context" <> line <> pretty ctx
+
+    t1 `TApp` t2 -> do
+      t1' <- substCtx ctx t1
+      t2' <- substCtx ctx t2
+      pure $ A a $ t1' `TApp` t2'
+
+    t1 :->: t2 -> do
+      t1' <- substCtx ctx t1
+      t2' <- substCtx ctx t2
+      pure $ A a $ t1' :->: t2'
+
+    Forall x k t -> do
+      t' <- substCtx ctx t
+      pure $ A a $ Forall x k t'
+
+    RecTy t -> do
+      t' <- substCtx ctx t
+      pure $ A a $ RecTy t'
+
+    TTuple ts -> do
+      A a . TTuple <$> sequence (map (substCtx ctx) ts)
+
+    Later t1 t2 -> do
+      t1' <- substCtx ctx t1
+      t2' <- substCtx ctx t2
+      pure (A a $ Later t1' t2')
+
+  `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
+
+-- | Apply a context to itself, substituting away all solved existentials.
+-- Only used for debugging to make large contexts easier to reason about.
+selfapp :: LocalCtx a -> TypingM a (LocalCtx a)
+selfapp (LocalCtx []) = pure $ mempty
+selfapp ctx@(LocalCtx ((ahat := ty) : xs)) = do
+  tys <- asMonotypeTM =<< substCtx ctx (asPolytype ty)
+  LocalCtx xs' <- selfapp (LocalCtx xs)
+  pure (LocalCtx $ (ahat := tys) : xs')
+selfapp (LocalCtx (x : xs)) = do
+  LocalCtx xs' <- selfapp (LocalCtx xs)
+  pure $ LocalCtx (x : xs')
+
+-- | Attempt to convert a type to a monotype and lift it to the TypingM monad
+asMonotypeTM :: Type a s -> TypingM a (MonoType a)
+asMonotypeTM t = maybe (otherErr $ show $ pretty t <+> "is not a monotype") pure . asMonotype $ t

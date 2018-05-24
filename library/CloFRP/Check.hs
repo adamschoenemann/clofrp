@@ -34,6 +34,8 @@ module CloFRP.Check
   )
   where
 
+import GHC.TypeLits
+import Data.Proxy (Proxy)
 import Data.Foldable (foldlM, foldrM)
 import Control.Monad.Writer (tell)
 import Control.Applicative ((<|>))
@@ -42,9 +44,10 @@ import Control.Monad (filterM)
 import GHC.Exts (toList, fromList)
 import Data.Text.Prettyprint.Doc
 import Data.List (find, genericLength)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, catMaybes)
 
 import CloFRP.AST.Name
+import qualified CloFRP.Check.Coverage as Coverage
 import qualified CloFRP.AST.Helpers as H
 import CloFRP.Context
 import CloFRP.Annotated
@@ -53,6 +56,9 @@ import CloFRP.Pretty
 import CloFRP.Check.Destr (Destr)
 import CloFRP.Check.Contexts
 import CloFRP.Check.TypingM
+import CloFRP.Check.Utils
+import CloFRP.Check.Subtyping
+import CloFRP.Check.Instantiation
 
 import qualified CloFRP.Check.Destr as Destr
 
@@ -82,59 +88,6 @@ runSynth rd e = runTypingM (synthesize e) rd initState
 -- Proceeds by completely standard induction over the type, except for the TExists case,
 -- Γ[α^ = τ'][α^] = Γ[τ'] which recurses back on the assigned type of α^,
 -- which can be called a "simultaneous substitution"
-substCtx :: LocalCtx a -> PolyType a -> TypingM a (PolyType a)
-substCtx ctx (A a ty) =
-  case ty of
-    TFree x -> pure $ A a $ TFree x
-    TVar x  -> pure $ A a $ TVar  x
-    TExists x ->
-      case findAssigned x ctx of
-        Just tau -> substCtx ctx (asPolytype tau) -- do it again to make substitutions simultaneous (transitive)
-        Nothing
-          | ctx `containsEVar` x -> pure $ A a $ TExists x
-          | otherwise            -> 
-              otherErr $ show $ "existential" <+> pretty x 
-              <+> "not in context" <> line <> pretty ctx
-
-    t1 `TApp` t2 -> do
-      t1' <- substCtx ctx t1
-      t2' <- substCtx ctx t2
-      pure $ A a $ t1' `TApp` t2'
-
-    t1 :->: t2 -> do
-      t1' <- substCtx ctx t1
-      t2' <- substCtx ctx t2
-      pure $ A a $ t1' :->: t2'
-
-    Forall x k t -> do
-      t' <- substCtx ctx t
-      pure $ A a $ Forall x k t'
-
-    RecTy t -> do
-      t' <- substCtx ctx t
-      pure $ A a $ RecTy t'
-
-    TTuple ts -> do
-      A a . TTuple <$> sequence (map (substCtx ctx) ts)
-
-    Later t1 t2 -> do
-      t1' <- substCtx ctx t1
-      t2' <- substCtx ctx t2
-      pure (A a $ Later t1' t2')
-
-  `decorateErr` (Other $ show $ "During substitution of" <+> pretty (A a ty))
-
--- | Apply a context to itself, substituting away all solved existentials.
--- Only used for debugging to make large contexts easier to reason about.
-selfapp :: LocalCtx a -> TypingM a (LocalCtx a)
-selfapp (LocalCtx []) = pure $ mempty
-selfapp ctx@(LocalCtx ((ahat := ty) : xs)) = do
-  tys <- asMonotypeTM =<< substCtx ctx (asPolytype ty)
-  LocalCtx xs' <- selfapp (LocalCtx xs)
-  pure (LocalCtx $ (ahat := tys) : xs')
-selfapp (LocalCtx (x : xs)) = do
-  LocalCtx xs' <- selfapp (LocalCtx xs)
-  pure $ LocalCtx (x : xs')
 
 -- | Checks that a context is κ-stable - that is, the context contains no
 -- lambda-bound names that mention κ in their type
@@ -147,138 +100,17 @@ mustBeStableUnder (LocalCtx xs) k = traverse traversal xs *> pure () where
 
 -- | Split a context at an element, yield the context before the element,
 -- the element itself, and the context after the element
-splitCtx :: CtxElem a -> LocalCtx a -> TypingM a (LocalCtx a, CtxElem a, LocalCtx a)
-splitCtx el ctx =
-  case splitCtx' el ctx of
-    Nothing -> root "splitCtx" *> cannotSplit el ctx
-    Just x  -> pure x
 
--- | Check if a context element occurs before another
--- context element in the current context
-before :: CtxElem a -> CtxElem a -> TypingM a Bool
-before alpha beta = before' alpha beta <$> getCtx
 
 -- | Query the kind of a name in the current context
-queryKind :: Name -> TypingM a Kind
-queryKind nm = do
-  ctx <- getCtx
-  case ctxFind p ctx of
-    Just (Exists _ k) -> pure k
-    Just (Uni _ k)    -> pure k
-    Just (_ := ty)    -> kindOf (asPolytype ty) `decorateErr` Other ("queryKind")
-    _                 -> 
-      otherErr $ showW 3000 $ "queryKind: Cannot lookup kind of" <+> 
-      pretty nm <+> "in" <+> pretty ctx
-  where
-      p (Uni x _)    = x == nm
-      p (Exists x _) = x == nm
-      p (x := _)     = x == nm
-      p _             = False
 
 -- | Insert another context (a list of ctx-elems) into the current context at a specific element.
 -- It will replace the element with the new inserted context
-insertAt :: CtxElem a -> LocalCtx a -> TypingM a (LocalCtx a)
-insertAt at insertee = do
-  ctx <- getCtx
-  case insertAt' at insertee ctx of
-    Nothing   -> otherErr $ show $ "Cannot insert" <+> pretty insertee <+> "into context" <+> pretty ctx <+> "at" <+> pretty at
-    Just ctx' -> pure ctx'
 
 -- | Get the kind of a type in the current context
-kindOf :: PolyType a -> TypingM a Kind
-kindOf ty = go ty `decorateErr` decorate where
-  go (A _ t) = do
-    kctx <- getKCtx
-    ctx <- getCtx
-    case t of
-      TFree v -> maybe (freeNotFound v) pure $ query v kctx
-      TVar v -> queryKind v
-      TExists  v -> queryKind v
 
-      TApp t1 t2 -> do
-        k1 <- go t1
-        k2 <- go t2
-        case (k1, k2) of
-          (k11 :->*: k12, k2')
-            | k11 == k2' -> pure k12
-            | otherwise  ->
-                otherErr $ "Expected " ++ pps t2 ++ " to have kind " ++ pps k11
-          (_k1', _) -> otherErr $ "Expected " ++ pps t1 ++ " to be a type constructor"
-
-      t1 :->: t2 -> do
-        k1 <- go t1
-        k2 <- go t2
-        case (k1, k2) of
-          (Star, Star) -> pure Star
-          (k1', k2')   -> otherErr $ "Both operands in arrow types must have kind *, but had "
-                      ++ pps k1' ++ " and " ++ pps k2' ++ " in " ++ pps t
-
-      Forall v k tau -> do
-        errIf (isInContext (Uni v k) <$> getCtx) (/= False) (\_ -> Other $ show $ pretty v <+> "is already universally quantified")
-        withCtx (\g -> g <+ Uni v k) $ go tau
-
-      RecTy tau -> do
-        k <- go tau
-        case k of
-          Star :->*: k' -> pure k'
-          _            -> otherErr $ show $ pretty tau <+> "must have kind * -> k to be an argument to Fix"
-
-      TTuple ts -> (traverse fn ts) *> pure Star where
-        fn tt = kindOf tt >>= \case
-          Star -> pure ()
-          k    -> otherErr $ show $ pretty tt <+> "must have kind * but had kind" <+> pretty k
-
-      Later k tau -> do
-        k' <- go tau
-        case k' of
-          Star -> pure Star
-          _    -> otherErr $ show $ pretty tau <+> "must have kind * at" <+> pretty ty <+> "but had kind" <+> pretty k'
-
-    where
-      freeNotFound v = do
-        kctx <- getKCtx
-        nameNotFound v `decorateErr` (Other $ show $ "looking up a free variable in kind-ctx" <+> pretty kctx)
-
-  decorate = Other $ show $ "kindOf" <+> (pretty ty)
-
--- | Check that a type is well-formed.
-checkWfType :: PolyType a -> TypingM a ()
-checkWfType ty = kindOf ty *> pure ()
 
 -- | Check if a given context is well-formed
-wfContext :: forall a. LocalCtx a -> TypingM a ()
-wfContext (LocalCtx elems) = (foldrM folder [] elems *> pure ())  where
-  folder :: CtxElem a -> [CtxElem a] -> TypingM a [CtxElem a]
-  folder el acc = do
-    _ <- withCtx (const $ LocalCtx acc) $ checkIt el
-    pure (el : acc)
-
-  elem' f xs = isJust $ find (\x -> f (unann x)) xs
-
-  -- this one refers to ctx through getCtx
-  checkIt el = case el of
-    Uni nm _        -> notInDom nm el
-    Exists nm _     -> notInDom nm el
-    (_, nm) `HasType` ty -> notInDom nm el *> checkWfType (asPolytype ty) `decorateErr` (NotWfContext el)
-    nm := ty        -> notInDom nm el *> checkWfType (asPolytype ty) `decorateErr` (NotWfContext el)
-    Marker nm       -> do
-      _ <- notInDom nm el
-      LocalCtx ctx <- getCtx
-      if ((\x -> Marker nm == x) `elem'` ctx)
-        then notWfContext (Marker nm)
-        else pure ()
-
-  -- TODO: fix this to account for HasType constructor as well
-  notInDom nm el = do
-    ctx <- getCtx
-    if (isJust $ ctxFind p ctx)
-      then notWfContext el
-      else pure ()
-    where
-      p (Uni x _)    = x == nm
-      p (Exists x _) = x == nm
-      p (x := _)     = x == nm
-      p _            = False
 
 -- | Check if a type has kind * in a context
 validType :: KindCtx a -> PolyType a -> TypingM a ()
@@ -289,368 +121,12 @@ validType kctx t = do
     _    -> otherErr $ show $ pretty t <+> "has kind" <+> pretty k
         <+> "but expected *"
 
--- | Assign an unsolved variable to a type in a context
--- TODO: Optimize
-assign :: Name -> MonoType a -> TypingM a (LocalCtx a)
-assign nm ty = do
-  ctx@(LocalCtx xs) <- getCtx
-  case findAssigned nm ctx of
-    Just ty'
-      | ty =%= ty' -> pure ctx
-      | otherwise  -> otherErr $ show $ pretty nm
-                  <+> "is already assigned to" <+> pretty ty'
-    Nothing ->
-       foldrM fn ([], False) xs >>= \case
-        (xs', True) -> do
-          let asserr = Other $ show $ "Assigning" <+> pretty nm <+> "to"
-                    <+> pretty ty
-          _ <- wfContext (LocalCtx xs') `decorateErr` asserr
-          pure (LocalCtx xs')
-        (xs', False) -> otherErr $ show $ pretty nm <+> ":=" <+> pretty ty <+> "Didn't assign anything"
-      where
-        fn (Exists nm' k) (xs', _) | nm == nm' = do 
-          tyk <- kindOf $ asPolytype ty
-          if (tyk /= k)
-            then otherErr $ show $ "Expected" <+> pretty ty <+> "to have kind" 
-                 <+> pretty k <+> "but it had kind" <+> pretty tyk
-            else pure (nm := ty : xs', True)
-        fn x (xs', b)                          = pure (x : xs', b)
-
--- | Attempt to convert a type to a monotype and lift it to the TypingM monad
-asMonotypeTM :: Type a s -> TypingM a (MonoType a)
-asMonotypeTM t = maybe (otherErr $ show $ pretty t <+> "is not a monotype") pure . asMonotype $ t
-
--- | Lookup a type in a given context (lifted to TypingM monad)
-lookupTyTM :: Name -> LocalCtx a -> TypingM a (PolyType a)
-lookupTyTM nm c =
-  case lookupTy nm c of
-    Just t -> pure t
-    Nothing -> nameNotFound nm
-
--- | Log that a rule of some name with some info was triggered
-rule :: Doc () -> Doc () -> TypingM a ()
-rule name info = do
-  ctx <- selfapp =<< getCtx
-  root $ sep [brackets name <+> info, indent 4 (nest 3 ("in" <+> pretty ctx))]
 
 -- | Assert that a type is functorial, namely that there is an instance of Functor for that type
 assertFunctor :: PolyType a -> TypingM a ()
 assertFunctor ty = findInstanceOf "Functor" ty >>= \case
   Just _ -> pure ()
   Nothing -> otherErr $ show $ "Cannot resolve functor instance of" <+> pretty ty
-
-solve :: Name -> Type a s -> TypingM a (LocalCtx a)
-solve ahat ty = do
-  mty <- asMonotypeTM ty
-  assign ahat mty
-
-
--- | Under input context Γ, instantiate α^ such that α^ <: A, with output context ∆
--- TODO: Find a way to abstract all these near-identical definitions out. Also, combine instL and instR, or
--- at least implement them both in terms of a more general combinator
-instL :: Name -> PolyType a -> TypingM a (LocalCtx a)
--- InstLSolve
-instL ahat ty@(A a ty') =
-  (solve ahat ty <* rule "InstLSolve" (pretty ahat <+> ":<=" <+> pretty ty)) `catchError` \err ->
-      case ty' of
-        -- InstLReach
-        TExists bhat -> do
-          ak <- queryKind ahat
-          bk <- queryKind bhat
-          rule "InstLReach" ("^" <> pretty bhat <+> "=" <+> "^" <> pretty ahat)
-          Exists ahat ak `before` Exists bhat bk >>= \case
-            True -> assign bhat (A a $ TExists ahat)
-            False -> otherErr $ "[InstLReach] error"
-
-        -- InstLArr
-        t1 :->: t2 -> do
-          rule "InstLArr" (pretty ahat <+> ":<=" <+> pretty ty)
-          af1 <- freshName
-          af2 <- freshName
-          let ahat1 = Exists af1 Star
-          let ahat2 = Exists af2 Star
-          let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := arr]
-          omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
-          substed <- substCtx omega t2
-          withCtx (const omega) $ branch (af2 `instL` substed)
-
-        -- InstLAllR
-        Forall beta k bty -> do
-          rule "InstLAllR" (pretty ahat <+> ":<=" <+> pretty ty)
-          beta' <- freshName
-          let bty' = subst (A a $ TVar beta') beta bty
-          theta <- withCtx (\g -> g <+ Uni beta' k) $ branch (ahat `instL` bty')
-          pure $ dropTil (Uni beta' k) theta
-
-        -- InstLTApp. Identical to InstLArr
-        TApp t1 t2 -> do
-          rule "InstLTApp" (pretty ahat <+> ":<=" <+> pretty ty)
-          af1 <- freshName
-          af2 <- freshName
-          t1k <- kindOf t1
-          t2k <- kindOf t2
-          tyk <- kindOf ty
-          let expectKind = t2k :->*: tyk
-          errIf (pure t1k) (/= expectKind) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected" <+> pretty expectKind)
-          let ahat1 = Exists af1 t1k
-          let ahat2 = Exists af2 t2k
-          let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat tyk) [ahat2, ahat1, ahat := app]
-          omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
-          substed <- substCtx omega t2
-          withCtx (const omega) $ branch (af2 `instL` substed)
-
-        -- InstLTuple
-        TTuple ts -> do
-          rule "InstLTuple" (pretty ty <+> "=<:" <+> pretty ahat)
-          nms <- traverse (const freshName) ts
-          tyk <- kindOf ty
-          let existstup = A a $ TTuple $ map (A a . TExists) nms
-          ctx' <- insertAt (Exists ahat tyk) (foldr (\x g -> g <+ Exists x Star) mempty nms <+ ahat := existstup)
-          foldrM folder ctx' $ zip nms ts
-          where
-            folder (af, t) acc = do
-              tsubst <- substCtx acc t
-              branch $ withCtx (const acc) $ tsubst `instR` af
-
-        -- InstLLater. Similar to instantiation of other type-combinators
-        Later t1 t2 -> do
-          rule "InstLLater" (pretty ahat <+> ":<=" <+> pretty ty)
-          af1 <- freshName
-          af2 <- freshName
-          errIf (kindOf t1) (/= ClockK) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected Clock")
-          errIf (kindOf t2) (/= Star)   (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected *")
-          let ahat1 = Exists af1 ClockK
-          let ahat2 = Exists af2 Star
-          let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
-          ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := ltr]
-          omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
-          substed <- substCtx omega t2
-          r <- withCtx (const omega) $ branch (af2 `instL` substed)
-          pure r
-
-        -- InstLRec
-        RecTy t -> do
-          rule "InstLRec" (pretty ahat <+> ":<=" <+> pretty ty)
-          a1 <- freshName
-          let rt = A a $ RecTy (A a $ TExists a1)
-          k <- kindOf t
-          ctx' <- insertAt (Exists ahat Star) [Exists a1 k, ahat := rt]
-          withCtx (const ctx') $ branch (a1 `instL` t)
-
-        _ -> do
-          rule "InstLError" ("^" <> pretty ahat <+> "=" <+> pretty ty)
-          throwError err
-
--- | Under input context Γ, instantiate α^ such that α^ >: A, with output context ∆
-instR :: PolyType a -> Name -> TypingM a (LocalCtx a)
--- InstRSolve
-instR ty@(A a ty') ahat =
-  (solve ahat ty <* rule "InstRSolve" (pretty ty <+> "=<:" <+> pretty ahat)) `catchError` \err ->
-        case ty' of
-          -- InstRReach
-          TExists bhat -> do
-            ak <- queryKind ahat
-            bk <- queryKind bhat
-            rule "InstRReach" ("^" <> pretty ahat <+> "=" <+> "^" <> pretty bhat)
-            Exists ahat ak `before` Exists bhat bk >>= \case
-              True -> assign bhat (A a $ TExists ahat)
-              False -> otherErr $ "[InstRReachError]"
-
-          -- InstRArr
-          t1 :->: t2 -> do
-            rule "InstRArr" (pretty ty <+> "=<:" <+> pretty ahat)
-            af1 <- freshName
-            af2 <- freshName
-            let ahat1 = Exists af1 Star
-            let ahat2 = Exists af2 Star
-            let arr = A a $ (A a $ TExists af1) :->: (A a $ TExists af2)
-            ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := arr]
-            omega <- withCtx (const ctx') $ branch (af1 `instL` t1)
-            substed <- substCtx omega t2
-            r <- withCtx (const omega) $ branch (substed `instR` af2)
-            pure r
-
-          -- InstRAllL
-          Forall beta k bty -> do
-            rule "InstRAllL" (pretty ty <+> "=<:" <+> pretty ahat)
-            beta' <- freshName
-            let bty' = subst (A a $ TExists beta') beta bty
-            ctx' <- withCtx (\g -> g <+ marker beta' <+ Exists beta' k) $ branch (bty' `instR` ahat)
-            (delta, _, _delta') <- splitCtx (Marker beta') ctx'
-            pure delta
-
-          -- InstRTApp. Identical to InstRArr
-          TApp t1 t2 -> do
-            rule "InstRTApp" (pretty ty <+> "=<:" <+> pretty ahat)
-            af1 <- freshName
-            af2 <- freshName
-            t1k <- kindOf t1
-            t2k <- kindOf t2
-            tyk  <- kindOf ty
-            let ahat1 = Exists af1 t1k
-            let ahat2 = Exists af2 t2k
-            let app = A a $ (A a $ TExists af1) `TApp` (A a $ TExists af2)
-            ctx' <- insertAt (Exists ahat tyk) [ahat2, ahat1, ahat := app]
-            omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
-            substed <- substCtx omega t2
-            r <- withCtx (const omega) $ branch (substed `instR` af2)
-            pure r
-
-          -- InstRRec
-          RecTy t -> do
-            rule "InstRRec" (pretty ty <+> "=<:" <+> pretty ahat)
-            a1 <- freshName
-            let rt = A a $ RecTy (A a $ TExists a1)
-            k <- kindOf t
-            ctx' <- insertAt (Exists ahat Star) [Exists a1 k, ahat := rt]
-            withCtx (const ctx') $ branch (t `instR` a1)
-
-          -- InstRTuple
-          TTuple ts -> do
-            rule "InstRTuple" (pretty ty <+> "=<:" <+> pretty ahat)
-            nms <- traverse (const freshName) ts
-            tyk <- kindOf ty
-            let existstup = A a $ TTuple $ map (A a . TExists) nms
-            ctx' <- insertAt (Exists ahat tyk) (foldr (\x g -> g <+ Exists x Star) mempty nms <+ ahat := existstup)
-            foldrM folder ctx' $ zip nms ts
-            where
-              folder (af, t) acc = do
-                tsubst <- substCtx acc t
-                branch $ withCtx (const acc) $ af `instL` tsubst
-
-          -- InstRLater. Similar to instantiation of other type-combinators
-          Later t1 t2 -> do
-            rule "InstRLater" (pretty ty <+> "=<:" <+> pretty ahat)
-            af1 <- freshName
-            af2 <- freshName
-            errIf (kindOf t1) (/= ClockK) (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected Clock")
-            errIf (kindOf t2) (/= Star)   (\k -> Other $ show $ pretty t1 <+> "had kind" <+> pretty k <+> "but expected *")
-            let ahat1 = Exists af1 ClockK
-            let ahat2 = Exists af2 Star
-            let ltr = A a $ Later (A a $ TExists af1) (A a $ TExists af2)
-            ctx' <- insertAt (Exists ahat Star) [ahat2, ahat1, ahat := ltr]
-            omega <- withCtx (const ctx') $ branch (t1 `instR` af1)
-            substed <- substCtx omega t2
-            r <- withCtx (const omega) $ branch (substed `instR` af2)
-            pure r
-
-          _ -> do
-            rule "InstRError" ("^" <> pretty ahat <+> "=" <+> pretty ty)
-            throwError err
-            -- otherErr $ showW 80 $ "[instR] Cannot instantiate" <+> pretty ahat <+> "to" <+> pretty ty <+> ". Cause:" <+> fromString err
-
--- | Under input context Γ, type A is a subtype of B, with output context ∆
--- A is a subtype of B iff A is more polymorphic than B
-subtypeOf :: PolyType a -> PolyType a -> TypingM a (LocalCtx a)
-subtypeOf ty1@(A ann1 typ1) ty2@(A ann2 typ2) = subtypeOf' typ1 typ2 where
-  -- <:Free
-  subtypeOf' (TFree x) (TFree x') = do
-    kctx <- getKCtx
-    case () of
-      _ | not (x `isMemberOf` kctx) ->
-            root ("[<:Free]") *> nameNotFound x
-        | not (x' `isMemberOf` kctx) ->
-            root ("[<:Free]") *> nameNotFound x'
-        | x == x' ->
-            root ("[<:Free]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> getCtx
-        | otherwise ->
-            root ("[<:Free]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> cannotSubtype ty1 ty2
-
-  -- <:Var
-  subtypeOf' (TVar x) (TVar x')
-        | x == x'   = do
-            ctx <- getCtx
-            if ctx `containsTVar` x
-              then root ("[<:Var]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> getCtx
-              else root ("[<:Var]") *> otherErr ("universal variable " ++ show x ++ " not found.")
-        | otherwise =
-            root ("[<:Var]" <+> pretty ty1 <+> "<:" <+> pretty ty2) *> cannotSubtype ty1 ty2
-
-  -- <:Exvar
-  subtypeOf' (TExists a) (TExists a')
-    | a == a' = do
-      ctx <- getCtx
-      root $ "[<:Exvar]" <+> pretty ty1 <+> "<:" <+> pretty ty2
-      if ctx `containsEVar` a
-        then pure ctx
-        else branch $ nameNotFound a
-
-  -- <:->
-  subtypeOf' (a1 :->: a2) (b1 :->: b2) = do
-    root $ "[<:->]" <+> pretty ty1 <+> "<:" <+> pretty ty2
-    theta <- branch (b1 `subtypeOf` a1)
-    a2' <- substCtx theta a2 `decorateErr` (Other "<:->.1")
-    b2' <- substCtx theta b2` decorateErr` (Other "<:->.2")
-    withCtx (const theta) $ branch (a2' `subtypeOf` b2')
-
-  -- <:∀R
-  subtypeOf' _t1 (Forall alpha k (A ann t2)) = do
-    alpha' <- freshName
-    rule "<:∀R" (pretty ty1 <+> "<:" <+> pretty ty2)
-    let ty2' = subst (A ann $ TVar alpha') alpha (A ann t2)
-    theta <- withCtx (\g -> g <+ Uni alpha' k) $ branch (ty1 `subtypeOf` ty2')
-    pure $ dropTil (Uni alpha' k) theta
-
-  -- <:∀L
-  subtypeOf' (Forall alpha k (A at1 t1)) _ = do
-    rule "<:∀L" (pretty ty1 <+> "<:" <+> pretty ty2)
-    alpha' <- freshName
-    let t1' = subst (A at1 $ TExists alpha') alpha (A at1 t1)
-    theta <- withCtx (\g -> g <+ marker alpha' <+ Exists alpha' k) $ branch (t1' `subtypeOf` ty2)
-    pure $ dropTil (Marker alpha') theta
-
-  -- <:TApp
-  subtypeOf' (TApp a1 a2) (TApp b1 b2) = do
-    rule "<:TApp" (pretty ty1 <+> "<:" <+> pretty ty2)
-    theta <- branch $ a1 `subtypeOf` b1
-    a2' <- substCtx theta a2
-    b2' <- substCtx theta b2
-    branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
-
-  -- <:Rec
-  subtypeOf' (RecTy b1) (RecTy b2) = do
-    rule "<:Rec" (pretty ty1 <+> "<:" <+> pretty ty2)
-    branch $ b1 `subtypeOf` b2
-
-  -- <:Tuple
-  subtypeOf' (TTuple ts1) (TTuple ts2) = do
-    root $ "[<:Tuple]" <+> pretty ty1 <+> "<:" <+> pretty ty2
-    ctx <- getCtx
-    foldrM (\(t1, t2) acc -> branch $ withCtx (const acc) $ t1 `subtypeOf` t2) ctx (zip ts1 ts2)
-
-  -- <:Later
-  subtypeOf' (Later a1 a2) (Later b1 b2) = do
-    root $ "[<:Later]" <+> pretty ty1 <+> "<:" <+> pretty ty2
-    theta <- branch $ a1 `subtypeOf` b1
-    a2' <- substCtx theta a2
-    b2' <- substCtx theta b2
-    branch $ withCtx (const theta) $ a2' `subtypeOf` b2'
-
-  -- <:InstantiateL
-  subtypeOf' (TExists ahat) _
-    | ahat `inFreeVars` ty2 = root "[InstantiateL] OccursError!" *> occursIn ahat ty2
-    | otherwise = do
-        root $ "[InstantiateL]" <+> "^" <> pretty ahat <+> ":<=" <+> pretty ty2
-        _ <- checkWfType (A ann1 $ TExists ahat)
-        r <- branch (ahat `instL` ty2)
-        pure r
-
-  -- <:InstantiateR
-  subtypeOf' _ (TExists ahat)
-    | ahat `inFreeVars` ty1 = root ("[InstantiateR] OccursError in" <+> pretty ty1 <+> ">=:" <+> pretty ty2) *> occursIn ahat ty1
-    | otherwise = do
-        root $ "[InstantiateR]" <+> pretty ty1 <+> "=<:" <+> "^" <> pretty ahat
-        _ <- checkWfType (A ann2 $ TExists ahat)
-        r <- branch (ty1 `instR` ahat)
-        pure r
-
-
-  subtypeOf' t1 t2 = do
-    -- root $ "[SubtypeError!]" <+> (fromString . show . unann $ t1) <+> "<:" <+> (fromString . show . unann $ t2)
-    root $ "[SubtypeError!]" <+> pretty t1 <+> "<:" <+> pretty t2
-    cannotSubtype ty1 ty2
 
 -- | Check that an expr has a type
 check :: Expr a -> PolyType a -> TypingM a (LocalCtx a)
@@ -1047,23 +523,6 @@ checkPat pat@(A ann p) ty = do
           d = Destr {name = dname, bound = dbound, typ = dtyp, args = dargs}
       in  branch $ checkDestr d pats ty
 
--- | Take a destructor and "existentialize it" - replace its bound type-variables
--- with fresh existentials
-existentialize :: forall a. a -> Destr a -> TypingM a (LocalCtx a, Destr a)
-existentialize ann destr = do
-  (nms, destr') <- foldrM folder ([], destr) (bound destr)
-  ctx <- getCtx
-  let ctx' = foldr (\(n,k) g -> g <+ Exists n k) ctx nms
-  pure (ctx', destr')
-  where
-    folder (b,k) (nms, d@(Destr {typ, args})) = do
-      b' <- freshName
-      let s = subst (A ann $ TExists b') b
-      let ntyp = s typ
-      let nargs = map s args
-      pure $ ((b',k) : nms, d {typ = ntyp, args = nargs})
-
-
 -- | In a context, check a destructor against a list of patterns and an expected type.
 -- if it succeeds, it binds the names listed in the pattern match to the input context
 checkDestr :: Destr a -> [Pat a] -> PolyType a -> TypingM a (LocalCtx a)
@@ -1162,10 +621,16 @@ foobar xs =
     | Just x
   
   xm coveredBy [Nothing, Just MkUnit]
-  v-- split xm into destructors
+  |
+  | split xm into destructors
+  |
+  v
   Nothing coveredBy [Nothing] -- discharge
   Just `a coveredBy [Just MkUnit, Just x]
-  v-- first pattern covers ideal, but there is more
+  |
+  | first pattern covers ideal, but there is more
+  |
+  v
   Just x unreachable!
   -------------------
 
@@ -1175,10 +640,14 @@ foobar xs =
     | Cons x Nil
   
   xs coveredBy [Nil, Cons x Nil]
-  v-- split xs into destructors
+  |
+  | split xs into destructors
+  v
   Nil coveredBy [Nil] -- discharge
   Cons `a `b coveredBy [Cons x Nil]
-  v-- `a matches x, but split `b to match Nil
+  |
+  | `a matches x, but split `b to match Nil
+  v
   Cons `a Nil coveredBy [Cons x Nil]
   Cons `a (Cons `b `c) coveredBy [Cons x Nil] <-- cant cover
   -------------------------------------------
@@ -1224,12 +693,43 @@ foobar xs =
   True coveredBy [True, True] <-- will erroneously report an unreachable pattern!
   False coveredBy [False]
    
+  #Example 4. unreachable
+  case lst of
+    | Nil
+    | Cons x Nil
+    | x
+  
+  lst coveredBy [Nil, Cons x Nil, x]
+  |
+  | split lst
+  v
+  Nil coveredBy [Nil, Nil] <-- unreachable
+  Cons `a `b coveredBy [Cons x Nil, Cons `a `b]
 
   # questions:
   - Do we need to maintain the full patterns and expand, or can't we just
     recurse down into them based on position? Seems like we cant
 
-  #Pseudo code
+  lst coveredBy [Nil, Cons x Nil, Cons x (Cons y xs)]
+    refine lst -> Nil
+      Nil coveredBy [Nil]
+    refine lst -> Cons `a `b
+      Cons `a `b coveredBy [Cons x Nil, Cons x (Cons y xs)]
+        refine 
+
+  # Pseudo code
+  coveredBy ideal covering = do
+    if ideal is a binding 
+      then do
+        let refinements = destructors of ideal's type
+        foreach (Match nm subpatterns) in refinements do
+          let covering' = all Match nm' _ in covering where nm == nm'
+          if (null subpatterns) and (length covering' == 1)
+            then discharge refinement case
+            else do
+
+
+  # Pseudo code
   coveredBy :: Pat a -> [Pat a] -> TypingM a ()
   coveredBy _ [] = not exhaustive!
   coveredBy (Bind nm) patterns = do
@@ -1244,26 +744,97 @@ foobar xs =
     else do
 -}
 
+-- data PatternType = PBind | PMatch
+
+-- data CovPattern :: Symbol -> PatternType -> * where
+--   CovBind :: String -> CovPattern s 'PBind
+  -- CovMatch :: Proxy s -> [CovPattern s' pt] -> CovPattern s 'PMatch
+
+-- coveredBy' :: Pat a -> [Pat a] -> TypingM a ()
+-- coveredBy' = go Here
+--   where
+--     go _ ideal [] = notExhaustive ideal
+--     go index ideal covering = do
+--       branches <- refineIdealAt index ideal covering
+--       traverse (traverseBranch index) branches
+    
+--     traverseBranch index (ideal, covering) =
+--       case ideal of
+--         A _ (Bind _) -> error "bind not expected"
+--         A _ (Match nm subideals) -> 
+
+
+data PatIndex = Here | Deeper Int PatIndex
+  deriving (Show, Eq)
+
+getLeaf :: PatIndex -> Pat a -> Maybe Name
+getLeaf Here p@(A _ (Bind nm)) = Just nm
+getLeaf (Deeper offset i) (A _ (Match _ subps)) = do
+  branch <- atIndex offset subps
+  getLeaf i branch
+
+modifyLeafAt :: (a -> Name -> Pat a) -> PatIndex -> Pat a -> Maybe (Pat a)
+modifyLeafAt fn = go
+  where
+    go Here (A ann (Bind nm)) = Just (fn ann nm)
+    go (Deeper offset i) (A ann (Match nm subps)) = do
+      subp <- atIndex offset subps
+      subp' <- go i subp
+      pure (A ann (Match nm (replaceAt offset subp' subps)))
+      
+
+atIndex :: Int -> [a] -> Maybe a
+atIndex 0 (x : _) = Just x
+atIndex n (x : xs) 
+  | n > 0 = atIndex (n-1) xs
+atIndex _ _ = Nothing
+
 freshPatternsFromName :: Name -> TypingM a [Pat a]
 freshPatternsFromName nm = do 
   mty <- lookupTy nm <$> getCtx
   case mty of 
     Nothing -> nameNotFound nm
-    Just ty -> do
-      silentBranch $ getPatternsOfType ty
+    Just ty -> silentBranch $ getPatternsOfType ty
 
-substPatByIndex :: Int -> Pat a -> [Pat a] -> (Pat a, [Pat a])
-substPatByIndex index refined covering =
+refineIdealAt :: PatIndex -> Pat a -> [Pat a] -> TypingM a [(Pat a, [Pat a])]
+refineIdealAt index ideal covering = do
+  nm <- getLeafLifted index ideal
+  refinements <- freshPatternsFromName nm
+  pure (map refineCovering refinements)
+  where
+    refineCovering refinement =
+      (refinement, substPatsByIndex index refinement covering)
+    
+    getLeafLifted index pat =
+      case getLeaf index pat of
+        Nothing -> otherErr $ "Cannot get pattern leaf at index " 
+                   ++ show index ++ " in pattern" ++ pps pat
+        Just pat' -> pure pat'
+
+substPatsByIndex :: PatIndex -> Pat a -> [Pat a] -> [Pat a]
+substPatsByIndex index refined covering = 
   map (overCovering index) covering
   where
-    overCovering 0 (A _ (Bind _)) = refined
-    overCovering n (A ann (Match nm subps))
-      | n > 0 && length subps <= n =
-        A ann (Match nm (replaceAt (n - 1) refined subps))
-    overCovering n pat = error $ show $ "FATAL: invalid subst index" <+> pretty n
-        <+> "for pattern" <+> pretty pat
+    overCovering i coveringPat =
+      maybe coveringPat id (modifyLeafAt (\_ann _nm -> refined) i coveringPat)
 
-replaceAt :: Int -> a -> [a] -> []
+
+getPatternsOfType :: PolyType a -> TypingM a [Pat a]
+getPatternsOfType qtype@(A ann _) = do
+  rule "GetPatternsOfType" (pretty qtype)
+  destrs <- branch $ getDestrsOfType qtype
+  traverse (destrToPat ann) destrs
+
+destrToPat :: a -> Destr a -> TypingM a (Pat a)
+destrToPat ann destr = do
+  let name = Destr.name destr
+  let args = Destr.args destr
+  subvars <- traverse (\_ -> A ann . Bind <$> freshName) args
+  pure (A ann (Match name subvars))
+
+
+
+replaceAt :: Int -> a -> [a] -> [a]
 replaceAt i rep xs =
   zipWith (\j x -> if i == j then rep else x) [0..] xs
 
@@ -1335,22 +906,7 @@ coveredBy idealPat coveringPats =
               A _ (Match nm' _) -> nm' == nm
           ) pats
 
-    getPatternsOfType :: PolyType a -> TypingM a [Pat a]
-    getPatternsOfType qtype@(A ann _) = do
-      rule "GetPatternsOfType" (pretty qtype)
-      destrs <- branch $ getDestrsOfType qtype
-      traverse (destrToPat ann) destrs
-    
-    destrToPat :: a -> Destr a -> TypingM a (Pat a)
-    destrToPat ann destr = do
-      let name = Destr.name destr
-      let args = Destr.args destr
-      subvars <- traverse (\_ -> A ann . Bind <$> freshName) args
-      pure (A ann (Match name subvars))
       
-isSubtypeOf :: PolyType a -> PolyType a -> TypingM a Bool
-isSubtypeOf type1 type2 = 
-  (subtypeOf type1 type2 >> pure True) `catchError` (const $ pure False)
 
 getDestrsOfType :: PolyType a -> TypingM a [Destr a]
 getDestrsOfType qtype@(A ann _) = do

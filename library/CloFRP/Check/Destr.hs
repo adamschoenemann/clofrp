@@ -23,3 +23,4 @@ unannDestr (Destr n t b a) =
 
 instance Pretty (Destr a) where
   pretty = fromString . show . unannDestr
+

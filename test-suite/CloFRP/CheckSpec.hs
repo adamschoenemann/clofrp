@@ -14,6 +14,7 @@ import Data.String (fromString)
 
 import qualified CloFRP.AST  as E
 import           CloFRP.Check
+import           CloFRP.Check.Utils
 import           CloFRP.Check.Prog
 import qualified Data.Map.Strict as M
 import           CloFRP.AST ((@->:), (@@:), Kind(..))
