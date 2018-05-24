@@ -755,6 +755,11 @@ typecheckSpec = do
           | Nil -> ...
           | Cons MkUnit (Cons y xs) -> ...
           | Cons MkUnit xs -> ...
+        
+      -}
+      {-
+        TODO: wont match because we filter too aggresively. non-scrutinizing patters
+        should be included in the filtered covering patterns in nested calls
       -}
       let ctx = TR
             { trCtx = ["lst" .: ("List" @@: "Unit")]

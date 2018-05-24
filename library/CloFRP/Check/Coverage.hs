@@ -86,6 +86,7 @@ coveredBy ideal pats@(covering : coverings) = do
   case uniM of 
     Nothing -> 
       error "FATAL: coveredBy must be called with unifying patterns"
+
     Just uni ->
       case isInjective uni of
         Injective -> do
@@ -99,8 +100,10 @@ coveredBy ideal pats@(covering : coverings) = do
         NotInjective binding (_constructor, _pats) -> do
           branch $ rule "CoveredBy.NotInjective" (pretty uni)
           patTy <- lookupTyTM binding
-          constructors <- silentBranch $ getPatternsOfType patTy
-          traverse (splitProblem patTy binding) constructors >> pure ()
+          constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
+          branch $ do
+            rule "CoveredBy.Split" (pretty constructors)
+            traverse (splitProblem patTy binding) constructors >> pure ()
   where
     splitProblem patTy nm constructor = do
       let refined = refine [(nm, constructor)] ideal
