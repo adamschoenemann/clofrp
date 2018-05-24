@@ -666,6 +666,14 @@ typecheckSpec = do
       do let ctx = nil 
          shouldFail $ runCheck (mk ctx) ("x" @-> "x") (E.forAll ["a","a"] $ "a" @->: "a") 
 
+  describe "Coverage.unify" $ do
+    it "unifies nullary constructors" $ do
+      Coverage.unify (E.match "MkUnit" []) (E.match "MkUnit" []) `shouldBe` Just []
+    it "cannot unify nested patterns of differing constructors" $ do
+      let pat1 = E.match "Cons" [E.match "MkUnit" [], E.match "Nil" []]
+      let pat2 = E.match "Cons" [E.match "MkUnit" [], E.match "Cons" [E.bind "y", E.bind "xs"]]
+      Coverage.unify pat1 pat2 `shouldBe` Nothing
+
   describe "coveredBy" $ do
     let destr name typ bound args = 
           name |-> Destr name typ bound args 
@@ -739,7 +747,7 @@ typecheckSpec = do
               ]
             ]
       runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldFailWith` 
-        errs (UncoveredPattern $ E.match "Cons" [E.bind (E.mname 2), E.match "Nil" []])
+        errs (UncoveredPattern $ E.match "Cons" [E.match "MkUnit" [], E.match "Nil" []])
 
     specify "succeeds for correct deeply nested list match" $ do
       {-

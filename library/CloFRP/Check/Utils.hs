@@ -8,16 +8,18 @@ module CloFRP.Check.Utils where
 
 import Data.Foldable (foldrM, find)
 import Data.Maybe (isJust)
+import Data.List (genericLength)
 
 import CloFRP.Check.TypingM 
 import CloFRP.Check.Destr (Destr(..))
 import CloFRP.Check.Contexts ( LocalCtx(..), CtxElem(..), (<+), isInContext
                              , Context(..), ctxFind, findAssigned, insertAt'
-                             , splitCtx', before'
+                             , splitCtx', before', Binding(..)
                              )
 import CloFRP.AST.Type (Type'(..), subst, PolyType, MonoType, asPolytype)
 import CloFRP.AST.Kind (Kind(..))
 import CloFRP.AST.Name (Name(..))
+import CloFRP.AST.Pat (Pat, Pat'(..))
 import CloFRP.Annotated (Annotated(..), (=%=), unann)
 import CloFRP.Pretty
 
