@@ -729,157 +729,157 @@ foobar xs =
 --         A _ (Match nm subideals) -> 
 
 
-data PatIndex = Here | Deeper Int PatIndex
-  deriving (Show, Eq)
+-- data PatIndex = Here | Deeper Int PatIndex
+--   deriving (Show, Eq)
 
-getLeaf :: PatIndex -> Pat a -> Maybe Name
-getLeaf Here p@(A _ (Bind nm)) = Just nm
-getLeaf (Deeper offset i) (A _ (Match _ subps)) = do
-  branch <- atIndex offset subps
-  getLeaf i branch
+-- getLeaf :: PatIndex -> Pat a -> Maybe Name
+-- getLeaf Here p@(A _ (Bind nm)) = Just nm
+-- getLeaf (Deeper offset i) (A _ (Match _ subps)) = do
+--   branch <- atIndex offset subps
+--   getLeaf i branch
 
-modifyLeafAt :: (a -> Name -> Pat a) -> PatIndex -> Pat a -> Maybe (Pat a)
-modifyLeafAt fn = go
-  where
-    go Here (A ann (Bind nm)) = Just (fn ann nm)
-    go (Deeper offset i) (A ann (Match nm subps)) = do
-      subp <- atIndex offset subps
-      subp' <- go i subp
-      pure (A ann (Match nm (replaceAt offset subp' subps)))
+-- modifyLeafAt :: (a -> Name -> Pat a) -> PatIndex -> Pat a -> Maybe (Pat a)
+-- modifyLeafAt fn = go
+--   where
+--     go Here (A ann (Bind nm)) = Just (fn ann nm)
+--     go (Deeper offset i) (A ann (Match nm subps)) = do
+--       subp <- atIndex offset subps
+--       subp' <- go i subp
+--       pure (A ann (Match nm (replaceAt offset subp' subps)))
       
 
-atIndex :: Int -> [a] -> Maybe a
-atIndex 0 (x : _) = Just x
-atIndex n (x : xs) 
-  | n > 0 = atIndex (n-1) xs
-atIndex _ _ = Nothing
+-- atIndex :: Int -> [a] -> Maybe a
+-- atIndex 0 (x : _) = Just x
+-- atIndex n (x : xs) 
+--   | n > 0 = atIndex (n-1) xs
+-- atIndex _ _ = Nothing
 
-freshPatternsFromName :: Name -> TypingM a [Pat a]
-freshPatternsFromName nm = do 
-  mty <- lookupTy nm <$> getCtx
-  case mty of 
-    Nothing -> nameNotFound nm
-    Just ty -> silentBranch $ getPatternsOfType ty
+-- freshPatternsFromName :: Name -> TypingM a [Pat a]
+-- freshPatternsFromName nm = do 
+--   mty <- lookupTy nm <$> getCtx
+--   case mty of 
+--     Nothing -> nameNotFound nm
+--     Just ty -> silentBranch $ getPatternsOfType ty
 
-refineIdealAt :: PatIndex -> Pat a -> [Pat a] -> TypingM a [(Pat a, [Pat a])]
-refineIdealAt index ideal covering = do
-  nm <- getLeafLifted index ideal
-  refinements <- freshPatternsFromName nm
-  pure (map refineCovering refinements)
-  where
-    refineCovering refinement =
-      (refinement, substPatsByIndex index refinement covering)
+-- refineIdealAt :: PatIndex -> Pat a -> [Pat a] -> TypingM a [(Pat a, [Pat a])]
+-- refineIdealAt index ideal covering = do
+--   nm <- getLeafLifted index ideal
+--   refinements <- freshPatternsFromName nm
+--   pure (map refineCovering refinements)
+--   where
+--     refineCovering refinement =
+--       (refinement, substPatsByIndex index refinement covering)
     
-    getLeafLifted index pat =
-      case getLeaf index pat of
-        Nothing -> otherErr $ "Cannot get pattern leaf at index " 
-                   ++ show index ++ " in pattern" ++ pps pat
-        Just pat' -> pure pat'
+--     getLeafLifted index pat =
+--       case getLeaf index pat of
+--         Nothing -> otherErr $ "Cannot get pattern leaf at index " 
+--                    ++ show index ++ " in pattern" ++ pps pat
+--         Just pat' -> pure pat'
 
-substPatsByIndex :: PatIndex -> Pat a -> [Pat a] -> [Pat a]
-substPatsByIndex index refined covering = 
-  map (overCovering index) covering
-  where
-    overCovering i coveringPat =
-      maybe coveringPat id (modifyLeafAt (\_ann _nm -> refined) i coveringPat)
-
-
-getPatternsOfType :: PolyType a -> TypingM a [Pat a]
-getPatternsOfType qtype@(A ann _) = do
-  rule "GetPatternsOfType" (pretty qtype)
-  destrs <- branch $ getDestrsOfType qtype
-  traverse (destrToPat ann) destrs
-
-destrToPat :: a -> Destr a -> TypingM a (Pat a)
-destrToPat ann destr = do
-  let name = Destr.name destr
-  let args = Destr.args destr
-  subvars <- traverse (\_ -> A ann . Bind <$> freshName) args
-  pure (A ann (Match name subvars))
+-- substPatsByIndex :: PatIndex -> Pat a -> [Pat a] -> [Pat a]
+-- substPatsByIndex index refined covering = 
+--   map (overCovering index) covering
+--   where
+--     overCovering i coveringPat =
+--       maybe coveringPat id (modifyLeafAt (\_ann _nm -> refined) i coveringPat)
 
 
+-- getPatternsOfType :: PolyType a -> TypingM a [Pat a]
+-- getPatternsOfType qtype@(A ann _) = do
+--   rule "GetPatternsOfType" (pretty qtype)
+--   destrs <- branch $ getDestrsOfType qtype
+--   traverse (destrToPat ann) destrs
 
-replaceAt :: Int -> a -> [a] -> [a]
-replaceAt i rep xs =
-  zipWith (\j x -> if i == j then rep else x) [0..] xs
+-- destrToPat :: a -> Destr a -> TypingM a (Pat a)
+-- destrToPat ann destr = do
+--   let name = Destr.name destr
+--   let args = Destr.args destr
+--   subvars <- traverse (\_ -> A ann . Bind <$> freshName) args
+--   pure (A ann (Match name subvars))
 
-coveredBy :: Pat a -> [Pat a] -> TypingM a ()
-coveredBy idealPat coveringPats =
-  case (idealPat, coveringPats) of
-    (_, []) -> coverRule "UncoveredPattern" >> uncoveredPattern idealPat
 
-    (_, A _ (Bind _) : ps) ->
-      case ps of
-        [] -> coverRule "Bind" >> pure ()
-        (p : _) -> coverRule "UnreachablePattern" >> unreachablePattern p
 
-    (A _ (Match nm1 []), p@(A _ (Match nm2 [])) : ps) | nm1 == nm2 -> 
-      case ps of
-        [] -> coverRule "Bind" >> pure ()
-        (p : _) -> coverRule "UnreachablePattern" >> unreachablePattern p
+-- replaceAt :: Int -> a -> [a] -> [a]
+-- replaceAt i rep xs =
+--   zipWith (\j x -> if i == j then rep else x) [0..] xs
 
-    (A _ (Bind bnm), ps@(A _ (Match _mnm _mpts) : _)) -> do
-      mty <- lookupTy bnm <$> getCtx
-      case mty of 
-        Nothing -> otherErr $ show $ pretty bnm <+> "is not bound in local context"
-        Just ty -> do
-          coverRule "Split"
-          idealPats <- silentBranch $ getPatternsOfType ty
-          rule "GetPatternsOfType.Info" (pretty idealPats)
-          if null idealPats 
-            then error $ show $ "FATAL: empty type" <+> pretty ty <+> "encountered"
-            else do
-              let continue ip = do
-                    delta <- branch $ checkPat ip ty
-                    withCtx (const delta) $ branch $ coveredBy ip (matchesIdeal ip ps)
-              traverse continue idealPats
-              pure ()
+-- coveredBy :: Pat a -> [Pat a] -> TypingM a ()
+-- coveredBy idealPat coveringPats =
+--   case (idealPat, coveringPats) of
+--     (_, []) -> coverRule "UncoveredCases" >> uncoveredCases idealPat
 
-    (A matchAnn (Match nm1 idealps), A _ (Match nm2 nestedps) : ps)
-      | nm1 /= nm2 ->
-        coveredBy idealPat ps
-        -- error $ "todo: cannot match pattern " ++ pps nm1 ++ " with " ++ pps nm2
-      | length idealps /= length nestedps ->
-        error $ "FATAL: expected " ++ show (length idealps) ++ " sub-patterns but got " 
-        ++ show (length nestedps)
-      | otherwise -> do
-        coverRule "Nest"
-        let matchingps = [ ps' | A _ (Match nm1' ps') <- coveringPats, nm1 == nm1' ]
-        let catcher index = \case
-              (UncoveredPattern newpat, _) -> uncoveredPattern (updateIdeal index newpat)
-              (UnreachablePattern newpat, _) -> unreachablePattern (updateIdeal index newpat)
-              err -> throwError err
-        let zipper = \index ip -> 
-              (branch $ coveredBy ip (map (!! index) matchingps)) `catchError` catcher index
-        _ <- sequence $ zipWith zipper [0..] idealps 
-        pure ()
-        where
-          updateIdeal index newpat =
-            let newIdealPs = zipWith (\i p -> if i == index then newpat else p) [0..] idealps
-            in  A matchAnn (Match nm1 newIdealPs)
-  where
-    coverRule sub = 
-      rule ("CoveredBy." <> sub) (pretty idealPat <> indent 2 (line <> pretty coveringPats))
+--     (_, A _ (Bind _) : ps) ->
+--       case ps of
+--         [] -> coverRule "Bind" >> pure ()
+--         (p : _) -> coverRule "UnreachableCases" >> unreachableCases p
 
-    matchesIdeal (A _ ideal) pats =
-      case ideal of
-        Bind _ -> pats
-        Match nm _ -> 
-          filter (
-            \case 
-              A _ (Bind _) -> True
-              A _ (Match nm' _) -> nm' == nm
-          ) pats
+--     (A _ (Match nm1 []), p@(A _ (Match nm2 [])) : ps) | nm1 == nm2 -> 
+--       case ps of
+--         [] -> coverRule "Bind" >> pure ()
+--         (p : _) -> coverRule "UnreachableCases" >> unreachableCases p
+
+--     (A _ (Bind bnm), ps@(A _ (Match _mnm _mpts) : _)) -> do
+--       mty <- lookupTy bnm <$> getCtx
+--       case mty of 
+--         Nothing -> otherErr $ show $ pretty bnm <+> "is not bound in local context"
+--         Just ty -> do
+--           coverRule "Split"
+--           idealPats <- silentBranch $ getPatternsOfType ty
+--           rule "GetPatternsOfType.Info" (pretty idealPats)
+--           if null idealPats 
+--             then error $ show $ "FATAL: empty type" <+> pretty ty <+> "encountered"
+--             else do
+--               let continue ip = do
+--                     delta <- branch $ checkPat ip ty
+--                     withCtx (const delta) $ branch $ coveredBy ip (matchesIdeal ip ps)
+--               traverse continue idealPats
+--               pure ()
+
+--     (A matchAnn (Match nm1 idealps), A _ (Match nm2 nestedps) : ps)
+--       | nm1 /= nm2 ->
+--         coveredBy idealPat ps
+--         -- error $ "todo: cannot match pattern " ++ pps nm1 ++ " with " ++ pps nm2
+--       | length idealps /= length nestedps ->
+--         error $ "FATAL: expected " ++ show (length idealps) ++ " sub-patterns but got " 
+--         ++ show (length nestedps)
+--       | otherwise -> do
+--         coverRule "Nest"
+--         let matchingps = [ ps' | A _ (Match nm1' ps') <- coveringPats, nm1 == nm1' ]
+--         let catcher index = \case
+--               (UncoveredCases newpat, _) -> uncoveredCases (updateIdeal index newpat)
+--               (UnreachableCases newpat, _) -> unreachableCases (updateIdeal index newpat)
+--               err -> throwError err
+--         let zipper = \index ip -> 
+--               (branch $ coveredBy ip (map (!! index) matchingps)) `catchError` catcher index
+--         _ <- sequence $ zipWith zipper [0..] idealps 
+--         pure ()
+--         where
+--           updateIdeal index newpat =
+--             let newIdealPs = zipWith (\i p -> if i == index then newpat else p) [0..] idealps
+--             in  A matchAnn (Match nm1 newIdealPs)
+--   where
+--     coverRule sub = 
+--       rule ("CoveredBy." <> sub) (pretty idealPat <> indent 2 (line <> pretty coveringPats))
+
+--     matchesIdeal (A _ ideal) pats =
+--       case ideal of
+--         Bind _ -> pats
+--         Match nm _ -> 
+--           filter (
+--             \case 
+--               A _ (Bind _) -> True
+--               A _ (Match nm' _) -> nm' == nm
+--           ) pats
 
       
 
-getDestrsOfType :: PolyType a -> TypingM a [Destr a]
-getDestrsOfType qtype@(A ann _) = do
-  destrCtx <- getDCtx
-  let destrs = map snd $ toList destrCtx
-  filterM onlySubtypes destrs
-  where
-    onlySubtypes destr = do
-      (delta, edestr) <- existentialize ann destr
-      withCtx (const delta) $ Destr.typ edestr `isSubtypeOf` qtype
+-- getDestrsOfType :: PolyType a -> TypingM a [Destr a]
+-- getDestrsOfType qtype@(A ann _) = do
+--   destrCtx <- getDCtx
+--   let destrs = map snd $ toList destrCtx
+--   filterM onlySubtypes destrs
+--   where
+--     onlySubtypes destr = do
+--       (delta, edestr) <- existentialize ann destr
+--       withCtx (const delta) $ Destr.typ edestr `isSubtypeOf` qtype
 

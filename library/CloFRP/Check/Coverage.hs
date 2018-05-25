@@ -3,18 +3,17 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module CloFRP.Check.Coverage (coveredBy, unify) where
+module CloFRP.Check.Coverage (coveredBy, unifyStrict, unifyNonStrict, normalizePattern) where
 
 import GHC.Exts (toList, IsList(..), coerce)
-import Data.Maybe (isJust)
-import Data.Foldable (foldrM)
+import Data.Maybe (catMaybes)
 import Control.Monad (filterM)
 import Debug.Trace (trace)
 
 import CloFRP.AST.Pat (Pat, Pat'(..))
 import CloFRP.AST.Name (Name)
 import CloFRP.Annotated (Annotated (..))
-import CloFRP.Check.TypingM ( TypingM(..), uncoveredPattern, unreachablePattern
+import CloFRP.Check.TypingM ( TypingM(..), uncoveredCases, unreachableCases
                             , branch, freshName, nameNotFound, silentBranch, rule
                             , getDCtx, getCtx, withCtx
                             )
@@ -25,7 +24,9 @@ import CloFRP.Check.Destr (Destr)
 import qualified CloFRP.Check.Destr as Destr
 import CloFRP.Check.Utils (existentialize)
 import CloFRP.Check.Subtyping (isSubtypeOf)
-import CloFRP.Check.Pat (checkDestr, checkPat)
+import CloFRP.Check.Pat (checkPat)
+
+data Strategy = Strict | NonStrict
 
 newtype Unifier a = Unifier [(Name, Pat a)]
   deriving (Show, Eq, Monoid)
@@ -42,21 +43,29 @@ instance Pretty (Unifier a) where
       $ map (\(n,p) -> pretty n <+> "↦" <+> pretty p) pairs
 
 
-unify :: Pat a -> Pat a -> Maybe (Unifier a)
-unify (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
-  unify'(Bind nm1) _ = Just (Unifier [(nm1, p2)])
+unify :: Strategy -> Pat a -> Pat a -> Maybe (Unifier a)
+unify ut (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
+  unify' (Bind nm1) _ = Just [(nm1, p2)]
+  unify' (Match _ _) (Bind _) = 
+    case ut of 
+      Strict -> Nothing
+      NonStrict -> Just []
   unify' (Match nm1 subpats1) (Match nm2 subpats2)
     | nm1 == nm2 = 
       case () of
         _ | length subpats1 /= length subpats2 -> -- sanity check
             error "FATAL: Pattern with same name but different number of subpats"
           | null subpats1 ->
-            Just (Unifier [])
+            Just []
           | otherwise -> 
-            mconcat <$> (sequence $ (zipWith unify subpats1 subpats2))
+            mconcat <$> (sequence $ (zipWith (unify ut) subpats1 subpats2))
     | otherwise =
       Nothing
   unify' _ _ = Nothing
+
+unifyStrict, unifyNonStrict :: Pat a -> Pat a -> Maybe (Unifier a)
+unifyStrict    = unify Strict
+unifyNonStrict = unify NonStrict
   
 refine :: Unifier a -> Pat a -> Pat a
 refine uni pat@(A ann pat') = refine' pat' where
@@ -79,41 +88,55 @@ isInjective (Unifier xs) = foldr folder Injective xs where
 
 
 coveredBy :: Pat a -> [Pat a] -> TypingM a ()
-coveredBy ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredPattern ideal
+coveredBy ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
 coveredBy ideal pats@(covering : coverings) = do
   rule "CoveredBy" (pretty (ideal, pats)) 
-  let uniM = unify ideal covering
+  let uniM = unifyNonStrict ideal covering
   case uniM of 
     Nothing -> 
       error "FATAL: coveredBy must be called with unifying patterns"
 
     Just uni ->
       case isInjective uni of
-        Injective -> do
-          branch $ rule "CoveredBy.Injective" (pretty uni)
-          case () of
-            _ | null coverings -> 
-                branch $ rule "CoveredBy.Discharge" (pretty (ideal, pats))
-                          >> pure ()
-              | otherwise -> unreachablePattern ideal
+        Injective -> branch $ do
+          rule "CoveredBy.Injective" (pretty uni)
+          case coverings of
+            [] -> branch $ do 
+              rule "CoveredBy.Discharge" (pretty (ideal, pats))
+              pure ()
+            xs@(_:_) -> branch $ do
+              rule "CoveredBy.Unreachable" (pretty (ideal, pats))
+              unreachableCases xs
 
-        NotInjective binding (_constructor, _pats) -> do
-          branch $ rule "CoveredBy.NotInjective" (pretty uni)
+        NotInjective binding (_constructor, _pats) -> branch $ do
+          rule "CoveredBy.NotInjective" (pretty uni)
           patTy <- lookupTyTM binding
           constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
           branch $ do
-            rule "CoveredBy.Split" (pretty constructors)
+            rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
             traverse (splitProblem patTy binding) constructors >> pure ()
   where
     splitProblem patTy nm constructor = do
       let refined = refine [(nm, constructor)] ideal
       delta <- silentBranch $ checkPat constructor patTy
-      withCtx (const delta) $ branch $ coveredBy refined (onlyUnifying refined)
+      withCtx (const delta) $ branch $ coveredBy refined (retainInvariant refined pats)
     
-    onlyUnifying uniWith =
-      let result = filter (isJust . unify uniWith) pats
-        -- const (show $ "unify with" <+> pretty uniWith <+> pretty pats <+> "-->" <+> pretty result) $ 
+    retainInvariant uniWith toUni =
+      let result = catMaybes $ map (normalizePattern uniWith) toUni
+      -- in  trace (show $ "unify with" <+> pretty uniWith <+> pretty pats <+> "-->" <+> pretty result) $ result
       in  result
+
+
+-- | Normalizes the second pattern to the first patterns form if they match
+normalizePattern :: Pat a -> Pat a -> Maybe (Pat a)
+normalizePattern pat1@(A _ pat1') pat2@(A ann pat2') = go pat1' pat2' where
+  go (Bind _) _ = pure pat2
+  go (Match nm1 subps1) (Match nm2 subps2) 
+    | nm1 == nm2 && length subps1 == length subps2 =
+      A ann . Match nm2 <$> sequence (zipWith normalizePattern subps1 subps2)
+    | otherwise = Nothing
+  go (Match _ _) (Bind _) = pure pat1
+
 
 lookupTyTM :: Name -> TypingM a (PolyType a)
 lookupTyTM nm = do
@@ -122,10 +145,10 @@ lookupTyTM nm = do
     Nothing -> nameNotFound nm
     Just ty -> pure ty
 
-freshPatternsFromName :: Name -> TypingM a [Pat a]
-freshPatternsFromName nm = do 
-  ty <- lookupTyTM nm
-  silentBranch $ getPatternsOfType ty
+-- freshPatternsFromName :: Name -> TypingM a [Pat a]
+-- freshPatternsFromName nm = do 
+--   ty <- lookupTyTM nm
+--   silentBranch $ getPatternsOfType ty
 
 getPatternsOfType :: PolyType a -> TypingM a [Pat a]
 getPatternsOfType qtype@(A ann _) = do

@@ -116,8 +116,8 @@ data TyExcept a
   | MutualRecursionErr Name
   | Other String
   | Decorate (TyExcept a) (TyExcept a)
-  | UncoveredPattern (Pat a)
-  | UnreachablePattern (Pat a)
+  | UncoveredCases (Pat a)
+  | UnreachableCases [Pat a]
   deriving (Show, Eq)
 
 instance Unann (TyExcept a) (TyExcept ()) where
@@ -134,8 +134,8 @@ instance Unann (TyExcept a) (TyExcept ()) where
     MutualRecursionErr nm    -> MutualRecursionErr nm
     Other s                  -> Other s
     Decorate outer inner     -> Decorate (unann outer) (unann inner)
-    UncoveredPattern pat        -> UncoveredPattern (unann pat)
-    UnreachablePattern pat   -> UnreachablePattern (unann pat)
+    UncoveredCases pat       -> UncoveredCases (unann pat)
+    UnreachableCases pat     -> UnreachableCases (map unann pat)
 
 instance Pretty (TyExcept a) where
   pretty = \case
@@ -150,8 +150,8 @@ instance Pretty (TyExcept a) where
     PartialSynonymApp syn       -> "Partial type-synonym application of synonym " <+> pretty syn
     MutualRecursionErr nm    -> pretty nm <+> "is mutually recursive with something else"
     Other s                  -> "Other error:" <+> fromString s
-    UncoveredPattern pat        -> "Pattern match is not exhaustive:" <+> pretty pat <+> "is not covered."
-    UnreachablePattern pat   -> "Pattern" <+> pretty pat <+> "is unreachable"
+    UncoveredCases pat       -> "Pattern match is not exhaustive:" <+> pretty pat <+> "is not covered."
+    UnreachableCases pat     -> "Cases" <+> pretty pat <+> "is unreachable"
     Decorate outer inner     -> pretty outer <> hardline <> "Caused by:" <> softline <> pretty inner
 
 tyExcept :: TyExcept a -> TypingM a r
@@ -192,9 +192,11 @@ partialSynonymApp syn = tyExcept $ PartialSynonymApp syn
 decorateErr :: TypingM a r -> TyExcept a -> TypingM a r
 decorateErr tm outer = tm `catchError` (\(inner, _ctx) -> tyExcept $ Decorate outer inner)
 
-uncoveredPattern, unreachablePattern :: Pat a -> TypingM a r
-uncoveredPattern = tyExcept . UncoveredPattern
-unreachablePattern = tyExcept . UnreachablePattern
+uncoveredCases :: Pat a -> TypingM a r
+uncoveredCases = tyExcept . UncoveredCases
+
+unreachableCases :: [Pat a] -> TypingM a r
+unreachableCases = tyExcept . UnreachableCases
 
 errIf :: TypingM a r -> (r -> Bool) -> (r -> TyExcept a) -> TypingM a ()
 errIf c p fl = do
