@@ -3,16 +3,19 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module CloFRP.Check.Coverage (coveredBy, unifyStrict, unifyNonStrict, normalizePattern) where
+module CloFRP.Check.Coverage ( coveredBy, unifyStrict, unifyNonStrict
+                             , normalizePattern, retainInvariant
+                             ) where
 
 import GHC.Exts (toList, IsList(..), coerce)
-import Data.Maybe (catMaybes)
-import Control.Monad (filterM)
+import Data.Maybe (catMaybes, isJust)
+import Control.Monad (filterM, when)
 import Debug.Trace (trace)
+import Data.List (foldl')
 
 import CloFRP.AST.Pat (Pat, Pat'(..))
 import CloFRP.AST.Name (Name)
-import CloFRP.Annotated (Annotated (..))
+import CloFRP.Annotated (Annotated (..), (=%=))
 import CloFRP.Check.TypingM ( TypingM(..), uncoveredCases, unreachableCases
                             , branch, freshName, nameNotFound, silentBranch, rule
                             , getDCtx, getCtx, withCtx
@@ -114,18 +117,37 @@ coveredBy ideal pats@(covering : coverings) = do
           constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
           branch $ do
             rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
-            traverse (splitProblem patTy binding) constructors >> pure ()
+            splitProblems patTy binding constructors
   where
-    splitProblem patTy nm constructor = do
+    splitProblems _patTy _nm [] = pure ()
+    splitProblems patTy nm (c:cs) = 
+        splitProblem (null cs) patTy nm c
+          >> splitProblems patTy nm cs
+
+    splitProblem isLast patTy nm constructor = do
       let refined = refine [(nm, constructor)] ideal
       delta <- silentBranch $ checkPat constructor patTy
-      withCtx (const delta) $ branch $ coveredBy refined (retainInvariant refined pats)
+      let retain = 
+            if isLast
+              then \ref -> catMaybes . map (normalizePattern ref) -- be strict about
+              else retainInvariant -- be loose about it
+      when isLast $ rule "IsLast" ""
+      withCtx (const delta) $ branch $ coveredBy refined (retain refined pats)
     
-    retainInvariant uniWith toUni =
-      let result = catMaybes $ map (normalizePattern uniWith) toUni
+      -- let result = filter (isJust . normalizePattern uniWith) toUni
       -- in  trace (show $ "unify with" <+> pretty uniWith <+> pretty pats <+> "-->" <+> pretty result) $ result
-      in  result
+      -- in  result
 
+retainInvariant :: Foldable t => Pat a -> t (Pat a) -> [Pat a]
+retainInvariant uniWith toUni =
+  reverse $ foldl' folder [] toUni where
+    folder acc p = 
+      case normalizePattern uniWith p of
+        Nothing -> acc
+        Just p'
+          | (null acc) -> trace "acc is not null" $ p' : acc
+          | p' =%= p -> trace "not refinement happened" $ p' : acc
+          | otherwise -> acc
 
 -- | Normalizes the second pattern to the first patterns form if they match
 normalizePattern :: Pat a -> Pat a -> Maybe (Pat a)

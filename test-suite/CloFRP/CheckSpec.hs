@@ -666,24 +666,33 @@ typecheckSpec = do
       do let ctx = nil 
          shouldFail $ runCheck (mk ctx) ("x" @-> "x") (E.forAll ["a","a"] $ "a" @->: "a") 
 
-  describe "Coverage.normalizePattern" $ do
-    it "expands to constructors (1)" $ do
-      Coverage.normalizePattern (E.match "MkUnit" []) (E.bind "x") `shouldBe` Just (E.match "MkUnit" [])
-    it "expands to constructors (2)" $ do
-      Coverage.normalizePattern 
-        (E.match "Cons" [E.bind "x", E.match "Nil" []])
-        (E.match "Cons" [E.bind "x", E.bind"xs"]) 
-        `shouldBe` Just (E.match "Cons" [E.bind "x", E.match "Nil" []])
+  describe "Coverage" $ do
+    describe "normalizePattern" $ do
+      it "expands to constructors (1)" $ do
+        Coverage.normalizePattern (E.match "MkUnit" []) (E.bind "x") `shouldBe` Just (E.match "MkUnit" [])
+      it "expands to constructors (2)" $ do
+        Coverage.normalizePattern 
+          (E.match "Cons" [E.bind "x", E.match "Nil" []])
+          (E.match "Cons" [E.bind "x", E.bind"xs"]) 
+          `shouldBe` Just (E.match "Cons" [E.bind "x", E.match "Nil" []])
 
-  describe "Coverage.unify" $ do
-    it "unifies nullary constructors" $ do
-      Coverage.unifyStrict (E.match "MkUnit" []) (E.match "MkUnit" []) `shouldBe` Just []
-    it "cannot unify nested patterns of differing constructors" $ do
-      let pat1 = E.match "Cons" [E.match "MkUnit" [], E.match "Nil" []]
-      let pat2 = E.match "Cons" [E.match "MkUnit" [], E.match "Cons" [E.bind "y", E.bind "xs"]]
-      Coverage.unifyNonStrict pat1 pat2 `shouldBe` Nothing
-    it "cannot strictly unify a match with a binding" $ do
-      Coverage.unifyStrict (E.match "MkUnit" []) (E.bind "x") `shouldBe` Nothing
+    describe "retainInvariant" $ do
+      specify "it works (1)" $ do
+        Coverage.retainInvariant @[] (E.match "MkUnit" []) [E.match "MkUnit" [], E.bind "xs"]
+          `shouldBe` [E.match "MkUnit" [], E.match "MkUnit" []]
+      specify "it works (2)" $ do
+        Coverage.retainInvariant @[] (E.match "Nil" []) [E.match "Nil" [], E.bind "xs"]
+          `shouldBe` [E.match "Nil" []]
+
+    describe "unify" $ do
+      it "unifies nullary constructors" $ do
+        Coverage.unifyStrict (E.match "MkUnit" []) (E.match "MkUnit" []) `shouldBe` Just []
+      it "cannot unify nested patterns of differing constructors" $ do
+        let pat1 = E.match "Cons" [E.match "MkUnit" [], E.match "Nil" []]
+        let pat2 = E.match "Cons" [E.match "MkUnit" [], E.match "Cons" [E.bind "y", E.bind "xs"]]
+        Coverage.unifyNonStrict pat1 pat2 `shouldBe` Nothing
+      it "cannot strictly unify a match with a binding" $ do
+        Coverage.unifyStrict (E.match "MkUnit" []) (E.bind "x") `shouldBe` Nothing
 
 
   describe "coveredBy" $ do
