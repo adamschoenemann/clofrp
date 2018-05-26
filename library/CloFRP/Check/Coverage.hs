@@ -90,6 +90,44 @@ isInjective (Unifier xs) = foldr folder Injective xs where
   folder _ acc@(NotInjective _ _)  = acc
 
 
+
+data Clause a = Clause { usages :: Int, pattern :: Pat a }
+
+newClause :: Pat a -> Clause a
+newClause pat = Clause { usages = 0, pattern = pat }
+
+useClause :: Clause a -> Clause a
+useClause cl = cl { usages = usages cl + 1 }
+
+-- attempt at "stateful solution". keep track of number of usages of each
+-- clause. Every clause must be used at least once. Sequential tests should
+-- make sure that redundant clauses are not reached and thus not used
+checkCoverage :: Pat a -> [Pat a] -> TypingM a ()
+checkCoverage idealPat coveringPats = 
+  check idealPat (map newClause coveringPats)
+  where 
+    check ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
+    check ideal (cov : covs) =
+      case unify NonStrict ideal (pattern cov) of
+        Nothing -> cov . (:) <$> check ideal covs
+        Just uni -> 
+          case isInjective uni of
+            Injective -> branch $ do
+              rule "CoveredBy.Injective" (pretty uni)
+              pure (useClause cov : covs)
+
+
+            NotInjective binding (_constructor, _pats) -> branch $ do
+              rule "CoveredBy.NotInjective" (pretty uni)
+              patTy <- lookupTyTM binding
+              constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
+              branch $ do
+                rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
+                splitProblems patTy binding constructors
+
+
+
+
 coveredBy :: Pat a -> [Pat a] -> TypingM a ()
 coveredBy ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
 coveredBy ideal pats@(covering : coverings) = do
