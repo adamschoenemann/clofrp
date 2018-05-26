@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module CloFRP.Check.Coverage ( coveredBy, unifyStrict, unifyNonStrict
-                             , normalizePattern, retainInvariant
+                             , normalizePattern, retainInvariant, checkCoverage
                              ) where
 
 import GHC.Exts (toList, IsList(..), coerce)
@@ -20,9 +21,10 @@ import CloFRP.Check.TypingM ( TypingM(..), uncoveredCases, unreachableCases
                             , branch, freshName, nameNotFound, silentBranch, rule
                             , getDCtx, getCtx, withCtx
                             )
-import CloFRP.Check.Contexts (lookupTy)
+import CloFRP.Check.Contexts (lookupTy, (.:), (<+))
 import CloFRP.Pretty
 import CloFRP.AST.Type (PolyType)
+import CloFRP.AST.Expr (Expr)
 import CloFRP.Check.Destr (Destr)
 import qualified CloFRP.Check.Destr as Destr
 import CloFRP.Check.Utils (existentialize)
@@ -87,17 +89,24 @@ isInjective (Unifier xs) = foldr folder Injective xs where
   folder (_, A _ (Bind _)) acc = acc
   folder (nm, A _ (Match mnm pats)) _acc = 
     NotInjective nm (mnm, pats)
-  folder _ acc@(NotInjective _ _)  = acc
-
-
+  folder _ acc  = acc
 
 data Clause a = Clause { usages :: Int, pattern :: Pat a }
+  deriving (Show, Eq)
+
+instance Pretty (Clause a) where
+  pretty (Clause uses pats) = "{" <+> pretty uses <> "," <+> pretty pats <+> "}"
 
 newClause :: Pat a -> Clause a
 newClause pat = Clause { usages = 0, pattern = pat }
 
 useClause :: Clause a -> Clause a
 useClause cl = cl { usages = usages cl + 1 }
+
+checkCoverage :: a -> PolyType a -> [Pat a] -> TypingM a ()
+checkCoverage ann ty covering = do
+  nm <- freshName
+  withCtx (\c -> c <+ (nm .: ty)) $ coveredBy (A ann (Bind nm)) covering
 
 -- attempt at "stateful solution". keep track of number of usages of each
 -- clause. Every clause must be used at least once. Sequential tests should
@@ -114,80 +123,46 @@ useClause cl = cl { usages = usages cl + 1 }
   Cons MkUnit Nil coveredBy [{0, Cons MkUnit xs}] <- increases to {1, Cons MkUnit xs}
   Cons MkUnit (Cons `c `d) coveredBy [{0, Cons MkUnit (Cons y xs)}, {1, Cons MkUnit xs}]
 -}
-checkCoverage :: Pat a -> [Pat a] -> TypingM a ()
-checkCoverage idealPat coveringPats = 
-  check idealPat (map newClause coveringPats)
+coveredBy :: forall a. Pat a -> [Pat a] -> TypingM a ()
+coveredBy idealPat coveringPats = do
+  clauses <- check idealPat (map newClause coveringPats)
+  let unreached = catMaybes $ map (\(Clause uses pat) -> if uses < 1 then Just pat else Nothing) clauses
+  if length unreached > 0
+    then unreachableCases unreached
+    else pure ()
   where 
+    check :: Pat a -> [Clause a] -> TypingM a [Clause a]
     check ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
-    check ideal (cov : covs) =
+    check ideal clauses@(cov : covs) = do
+      rule "CoveredBy" (pretty (ideal, clauses)) 
       case unify NonStrict ideal (pattern cov) of
-        Nothing -> cov . (:) <$> check ideal covs
+        Nothing -> (cov :) <$> check ideal covs
         Just uni -> 
           case isInjective uni of
             Injective -> branch $ do
               rule "CoveredBy.Injective" (pretty uni)
               pure (useClause cov : covs)
 
-
-            NotInjective binding (_constructor, _pats) -> branch $ do
+            NotInjective binding (_constructor, _clauses) -> branch $ do
               rule "CoveredBy.NotInjective" (pretty uni)
               patTy <- lookupTyTM binding
               constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
               branch $ do
                 rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
-                splitProblems patTy binding constructors
+                splitProblems ideal patTy binding clauses constructors
 
+    splitProblems ideal _patTy _nm clauses [] = pure clauses
+    splitProblems ideal patTy nm clauses (c:cs) = do
+        clauses' <- splitProblem ideal patTy nm clauses c
+        splitProblems ideal patTy nm clauses' cs
 
-
-
-coveredBy :: Pat a -> [Pat a] -> TypingM a ()
-coveredBy ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
-coveredBy ideal pats@(covering : coverings) = do
-  rule "CoveredBy" (pretty (ideal, pats)) 
-  let uniM = unifyNonStrict ideal covering
-  case uniM of 
-    Nothing -> 
-      error "FATAL: coveredBy must be called with unifying patterns"
-
-    Just uni ->
-      case isInjective uni of
-        Injective -> branch $ do
-          rule "CoveredBy.Injective" (pretty uni)
-          case coverings of
-            [] -> branch $ do 
-              rule "CoveredBy.Discharge" (pretty (ideal, pats))
-              pure ()
-            xs@(_:_) -> branch $ do
-              rule "CoveredBy.Unreachable" (pretty (ideal, pats))
-              unreachableCases xs
-
-        NotInjective binding (_constructor, _pats) -> branch $ do
-          rule "CoveredBy.NotInjective" (pretty uni)
-          patTy <- lookupTyTM binding
-          constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
-          branch $ do
-            rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
-            splitProblems patTy binding constructors
-  where
-    splitProblems _patTy _nm [] = pure ()
-    splitProblems patTy nm (c:cs) = 
-        splitProblem (null cs) patTy nm c
-          >> splitProblems patTy nm cs
-
-    splitProblem isLast patTy nm constructor = do
+    splitProblem ideal patTy nm clauses constructor = do
       let refined = refine [(nm, constructor)] ideal
       delta <- silentBranch $ checkPat constructor patTy
-      let retain = 
-            if isLast
-              then \ref -> catMaybes . map (normalizePattern ref) -- be strict about
-              else retainInvariant -- be loose about it
-      when isLast $ rule "IsLast" ""
-      withCtx (const delta) $ branch $ coveredBy refined (retain refined pats)
-    
-      -- let result = filter (isJust . normalizePattern uniWith) toUni
-      -- in  trace (show $ "unify with" <+> pretty uniWith <+> pretty pats <+> "-->" <+> pretty result) $ result
-      -- in  result
+      withCtx (const delta) $ branch $ check refined clauses
 
+
+-- deprecated
 retainInvariant :: Foldable t => Pat a -> t (Pat a) -> [Pat a]
 retainInvariant uniWith toUni =
   reverse $ foldl' folder [] toUni where
@@ -200,6 +175,7 @@ retainInvariant uniWith toUni =
           | otherwise -> acc
 
 -- | Normalizes the second pattern to the first patterns form if they match
+-- | deprecated
 normalizePattern :: Pat a -> Pat a -> Maybe (Pat a)
 normalizePattern pat1@(A _ pat1') pat2@(A ann pat2') = go pat1' pat2' where
   go (Bind _) _ = pure pat2
@@ -216,11 +192,6 @@ lookupTyTM nm = do
   case mty of 
     Nothing -> nameNotFound nm
     Just ty -> pure ty
-
--- freshPatternsFromName :: Name -> TypingM a [Pat a]
--- freshPatternsFromName nm = do 
---   ty <- lookupTyTM nm
---   silentBranch $ getPatternsOfType ty
 
 getPatternsOfType :: PolyType a -> TypingM a [Pat a]
 getPatternsOfType qtype@(A ann _) = do
