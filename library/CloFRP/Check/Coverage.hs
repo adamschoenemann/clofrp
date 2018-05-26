@@ -102,6 +102,18 @@ useClause cl = cl { usages = usages cl + 1 }
 -- attempt at "stateful solution". keep track of number of usages of each
 -- clause. Every clause must be used at least once. Sequential tests should
 -- make sure that redundant clauses are not reached and thus not used
+{-
+  here is a badly written example
+  xs coveredBy [{0, Nil}, {0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
+  | split xs
+  Nil coveredBy [{0, Nil}] <- increases to {1, Nil}
+  Cons `a `b coveredBy [{0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}] 
+  | split `a
+  Cons MkUnit `b coveredBy [{0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
+  | split `b
+  Cons MkUnit Nil coveredBy [{0, Cons MkUnit xs}] <- increases to {1, Cons MkUnit xs}
+  Cons MkUnit (Cons `c `d) coveredBy [{0, Cons MkUnit (Cons y xs)}, {1, Cons MkUnit xs}]
+-}
 checkCoverage :: Pat a -> [Pat a] -> TypingM a ()
 checkCoverage idealPat coveringPats = 
   check idealPat (map newClause coveringPats)
