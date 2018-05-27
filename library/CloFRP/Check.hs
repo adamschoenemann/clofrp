@@ -169,7 +169,7 @@ check e@(A eann e') ty@(A tann ty') = sanityCheck ty *> check' e' ty' where
     -- check coverage
     coverType <- substCtx delta'' pty''
     (withCtx (const delta'') $ Coverage.checkCoverage eann coverType (map fst clauses))
-      `decorateErr` (Other $ show $ "when checking" <+> pretty on <+> "of type" <+> pretty coverType)
+      `decorateErr` (Other $ show $ "when coverage-checking" <+> pretty on <+> "of type" <+> pretty coverType)
     pure delta''
 
   -- TickAbsI
@@ -355,7 +355,8 @@ synthesize expr@(A ann expr') = synthesize' expr' where
   -- PrimRec=>
   synthesize' (PrimRec prty) = do
     rule "PrimRec=>" (pretty expr)
-    errIf (kindOf prty) (/= (Star :->*: Star)) (const $ Other $ show $ "Expected" <+> pretty prty <+> "to have kind * -> *")
+    errIf (kindOf prty) (/= (Star :->*: Star)) 
+      (const $ Other $ show $ "Expected" <+> pretty prty <+> "to have kind * -> *")
     assertFunctor prty
     let ?annotation  = ann
     let resultty     = H.tvar "A"

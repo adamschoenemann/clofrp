@@ -4,13 +4,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module CloFRP.Check.Coverage ( coveredBy, unifyStrict, unifyNonStrict
-                             , checkCoverage
-                             ) where
+module CloFRP.Check.Coverage (coveredBy, unify, checkCoverage) where
 
 import GHC.Exts (toList, IsList(..), coerce)
 import Data.Maybe (catMaybes, isJust)
-import Control.Monad (filterM, when)
+import Control.Monad (filterM, when, replicateM)
 import Debug.Trace (trace)
 import Data.List (foldl')
 
@@ -23,7 +21,7 @@ import CloFRP.Check.TypingM ( TypingM(..), uncoveredCases, unreachableCases
                             )
 import CloFRP.Check.Contexts (lookupTy, (.:), (<+))
 import CloFRP.Pretty
-import CloFRP.AST.Type (PolyType)
+import CloFRP.AST.Type (PolyType, Type'(..))
 import CloFRP.AST.Expr (Expr)
 import CloFRP.Check.Destr (Destr)
 import qualified CloFRP.Check.Destr as Destr
@@ -31,11 +29,8 @@ import CloFRP.Check.Utils (existentialize)
 import CloFRP.Check.Subtyping (isSubtypeOf)
 import CloFRP.Check.Pat (checkPat)
 
-data Strategy = Strict | NonStrict
-
 newtype Unifier a = Unifier [(Name, Pat a)]
   deriving (Show, Eq, Monoid)
-
 
 instance IsList (Unifier a) where
   type Item (Unifier a) = (Name, Pat a)
@@ -48,13 +43,10 @@ instance Pretty (Unifier a) where
       $ map (\(n,p) -> pretty n <+> "↦" <+> pretty p) pairs
 
 
-unify :: Strategy -> Pat a -> Pat a -> Maybe (Unifier a)
-unify ut (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
+unify :: Pat a -> Pat a -> Maybe (Unifier a)
+unify (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
   unify' (Bind nm1) _ = Just [(nm1, p2)]
-  unify' (Match _ _) (Bind _) = 
-    case ut of 
-      Strict -> Nothing
-      NonStrict -> Just []
+  unify' (Match _ _) (Bind _) = Just []
   unify' (Match nm1 subpats1) (Match nm2 subpats2)
     | nm1 == nm2 = 
       case () of
@@ -63,15 +55,16 @@ unify ut (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
           | null subpats1 ->
             Just []
           | otherwise -> 
-            mconcat <$> (sequence $ (zipWith (unify ut) subpats1 subpats2))
+            mconcat <$> (sequence $ (zipWith unify subpats1 subpats2))
     | otherwise =
       Nothing
+  unify' (PTuple subpats1) (PTuple subpats2)
+      | length subpats1 /= length subpats2 = -- sanity check
+        error "FATAL: Tuple patterns with different number of subpats"
+      | otherwise = 
+        mconcat <$> (sequence $ (zipWith unify subpats1 subpats2))
   unify' _ _ = Nothing
 
-unifyStrict, unifyNonStrict :: Pat a -> Pat a -> Maybe (Unifier a)
-unifyStrict    = unify Strict
-unifyNonStrict = unify NonStrict
-  
 refine :: Unifier a -> Pat a -> Pat a
 refine uni pat@(A ann pat') = refine' pat' where
   refine' (Bind nm)
@@ -79,16 +72,20 @@ refine uni pat@(A ann pat') = refine' pat' where
     | otherwise = pat
   refine' (Match nm subpats) =
     A ann (Match nm (map (refine uni) subpats))
+  refine' (PTuple subpats) =
+    A ann (PTuple (map (refine uni) subpats))
 
 data IsInjectiveResult a
   = Injective 
-  | NotInjective Name (Name, [Pat a])
+  | NotInjective Name
 
 isInjective :: Unifier a -> IsInjectiveResult a
 isInjective (Unifier xs) = foldr folder Injective xs where
   folder (_, A _ (Bind _)) acc = acc
-  folder (nm, A _ (Match mnm pats)) _acc = 
-    NotInjective nm (mnm, pats)
+  folder (nm, A _ (Match _mnm _pats)) _acc = 
+    NotInjective nm 
+  folder (nm, A _ (PTuple _pats)) _acc = 
+    NotInjective nm 
   folder _ acc  = acc
 
 data Clause a = Clause { usages :: Int, pattern :: Pat a }
@@ -135,7 +132,7 @@ coveredBy idealPat coveringPats = do
     check ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
     check ideal clauses@(cov : covs) = do
       rule "CoveredBy" (pretty (ideal, clauses)) 
-      case unify NonStrict ideal (pattern cov) of
+      case unify ideal (pattern cov) of
         Nothing -> (cov :) <$> check ideal covs
         Just uni -> 
           case isInjective uni of
@@ -143,13 +140,16 @@ coveredBy idealPat coveringPats = do
               rule "CoveredBy.Injective" (pretty uni)
               pure (useClause cov : covs)
 
-            NotInjective binding (_constructor, _clauses) -> branch $ do
+            NotInjective binding -> branch $ do
               rule "CoveredBy.NotInjective" (pretty uni)
               patTy <- lookupTyTM binding
               constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
-              branch $ do
-                rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
-                splitProblems ideal patTy binding clauses constructors
+              if null constructors
+                then error $ show $ "Cant match on a value of type" <+> pretty patTy
+                  <+> "because it has no constructors"
+                else branch $ do
+                  rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
+                  splitProblems ideal patTy binding clauses constructors
 
     splitProblems ideal _patTy _nm clauses [] = pure clauses
     splitProblems ideal patTy nm clauses (c:cs) = do
@@ -194,10 +194,14 @@ lookupTyTM nm = do
     Just ty -> pure ty
 
 getPatternsOfType :: PolyType a -> TypingM a [Pat a]
-getPatternsOfType qtype@(A ann _) = do
+getPatternsOfType qtype@(A ann qtype') = do
   rule "GetPatternsOfType" (pretty qtype)
-  destrs <- branch $ getDestrsOfType qtype
-  traverse (destrToPat ann) destrs
+  case qtype' of 
+    TTuple ts -> 
+      (: []) . A ann . PTuple <$> replicateM (length ts) (A ann . Bind <$> freshName)
+    _ -> do
+      destrs <- branch $ getDestrsOfType qtype
+      traverse (destrToPat ann) destrs
 
 destrToPat :: a -> Destr a -> TypingM a (Pat a)
 destrToPat ann destr = do
