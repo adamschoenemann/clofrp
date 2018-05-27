@@ -321,8 +321,10 @@ deriveSpec = do
         data B = B.
 
         main : Foo B.
-        main = case fmap {Foo} (\x -> B) (Foo (\x -> (A, x))) of
-          | Foo fn -> fn B.
+        main = 
+          case fmap {Foo} (\x -> B) (Foo (\x -> (A, x))) of
+          | Foo fn -> fn B
+          end.
       |]
       v `shouldBe` Tuple [Constr "B" [], Constr "B" []]
 

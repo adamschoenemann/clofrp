@@ -61,8 +61,9 @@ clott_add = [clofrp|
   plus = \m n -> 
     let body = \x ->
       case x of
-        | Z -> n
-        | S (m', r) -> s r
+      | Z -> n
+      | S (m', r) -> s r
+      end
     in  primRec {NatF} body m.
 
   app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
@@ -78,6 +79,8 @@ clott_add = [clofrp|
         | Cons pair xs -> 
           case pair of
           | (x1, x2) -> fold (Cons (plus x1 x2) (app g xs))
+          end
+      end
     ).
 |]
 
@@ -113,7 +116,8 @@ clott_add_int = [clofrp|
   negate = \b ->
     case b of
     | True -> False
-    | False -> True.
+    | False -> True
+    end.
   
   data NatF f = Z | S f deriving Functor.
   type Nat = Fix NatF.
@@ -123,6 +127,7 @@ clott_add_int = [clofrp|
     let fn = \x -> case x of 
                    | Z -> 0
                    | S (n, r) -> 1 + r
+                   end
     in  primRec {NatF} fn.
 
   z : Nat. z = fold Z.
@@ -144,6 +149,7 @@ clott_add_int = [clofrp|
   strmap = \f -> fix (\g xs -> 
                    case unfold xs of
                    | Cons x xs' -> cons (f x) (\\(af : k) -> g [af] (xs' [af]))
+                   end
                  ).
 
   nats : forall (k : Clock). Stream k Int.

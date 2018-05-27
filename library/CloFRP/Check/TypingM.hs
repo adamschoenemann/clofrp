@@ -58,6 +58,9 @@ tellDebugTree :: DerivationTree -> TypingM a ()
 tellDebugTree dt =
   modify (\s -> s { debugDerivationTree = dt ++ debugDerivationTree s })
 
+clearDebugTree :: TypingM a ()
+clearDebugTree = modify (\st -> st { debugDerivationTree = [] })
+
 root :: Doc () -> TypingM a ()
 root x = gets level >>= \l -> tellDebugTree [(l,x)]
 

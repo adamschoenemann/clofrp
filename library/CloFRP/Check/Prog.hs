@@ -388,7 +388,9 @@ checkElabedProg (ElabProg {kinds, types, defs, destrs, synonyms, instances}) = d
         resetNameState
         let ctx' = ctx { trFree = delete k (trFree ctx) }
         tellDebugTree [(0, "============" <+> pretty k <+> "=============")]
-        local (const ctx') $ check expr ty
+        r <- local (const ctx') $ check expr ty
+        clearDebugTree
+        pure r
         -- censor (const []) $ local (const ctx') $ check expr ty
       Nothing -> error $ "Could not find " ++ show k ++ " in context even after elaboration. Should not happen"
     

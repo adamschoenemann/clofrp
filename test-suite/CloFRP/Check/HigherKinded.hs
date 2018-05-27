@@ -35,18 +35,24 @@ higherKindedSpec = do
         data Pair a b = Pair a b.
 
         map : forall (f : * -> *). Functor f -> Map f.
-        map = \x -> case x of
-          | Functor map' -> map'.
+        map = \x -> 
+          case x of
+          | Functor map' -> map'
+          end.
 
         idf : Functor Id.
-        idf = Functor (\f x -> case x of
+        idf = Functor (\f x -> 
+                case x of
                 | Id x' -> Id (f x')                
+                end
               ).
         
         mapMaybe : forall a b. (a -> b) -> Maybe a -> Maybe b.
-        mapMaybe = \f x -> case x of
+        mapMaybe = \f x -> 
+          case x of
           | Nothing -> Nothing
-          | Just x' -> Nothing.
+          | Just x' -> Nothing
+          end.
         
         maybef : Functor Maybe.
         maybef = Functor mapMaybe.
@@ -61,8 +67,10 @@ higherKindedSpec = do
         -- listf = Functor mapList.
 
         mapPair : forall a b c. (b -> c) -> Pair a b -> Pair a c.
-        mapPair = \f p -> case p of
-          | Pair x y -> Pair x (f y).
+        mapPair = \f p -> 
+          case p of
+          | Pair x y -> Pair x (f y)
+          end.
         
         pairf : forall a. Functor (Pair a).
         pairf = Functor mapPair.
@@ -80,8 +88,10 @@ higherKindedSpec = do
         data Bifunctor (f : * -> * -> *) = Bifunctor (Bimap f).
 
         bimap : forall (f : * -> * -> *). Bifunctor f -> Bimap f.
-        bimap = \f -> case f of
-          | Bifunctor bimap' -> bimap'.
+        bimap = \f -> 
+          case f of
+          | Bifunctor bimap' -> bimap'
+          end.
 
         data Pair a b = Pair a b.
 
@@ -92,8 +102,10 @@ higherKindedSpec = do
         second = \f fn -> bimap f (\x -> x) fn.
 
         bimapPair : forall a b c d. (a -> c) -> (b -> d) -> Pair a b -> Pair c d.
-        bimapPair = \f g p -> case p of
-          | Pair x y -> Pair (f x) (g y).
+        bimapPair = \f g p -> 
+          case p of
+          | Pair x y -> Pair (f x) (g y)
+          end.
         
         pairbf : Bifunctor Pair.
         pairbf = Bifunctor bimapPair.
@@ -104,7 +116,7 @@ higherKindedSpec = do
         data Either a b = Left a | Right b.
 
         foo : Pair Bool Bool -> Pair (Either A B) Bool.
-        foo = \p -> first pairbf (\x -> case x of | True -> Left A | False -> Right B) p.
+        foo = \p -> first pairbf (\x -> case x of | True -> Left A | False -> Right B end) p.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -120,8 +132,10 @@ higherKindedSpec = do
         compose = \g f x -> g (f x).
 
         dimapArr : forall a b c d. (a -> b) -> (c -> d) -> Arr b c -> Arr a d.
-        dimapArr = \f g arr -> case arr of
-          | Arr h -> Arr (compose g (compose h f)).
+        dimapArr = \f g arr -> 
+          case arr of
+          | Arr h -> Arr (compose g (compose h f))
+          end.
 
         pairf : Profunctor Arr.
         pairf = Profunctor dimapArr.
@@ -139,9 +153,11 @@ higherKindedSpec = do
         maybeM : Monad Maybe.
         maybeM = Monad
           Just
-          (\fn x -> case x of
+          (\fn x -> 
+            case x of
             | Nothing -> Nothing
             | Just x' -> fn x'
+            end
           ).
         
         data State s a = State (s -> (a, s)).
@@ -151,11 +167,17 @@ higherKindedSpec = do
         stateM : forall s. Monad (State s).
         stateM = Monad
           (\x -> State (\s -> (x, s)))
-          (\fn x -> case x of 
-            | State sfn -> State (\s -> case sfn s of
-              | (r, s') -> case fn r of
+          (\fn x -> 
+            case x of 
+            | State sfn -> State (\s -> 
+              case sfn s of
+              | (r, s') -> 
+                case fn r of
                 | State sfn' -> sfn' s'
+                end
+              end
             )
+            end
           ).
         
         stateM' : forall s. Monad (State s).

@@ -82,14 +82,18 @@ clockSpec = do
         data Bool = True | False.
 
         isNow : forall (k : Clock) a. NowOrNext k a -> Bool.
-        isNow = \x -> case x of
+        isNow = \x -> 
+          case x of
           | Now y -> True
-          | Next y -> False.
+          | Next y -> False
+          end.
 
         not : Bool -> Bool.
-        not = \b -> case b of 
+        not = \b -> 
+          case b of 
           | True -> False
-          | False -> True.
+          | False -> True
+          end.
 
         isNext : forall (k : Clock) a. NowOrNext k a -> Bool.
         isNext = \x -> not (isNow x).
@@ -97,8 +101,9 @@ clockSpec = do
         nextOrElse : forall (k : Clock) a. |>k a -> NowOrNext k a -> |>k a.
         nextOrElse = \d non ->
           case non of
-            | Now y -> d
-            | Next y -> y.
+          | Now y -> d
+          | Next y -> y
+          end.
 
       |]
       let (Right ep, _st, _wrt) = runTypingM0 (elabProg prog) mempty 
@@ -145,7 +150,8 @@ clockSpec = do
         good3 : forall (k : Clock) a. a -> a.
         good3 = \x -> 
           case Wrap (\\(af : k) -> x) of
-            | Wrap x' -> x' [<>].
+          | Wrap x' -> x' [<>]
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
       
@@ -199,12 +205,14 @@ clockSpec = do
         hd : forall (k : Clock) a. Stream k a -> a.
         hd = \xs ->
           case unfold xs of
-          | Cons x xs' -> x.
+          | Cons x xs' -> x
+          end.
 
         tl : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
         tl = \xs ->
           case unfold xs of
-          | Cons x xs' -> xs'.
+          | Cons x xs' -> xs'
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -215,7 +223,7 @@ clockSpec = do
         data CoStream a = Cos (forall (k : Clock). Stream k a).
 
         uncos : forall a. CoStream a -> forall (k : Clock). Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+        uncos = \xs -> case xs of | Cos xs' -> xs' end.
 
         cosid : forall a. CoStream a -> CoStream a.
         cosid = \x ->
@@ -237,7 +245,7 @@ clockSpec = do
         data CoStream a = Cos (forall (kappa : Clock). Stream kappa a).
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+        uncos = \xs -> case xs of | Cos xs' -> xs' end.
 
         -- cos' : forall (k : Clock) a. a -> |>k (CoStream a) -> CoStream a.
         -- cos' = \x xs ->
@@ -271,12 +279,14 @@ clockSpec = do
         hdk : forall (k : Clock) a. Stream k a -> a.
         hdk = \xs ->
           case unfold xs of
-          | Cons x xs' -> x.
+          | Cons x xs' -> x
+          end.
 
         tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
         tlk = \xs ->
           case unfold xs of
-          | Cons x xs' -> xs'.
+          | Cons x xs' -> xs'
+          end.
 
         hd : forall a. CoStream a -> a.
         hd = \xs -> let Cons x xs' = unfold (uncos {K0} xs) in x.
@@ -300,6 +310,7 @@ clockSpec = do
                 | Cons x xs' -> 
                   let ys = \\(af : k) -> g [af] (xs' [af])
                   in cons x xs'
+                end
           in fix fn.
 
         map : forall (k : Clock) a b. (a -> b) -> Stream k a -> Stream k b.
@@ -345,6 +356,7 @@ clockSpec = do
             case n of
             | Z -> hdk xs'
             | S (n', r) -> r (tlk xs' [<>])
+            end
           in  primRec {NatF} fn n xs'.
         
         test : forall (k' : Clock) a. |>k' (CoStream a) -> |>k' (Stream k' a).
@@ -377,7 +389,8 @@ clockSpec = do
           | Z -> nil
           | S (m', r) -> 
             let (x, xs') = uncons xs
-            in lcons x (r xs').
+            in lcons x (r xs')
+          end.
 
         take : forall a. Nat -> CoStream a -> List a.
         take = \n -> primRec {NatF} takeBody n.

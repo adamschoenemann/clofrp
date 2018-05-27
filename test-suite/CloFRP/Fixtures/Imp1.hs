@@ -38,7 +38,8 @@ import CloFRP.QuasiQuoter
   def = \def m ->
     case m of
     | Nothing -> def
-    | Just x -> x.
+    | Just x -> x
+    end.
   
   -- explicit type app is required here by Haskell, but not by CloFRP
   imp4 : Maybe (forall a. a -> a) -> forall a. a -> a.

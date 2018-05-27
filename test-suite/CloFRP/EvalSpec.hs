@@ -92,9 +92,11 @@ evalSpec = do
 
     describe "case expression evaluation" $ do
       let p1 e = unann [unsafeExpr|
-        (\x -> case x of
+        (\x -> 
+          case x of
           | Nothing -> 0
           | Just x -> x
+          end
         )
       |] @@ e
       let m = [s,z,just,nothing,cons,nil]
@@ -104,10 +106,12 @@ evalSpec = do
         eval m (p1 "Nothing") `shouldBe` (int 0)
 
       let p2 e = unann [unsafeExpr|
-        (\x -> case x of
+        (\x -> 
+          case x of
           | Nothing -> 0
           | Just Nil -> 1
           | Just (Cons x' xs') -> x'
+          end
         ) 
       |] @@ e
       it "evals case expressions (3)" $ do
@@ -116,9 +120,11 @@ evalSpec = do
         eval m (p2 ("Just" @@ "Nil")) `shouldBe` (int 1)
 
       let p3 e = unann [unsafeExpr|
-        \x -> case x of
+        \x -> 
+          case x of
           | z -> 10
           | (x, y) -> x
+          end
       |] @@ e
 
       it "evals case expressions (5)" $ do
@@ -171,6 +177,7 @@ evalSpec = do
                 | Cons x xs' -> 
                   let ys = \\(af : k) -> g [af] (xs' [af])
                   in  cons (f x) ys 
+                end
             in fix mapfix in
           let const = \x ->
              let body = \xs -> cons x xs
@@ -217,6 +224,7 @@ evalSpec = do
               | Cons x xs' -> 
                 let ys = \\(af : k) -> g [af] (xs' [af])
                 in  cons (f x) ys 
+              end
           in fix mapfix in
         let z = fold Z in
         let s = \x -> fold (S x) in
@@ -256,6 +264,7 @@ evalSpec = do
                 | Cons x xs' -> 
                   let ys = \\(af : k) -> g [af] (xs' [af])
                   in  cons (f x) ys
+                end
           in fix mapfix.
 
         z : Nat.
@@ -326,14 +335,15 @@ evalSpec = do
         truefalse = fix (\g -> cons True (\\(af : k) -> cons False g)).
 
         uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-        uncos = \xs -> case xs of | Cos xs' -> xs'.
+        uncos = \xs -> case xs of | Cos xs' -> xs' end.
 
 
         hd : forall a. CoStream a -> a.
         hd = \xs -> 
           let Cos s = xs
           in case unfold s of
-             | Cons x xs' -> x.
+             | Cons x xs' -> x
+             end.
 
         -- see if you can do this better with let generalization
         tl : forall a. CoStream a -> CoStream a.
@@ -341,7 +351,7 @@ evalSpec = do
           let Cos s = x in
           let r = (case unfold s of
                   | Cons x xs' -> xs' 
-                  ) : forall (k : Clock). |>k (Stream k a)
+                  end) : forall (k : Clock). |>k (Stream k a)
           in Cos (r [<>]).
 
         eok : forall (k : Clock) a. CoStream a -> Stream k a.
@@ -388,15 +398,17 @@ evalSpec = do
         plus = \m n -> 
           let body = \x ->
             case x of
-              | Z -> n
-              | S (m', r) -> fold (S r)
+            | Z -> n
+            | S (m', r) -> fold (S r)
+            end
           in  primRec {NatF} body m.
 
         multRec : Nat -> NatF (Nat, Nat) -> Nat.
         multRec = \n x ->
           case x of
-            | Z -> fold Z
-            | S (m', r) -> plus n r.
+          | Z -> fold Z
+          | S (m', r) -> plus n r
+          end.
         
         mult : Nat -> Nat -> Nat.
         mult = \m n ->

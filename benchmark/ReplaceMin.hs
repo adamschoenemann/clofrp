@@ -32,10 +32,10 @@ import CloFRP.QuasiQuoter
   map = \f la -> app (pure f) la.
 
   fst : forall a b. (a, b) -> a.
-  fst = \x -> case x of | (y, z) -> y.
+  fst = \x -> case x of | (y, z) -> y end.
 
   snd : forall a b. (a, b) -> b.
-  snd = \x -> case x of | (y, z) -> z.
+  snd = \x -> case x of | (y, z) -> z end.
 
   feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
   feedback = \f -> fst (fix (\x -> f (map snd x))).
@@ -54,15 +54,18 @@ import CloFRP.QuasiQuoter
   plus = \m n -> 
     let body = \x ->
       case x of
-        | Z -> n
-        | S (m', r) -> fold (S r)
+      | Z -> n
+      | S (m', r) -> fold (S r)
+      end
     in  primRec {NatF} body m.
 
   mult : Nat -> Nat -> Nat.
   mult = \m n ->
-    let body = \x -> case x of
+    let body = \x -> 
+      case x of
       | Z -> z
       | S (m', r) -> plus n r
+      end
     in primRec {NatF} body m.
 
   data TreeF a f = Leaf a | Br f f deriving Functor.
@@ -72,7 +75,8 @@ import CloFRP.QuasiQuoter
   ite = \b x y ->
     case b of
     | True -> x
-    | False -> y.
+    | False -> y
+    end.
 
   min : Int -> Int -> Int.
   min = \x y -> ite (x < y) x y.
@@ -94,6 +98,7 @@ import CloFRP.QuasiQuoter
       let (Delay r', mr) = rrec m {- : (Delay (Tree Int) k, Int) -} in
       let m'       = min ml mr in
       (Delay (app (map br l') r'), m')
+    end
   ).
 
   replaceMin : Tree Int -> Tree Int.
@@ -105,11 +110,12 @@ import CloFRP.QuasiQuoter
   ofHeight = \nat -> 
     fst (primRec {NatF} (\m n ->
       case m of  
-        | Z -> (leaf n, 1 + n)
-        | S (m', r) -> 
-          let (t1, n1) = r n in
-          let (t2, n2) = r n1
-          in  (br t1 t2, n2)
+      | Z -> (leaf n, 1 + n)
+      | S (m', r) -> 
+        let (t1, n1) = r n in
+        let (t2, n2) = r n1
+        in  (br t1 t2, n2)
+      end
     ) nat 0).
   
   main : Tree Int.

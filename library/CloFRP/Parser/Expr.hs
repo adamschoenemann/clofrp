@@ -66,7 +66,9 @@ casep = do
   scrutinee <- expr
   _ <- reserved "of"
   _ <- reservedOp "|"
-  ann <*> (E.Case scrutinee <$> matchp `sepBy` (reservedOp "|"))
+  r <- ann <*> (E.Case scrutinee <$> matchp `sepBy` (reservedOp "|"))
+  _ <- reserved "end"
+  pure r 
   where
     matchp = (,) <$> (pat <* reservedOp "->") <*> expr
 

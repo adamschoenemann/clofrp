@@ -72,16 +72,20 @@ recSpec = do
         pred : Nat -> Nat.
         pred = \m ->
           case unfold m of
-            | Z -> fold Z
-            | S m' -> m'.
+          | Z -> fold Z
+          | S m' -> m'
+          end.
 
         pred2 : Nat -> Nat.
         pred2 = \m ->
           case unfold m of
-            | S m' -> case unfold m' of
-              | Z -> fold Z
-              | S m'' -> m''
-            | Z -> fold Z.
+          | S m' -> 
+            case unfold m' of
+            | Z -> fold Z
+            | S m'' -> m''
+            end
+          | Z -> fold Z
+          end.
         
         succ : Nat -> Nat.
         succ = \x -> fold (S x).
@@ -130,8 +134,9 @@ recSpec = do
         head : forall a. List a -> Maybe a.
         head = \xs ->
           case unfold xs of
-            | Nil -> Nothing
-            | Cons x xs' -> Just x.
+          | Nil -> Nothing
+          | Cons x xs' -> Just x
+          end.
         
         singleton : forall a. a -> List a.
         singleton = \x -> fold (Cons x (fold Nil)).
@@ -161,14 +166,16 @@ recSpec = do
         treeMatch : forall a. Tree a -> Maybe (Triple a (Tree a) (Tree a)).
         treeMatch = \t ->
           case unfold t of
-            | Empty -> Nothing
-            | Branch x l r -> Just (Triple x l r).
+          | Empty -> Nothing
+          | Branch x l r -> Just (Triple x l r)
+          end.
 
         nonsense : forall a. Tree a -> Nat.
         nonsense = \t -> 
           case unfold t of
-            | Empty -> fold Z
-            | Branch x l r -> fold (S (fold Z)).
+          | Empty -> fold Z
+          | Branch x l r -> fold (S (fold Z))
+          end.
 
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -181,23 +188,26 @@ recSpec = do
         plusRec : Nat -> NatF (Nat, Nat) -> Nat.
         plusRec = \n x ->
           case x of
-            | Z -> n
-            | S (m', r) -> fold (S r).
+          | Z -> n
+          | S (m', r) -> fold (S r)
+          end.
         
         -- without annotations :O
         plus : Nat -> Nat -> Nat.
         plus = \m n -> 
           let body = \x ->
             case x of
-              | Z -> n
-              | S (m', r) -> fold (S r)
+            | Z -> n
+            | S (m', r) -> fold (S r)
+            end
           in  primRec {NatF} body m.
 
         multRec : Nat -> NatF (Nat, Nat) -> Nat.
         multRec = \n x ->
           case x of
-            | Z -> fold Z
-            | S (m', r) -> plus n r.
+          | Z -> fold Z
+          | S (m', r) -> plus n r
+          end.
         
         mult : Nat -> Nat -> Nat.
         mult = \m n ->
@@ -206,9 +216,11 @@ recSpec = do
         -- without annotations :O
         mult' : Nat -> Nat -> Nat.
         mult' = \m n ->
-          let body = \x -> case x of
+          let body = \x -> 
+            case x of
             | Z -> fold Z
             | S (m', r) -> plus n r
+            end
           in primRec {NatF} body m.
 
       |]
@@ -222,8 +234,9 @@ recSpec = do
         mapRec : forall a b. (a -> b) -> ListF a (List a, List b) -> List b.
         mapRec = \f l->
           case l of
-            | Nil -> fold Nil
-            | Cons x (xs, ys) -> fold (Cons (f x) ys).
+          | Nil -> fold Nil
+          | Cons x (xs, ys) -> fold (Cons (f x) ys)
+          end.
 
         map : forall a b. (a -> b) -> List a -> List b.
         map = \f xs -> primRec {ListF a} (mapRec f) xs.
@@ -233,8 +246,9 @@ recSpec = do
         map' = \f xs -> 
           let body = \x -> 
             case x of
-              | Nil -> fold Nil
-              | Cons x (xs, ys) -> fold (Cons (f x) ys)
+            | Nil -> fold Nil
+            | Cons x (xs, ys) -> fold (Cons (f x) ys)
+            end
           in  primRec {ListF a} body xs.
 
         type Fmap (f : * -> *) = forall a b. (a -> b) -> f a -> f b.
@@ -246,7 +260,8 @@ recSpec = do
         listf : forall a. Functor ListW.
         listf = Functor (\f l -> 
           case l of  
-            | ListW ls -> ListW (map f ls)
+          | ListW ls -> ListW (map f ls)
+          end
         ).
 
       |]
@@ -260,8 +275,9 @@ recSpec = do
         mapRec : forall a b. (a -> b) -> TreeF a (Tree a, Tree b) -> Tree b.
         mapRec = \f t ->
           case t of
-            | Empty -> fold Empty
-            | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec).
+          | Empty -> fold Empty
+          | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec)
+          end.
 
         map : forall a b. (a -> b) -> Tree a -> Tree b.
         map = \f xs -> primRec {TreeF a} (mapRec f) xs.
@@ -271,8 +287,9 @@ recSpec = do
         map' = \f xs -> 
           let body = \t -> 
             case t of
-              | Empty -> fold Empty
-              | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec)
+            | Empty -> fold Empty
+            | Branch x (l, lrec) (r, rrec) -> fold (Branch (f x) lrec rrec)
+            end
           in  primRec {TreeF a} body xs.
 
       |]

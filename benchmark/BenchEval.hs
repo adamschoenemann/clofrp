@@ -235,28 +235,31 @@ simpleTrans = [clofrp|
   data Bool = True | False.        
 
   uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-  uncos = \xs -> case xs of | Cos xs' -> xs'.
+  uncos = \xs -> case xs of | Cos xs' -> xs' end.
 
   tlk : forall (k : Clock) a. Stream k a -> |>k (Stream k a).
   tlk = \xs ->
     case unfold xs of
-    | Cons x xs' -> xs'.
+    | Cons x xs' -> xs'
+    end.
 
   tl : forall a. CoStream a -> CoStream a.
   tl = \xs -> Cos ((tlk (uncos xs)) [<>]).
 
   negate : forall (k : Clock). Stream k Bool -> Stream k Bool.
   negate = fix (\g xs ->
-     case unfold xs of 
-     | Cons x xs'-> 
-       let x' = (case x of | True -> False | False -> True) : Bool
-       in  fold (Cons x' (\\(af : k) -> (g [af]) (xs' [af])))
+    case unfold xs of 
+    | Cons x xs'-> 
+      let x' = (case x of | True -> False | False -> True end) : Bool
+      in  fold (Cons x' (\\(af : k) -> (g [af]) (xs' [af])))
+    end
   ).
 
   fixid : forall (k : Clock) a. Stream k a -> Stream k a.
   fixid = fix (\g xs -> 
     case unfold xs of
     | Cons x xs' -> fold (Cons x (\\(af : k) -> g [af] (xs' [af])))
+    end
   ).
 
   main : Stream K0 Bool -> Stream K0 Bool.
@@ -295,10 +298,10 @@ replaceMin =
       map = \f la -> app (pure f) la.
 
       fst : forall a b. (a, b) -> a.
-      fst = \x -> case x of | (y, z) -> y.
+      fst = \x -> case x of | (y, z) -> y end.
 
       snd : forall a b. (a, b) -> b.
-      snd = \x -> case x of | (y, z) -> z.
+      snd = \x -> case x of | (y, z) -> z end.
 
       feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
       feedback = \f -> fst (fix (\x -> f (map snd x))).
@@ -317,15 +320,18 @@ replaceMin =
       plus = \m n -> 
         let body = \x ->
           case x of
-            | Z -> n
-            | S (m', r) -> fold (S r)
+          | Z -> n
+          | S (m', r) -> fold (S r)
+          end
         in  primRec {NatF} body m.
 
       mult : Nat -> Nat -> Nat.
       mult = \m n ->
-        let body = \x -> case x of
+        let body = \x -> 
+          case x of
           | Z -> z
           | S (m', r) -> plus n r
+          end
         in primRec {NatF} body m.
 
       data TreeF a f = Leaf a | Br f f deriving Functor.
@@ -335,7 +341,8 @@ replaceMin =
       ite = \b x y ->
         case b of
         | True -> x
-        | False -> y.
+        | False -> y
+        end.
 
       min : Int -> Int -> Int.
       min = \x y -> ite (x < y) x y.
@@ -357,6 +364,7 @@ replaceMin =
           let (Delay r', mr) = rrec m {- : (Delay (Tree Int) k, Int) -} in
           let m'       = min ml mr in
           (Delay (app (map br l') r'), m')
+        end
       ).
 
       replaceMinK : forall (k : Clock). Tree Int -> Delay (Tree Int) k.
@@ -371,11 +379,12 @@ replaceMin =
       ofHeight = \nat -> 
         fst (primRec {NatF} (\m n ->
           case m of  
-            | Z -> (leaf n, 1 + n)
-            | S (m', r) -> 
-              let (t1, n1) = r n in
-              let (t2, n2) = r n1
-              in  (br t1 t2, n2)
+          | Z -> (leaf n, 1 + n)
+          | S (m', r) -> 
+            let (t1, n1) = r n in
+            let (t2, n2) = r n1
+            in  (br t1 t2, n2)
+          end  
         ) nat 0).
       
       main : Tree Int.
@@ -581,6 +590,7 @@ bench_scaryConst = do
       let mapfix = \g xs ->
             case unfold xs of
             | Cons x xs' -> cons (f x) (\\(af : k) -> g [af] (xs' [af]))
+            end
       in fix mapfix.
 
     nats : forall (k : Clock). Int -> Stream k Int.

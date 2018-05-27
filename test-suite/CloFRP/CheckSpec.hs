@@ -667,22 +667,6 @@ typecheckSpec = do
          shouldFail $ runCheck (mk ctx) ("x" @-> "x") (E.forAll ["a","a"] $ "a" @->: "a") 
 
   describe "Coverage" $ do
-    describe "normalizePattern" $ do
-      it "expands to constructors (1)" $ do
-        Coverage.normalizePattern (E.match "MkUnit" []) (E.bind "x") `shouldBe` Just (E.match "MkUnit" [])
-      it "expands to constructors (2)" $ do
-        Coverage.normalizePattern 
-          (E.match "Cons" [E.bind "x", E.match "Nil" []])
-          (E.match "Cons" [E.bind "x", E.bind"xs"]) 
-          `shouldBe` Just (E.match "Cons" [E.bind "x", E.match "Nil" []])
-
-    describe "retainInvariant" $ do
-      specify "it works (1)" $ do
-        Coverage.retainInvariant @[] (E.match "MkUnit" []) [E.match "MkUnit" [], E.bind "xs"]
-          `shouldBe` [E.match "MkUnit" [], E.match "MkUnit" []]
-      specify "it works (2)" $ do
-        Coverage.retainInvariant @[] (E.match "Nil" []) [E.match "Nil" [], E.bind "xs"]
-          `shouldBe` [E.match "Nil" []]
 
     describe "unify" $ do
       it "unifies nullary constructors" $ do
@@ -695,229 +679,229 @@ typecheckSpec = do
         Coverage.unifyStrict (E.match "MkUnit" []) (E.bind "x") `shouldBe` Nothing
 
 
-  describe "coveredBy" $ do
-    let destr name typ bound args = 
-          name |-> Destr name typ bound args 
-    specify "bind-patterns covers all" $ do
-      runTypingM0 @() ("xs" `Coverage.coveredBy` ["all"]) mempty `shouldYield` ()
+    describe "coveredBy" $ do
+      let destr name typ bound args = 
+            name |-> Destr name typ bound args 
+      specify "bind-patterns covers all" $ do
+        runTypingM0 @() ("xs" `Coverage.coveredBy` ["all"]) mempty `shouldYield` ()
 
-    specify "unit type covered by one match" $ do
-      let ctx = TR 
-            { trCtx = ["one" .: "Unit"]
-            , trFree = mempty
-            , trKinds = ["Unit" |-> Star]
-            , trDestrs = [destr "MkUnit" "Unit" [] []]
-            , trInstances = mempty
-            }
-      runTypingM0 @() ("one" `Coverage.coveredBy` [E.match "MkUnit" []]) ctx `shouldYield` ()
+      specify "unit type covered by one match" $ do
+        let ctx = TR 
+              { trCtx = ["one" .: "Unit"]
+              , trFree = mempty
+              , trKinds = ["Unit" |-> Star]
+              , trDestrs = [destr "MkUnit" "Unit" [] []]
+              , trInstances = mempty
+              }
+        runTypingM0 @() ("one" `Coverage.coveredBy` [E.match "MkUnit" []]) ctx `shouldYield` ()
 
-    specify "succeeds for identity wrapper" $ do
-      let ctx = TR 
-            { trCtx = ["x" .: ("Id" @@: "Unit")]
-            , trFree = mempty
-            , trKinds = ["Unit" |-> Star, "Id" |-> Star :->*: Star]
-            , trDestrs = [destr "MkUnit" "Unit" [] [], destr "MkId" ("Id" @@: "p") [("p", Star)] ["p"]]
-            , trInstances = mempty
-            }
-      runTypingM0 @() ("x" `Coverage.coveredBy` [E.match "MkId" ["z"]]) ctx `shouldYield` ()
-      runTypingM0 @() ("x" `Coverage.coveredBy` [E.match "MkId" [E.match "MkUnit" []]]) ctx `shouldYield` ()
+      specify "succeeds for identity wrapper" $ do
+        let ctx = TR 
+              { trCtx = ["x" .: ("Id" @@: "Unit")]
+              , trFree = mempty
+              , trKinds = ["Unit" |-> Star, "Id" |-> Star :->*: Star]
+              , trDestrs = [destr "MkUnit" "Unit" [] [], destr "MkId" ("Id" @@: "p") [("p", Star)] ["p"]]
+              , trInstances = mempty
+              }
+        runTypingM0 @() ("x" `Coverage.coveredBy` [E.match "MkId" ["z"]]) ctx `shouldYield` ()
+        runTypingM0 @() ("x" `Coverage.coveredBy` [E.match "MkId" [E.match "MkUnit" []]]) ctx `shouldYield` ()
 
-    specify "succeeds for deeply nested maybe match" $ do
-      let ctx = TR
-            { trCtx = ["something" .: ("Maybe" @@: ("Maybe" @@: "Unit"))]
-            , trFree = mempty
-            , trKinds = ["Maybe" |-> Star :->*: Star, "Unit" |-> Star]
-            , trDestrs = 
-                [ destr "Nothing" ("Maybe" @@: "a") [("a", Star)] []
-                , destr "Just" ("Maybe" @@: "a") [("a", Star)] ["a"]
-                , destr "MkUnit" "Unit" [] []
-                ]
-            , trInstances = mempty
-            }
-      let clauses = 
-            [ E.match "Nothing" []
-            , E.match "Just"
-              [ E.match "Nothing" [] ]
-            , E.match "Just"
-              [ E.match "Just" ["x"] ]
-            ]
-      runTypingM0 @() ("something" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
-
-    specify "fails for incorrect deeply nested list match" $ do
-      {-
-        case lst of
-          | Nil -> ...
-          | Cons MkUnit (Cons y xs) -> ...
-      -}
-      let ctx = TR
-            { trCtx = ["lst" .: ("List" @@: "Unit")]
-            , trFree = mempty
-            , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
-            , trDestrs = 
-                [ destr "Nil" ("List" @@: "a") [("a", Star)] []
-                , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
-                , destr "MkUnit" "Unit" [] []
-                ]
-            , trInstances = mempty
-            }
-      let clauses = 
-            [ E.match "Nil" []
-            , E.match "Cons"
-              [ E.match "MkUnit" []
-              , E.match "Cons" ["y", "xs"]
+      specify "succeeds for deeply nested maybe match" $ do
+        let ctx = TR
+              { trCtx = ["something" .: ("Maybe" @@: ("Maybe" @@: "Unit"))]
+              , trFree = mempty
+              , trKinds = ["Maybe" |-> Star :->*: Star, "Unit" |-> Star]
+              , trDestrs = 
+                  [ destr "Nothing" ("Maybe" @@: "a") [("a", Star)] []
+                  , destr "Just" ("Maybe" @@: "a") [("a", Star)] ["a"]
+                  , destr "MkUnit" "Unit" [] []
+                  ]
+              , trInstances = mempty
+              }
+        let clauses = 
+              [ E.match "Nothing" []
+              , E.match "Just"
+                [ E.match "Nothing" [] ]
+              , E.match "Just"
+                [ E.match "Just" ["x"] ]
               ]
-            ]
-      runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldFailWith` 
-        errs (UncoveredCases $ E.match "Cons" [E.match "MkUnit" [], E.match "Nil" []])
+        runTypingM0 @() ("something" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
 
-    specify "succeeds for correct deeply nested list match" $ do
-      {-
-        case lst of
-          | Nil -> ...
-          | Cons MkUnit (Cons y xs) -> ...
-          | Cons MkUnit xs -> ...
-        
-      -}
-      {-
-        TODO: wont match because we filter too aggresively. non-scrutinizing patters
-        should be included in the filtered covering patterns in nested calls
-      -}
-      let ctx = TR
-            { trCtx = ["lst" .: ("List" @@: "Unit")]
-            , trFree = mempty
-            , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
-            , trDestrs = 
-                [ destr "Nil" ("List" @@: "a") [("a", Star)] []
-                , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
-                , destr "MkUnit" "Unit" [] []
+      specify "fails for incorrect deeply nested list match" $ do
+        {-
+          case lst of
+            | Nil -> ...
+            | Cons MkUnit (Cons y xs) -> ...
+        -}
+        let ctx = TR
+              { trCtx = ["lst" .: ("List" @@: "Unit")]
+              , trFree = mempty
+              , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
+              , trDestrs = 
+                  [ destr "Nil" ("List" @@: "a") [("a", Star)] []
+                  , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
+                  , destr "MkUnit" "Unit" [] []
+                  ]
+              , trInstances = mempty
+              }
+        let clauses = 
+              [ E.match "Nil" []
+              , E.match "Cons"
+                [ E.match "MkUnit" []
+                , E.match "Cons" ["y", "xs"]
                 ]
-            , trInstances = mempty
-            }
-      let clauses = 
-            [ E.match "Nil" []
-            , E.match "Cons"
-              [ E.match "MkUnit" []
-              , E.match "Cons" ["y", "xs"]
               ]
-            , E.match "Cons"
-              [ E.match "MkUnit" []
+        runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldFailWith` 
+          errs (UncoveredCases $ E.match "Cons" [E.match "MkUnit" [], E.match "Nil" []])
+
+      specify "succeeds for correct deeply nested list match" $ do
+        {-
+          case lst of
+            | Nil -> ...
+            | Cons MkUnit (Cons y xs) -> ...
+            | Cons MkUnit xs -> ...
+          
+        -}
+        {-
+          TODO: wont match because we filter too aggresively. non-scrutinizing patters
+          should be included in the filtered covering patterns in nested calls
+        -}
+        let ctx = TR
+              { trCtx = ["lst" .: ("List" @@: "Unit")]
+              , trFree = mempty
+              , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
+              , trDestrs = 
+                  [ destr "Nil" ("List" @@: "a") [("a", Star)] []
+                  , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
+                  , destr "MkUnit" "Unit" [] []
+                  ]
+              , trInstances = mempty
+              }
+        let clauses = 
+              [ E.match "Nil" []
+              , E.match "Cons"
+                [ E.match "MkUnit" []
+                , E.match "Cons" ["y", "xs"]
+                ]
+              , E.match "Cons"
+                [ E.match "MkUnit" []
+                , E.bind "xs"
+                ]
+              ]
+        runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
+
+      specify "fails for empty clauses" $ 
+        runTypingM0 @() ("xs" `Coverage.coveredBy` []) mempty `shouldFailWith` 
+          errs (UncoveredCases "xs")
+
+      specify "fails for non-exhaustive match" $ do
+        let ctx = TR
+              { trCtx = ["something" .: ("Maybe" @@: "Unit")]
+              , trFree = mempty
+              , trKinds = ["Maybe" |-> Star :->*: Star, "Unit" |-> Star]
+              , trDestrs = 
+                  [ destr "Nothing" ("Maybe" @@: "a") [("a", Star)] []
+                  , destr "Just" ("Maybe" @@: "a") [("a", Star)] ["a"]
+                  ]
+              , trInstances = mempty
+              }
+        let clauses = [E.match "Nothing" []]
+        runTypingM0 @() ("something" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
+          errs (UncoveredCases $ E.match "Just" [E.bind (E.mname 2)])
+
+      specify "succeeds for overlapping but not redundant clauses" $ do
+        let ctx = TR
+              { trCtx = ["lst" .: ("List" @@: "Unit")]
+              , trFree = mempty
+              , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
+              , trDestrs = 
+                  [ destr "Nil" ("List" @@: "a") [("a", Star)] []
+                  , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
+                  ]
+              , trInstances = mempty
+              }
+        let clauses = 
+              [ E.match "Nil" []
               , E.bind "xs"
               ]
-            ]
-      runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
+        runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
 
-    specify "fails for empty clauses" $ 
-      runTypingM0 @() ("xs" `Coverage.coveredBy` []) mempty `shouldFailWith` 
-        errs (UncoveredCases "xs")
+      specify "fails for unreachable pattern (1)" $ do
+        let ctx = TR
+              { trCtx = ["one" .: "Unit"]
+              , trFree = mempty
+              , trKinds = ["Unit" |-> Star]
+              , trDestrs = [ destr "MkUnit" "Unit" [] [] ]
+              , trInstances = mempty
+              }
+        let clauses = [ E.match "MkUnit" [], E.bind "x" ]
+        runTypingM0 @() ("one" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
+          errs (UnreachableCases $ [E.bind "x"])
 
-    specify "fails for non-exhaustive match" $ do
-      let ctx = TR
-            { trCtx = ["something" .: ("Maybe" @@: "Unit")]
-            , trFree = mempty
-            , trKinds = ["Maybe" |-> Star :->*: Star, "Unit" |-> Star]
-            , trDestrs = 
-                [ destr "Nothing" ("Maybe" @@: "a") [("a", Star)] []
-                , destr "Just" ("Maybe" @@: "a") [("a", Star)] ["a"]
-                ]
-            , trInstances = mempty
-            }
-      let clauses = [E.match "Nothing" []]
-      runTypingM0 @() ("something" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
-        errs (UncoveredCases $ E.match "Just" [E.bind (E.mname 2)])
+      specify "fails for unreachable pattern (2)" $ do
+        let ctx = TR
+              { trCtx = ["one" .: "Unit"]
+              , trFree = mempty
+              , trKinds = ["Unit" |-> Star]
+              , trDestrs = [ destr "MkUnit" "Unit" [] [] ]
+              , trInstances = mempty
+              }
+        let clauses = [ E.bind "x", E.match "MkUnit" [] ]
+        runTypingM0 @() ("one" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
+          errs (UnreachableCases $ [E.match "MkUnit" []])
 
-    specify "succeeds for overlapping but not redundant clauses" $ do
-      let ctx = TR
-            { trCtx = ["lst" .: ("List" @@: "Unit")]
-            , trFree = mempty
-            , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
-            , trDestrs = 
-                [ destr "Nil" ("List" @@: "a") [("a", Star)] []
-                , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
-                ]
-            , trInstances = mempty
-            }
-      let clauses = 
-            [ E.match "Nil" []
-            , E.bind "xs"
-            ]
-      runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
+      specify "fails for unreachable pattern (3)" $ do
+        let ctx = TR
+              { trCtx = ["lst" .: ("List" @@: "Unit")]
+              , trFree = mempty
+              , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
+              , trDestrs = 
+                  [ destr "Nil" ("List" @@: "a") [("a", Star)] []
+                  , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
+                  ]
+              , trInstances = mempty
+              }
+        let clauses = 
+              [ E.match "Nil" []
+              , E.match "Cons" [E.bind "x", E.bind "xs"]
+              , E.bind "xs"
+              ]
+        runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
+          errs (UnreachableCases $ [E.bind "xs"])
 
-    specify "fails for unreachable pattern (1)" $ do
-      let ctx = TR
-            { trCtx = ["one" .: "Unit"]
-            , trFree = mempty
-            , trKinds = ["Unit" |-> Star]
-            , trDestrs = [ destr "MkUnit" "Unit" [] [] ]
-            , trInstances = mempty
-            }
-      let clauses = [ E.match "MkUnit" [], E.bind "x" ]
-      runTypingM0 @() ("one" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
-        errs (UnreachableCases $ [E.bind "x"])
+      -- specify "fails for unreachable nested pattern" $ do
+      --   let ctx = TR
+      --         { trCtx = ["something" .: ("Maybe" @@: "Unit")]
+      --         , trFree = mempty
+      --         , trKinds = ["Maybe" |-> Star :->*: Star, "Unit" |-> Star]
+      --         , trDestrs = 
+      --             [ destr "Nothing" ("Maybe" @@: "a") [("a", Star)] []
+      --             , destr "Just" ("Maybe" @@: "a") [("a", Star)] ["a"]
+      --             , destr "MkUnit" "Unit" [] []
+      --             ]
+      --         , trInstances = mempty
+      --         }
+      --   let clauses = 
+      --         [ E.match "Nothing" []
+      --         , E.match "Just" [ E.match "MkUnit" []]
+      --         , E.match "Just" [E.bind "x"]
+      --         ]
+      --   runTypingM0 @() ("something" `coveredBy` clauses) ctx `shouldFailWith`
+      --     errs (UncoveredCases $ E.match "Just" [E.bind (E.mname 2)])
 
-    specify "fails for unreachable pattern (2)" $ do
-      let ctx = TR
-            { trCtx = ["one" .: "Unit"]
-            , trFree = mempty
-            , trKinds = ["Unit" |-> Star]
-            , trDestrs = [ destr "MkUnit" "Unit" [] [] ]
-            , trInstances = mempty
-            }
-      let clauses = [ E.bind "x", E.match "MkUnit" [] ]
-      runTypingM0 @() ("one" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
-        errs (UnreachableCases $ [E.match "MkUnit" []])
-
-    specify "fails for unreachable pattern (3)" $ do
-      let ctx = TR
-            { trCtx = ["lst" .: ("List" @@: "Unit")]
-            , trFree = mempty
-            , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
-            , trDestrs = 
-                [ destr "Nil" ("List" @@: "a") [("a", Star)] []
-                , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
-                ]
-            , trInstances = mempty
-            }
-      let clauses = 
-            [ E.match "Nil" []
-            , E.match "Cons" [E.bind "x", E.bind "xs"]
-            , E.bind "xs"
-            ]
-      runTypingM0 @() ("lst" `Coverage.coveredBy` clauses) ctx `shouldFailWith`
-        errs (UnreachableCases $ [E.bind "xs"])
-
-    -- specify "fails for unreachable nested pattern" $ do
-    --   let ctx = TR
-    --         { trCtx = ["something" .: ("Maybe" @@: "Unit")]
-    --         , trFree = mempty
-    --         , trKinds = ["Maybe" |-> Star :->*: Star, "Unit" |-> Star]
-    --         , trDestrs = 
-    --             [ destr "Nothing" ("Maybe" @@: "a") [("a", Star)] []
-    --             , destr "Just" ("Maybe" @@: "a") [("a", Star)] ["a"]
-    --             , destr "MkUnit" "Unit" [] []
-    --             ]
-    --         , trInstances = mempty
-    --         }
-    --   let clauses = 
-    --         [ E.match "Nothing" []
-    --         , E.match "Just" [ E.match "MkUnit" []]
-    --         , E.match "Just" [E.bind "x"]
-    --         ]
-    --   runTypingM0 @() ("something" `coveredBy` clauses) ctx `shouldFailWith`
-    --     errs (UncoveredCases $ E.match "Just" [E.bind (E.mname 2)])
-
-    specify "succeeds for list match" $ do
-      let ctx = TR
-            { trCtx = ["xs" .: ("List" @@: "Unit")]
-            , trFree = mempty
-            , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
-            , trDestrs = 
-                [ destr "Nil" ("List" @@: "a") [("a", Star)] []
-                , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
-                ]
-            , trInstances = mempty
-            }
-      let clauses = [E.match "Nil" [], E.match "Cons" ["x", "xs'"]]
-      runTypingM0 @() ("xs" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
+      specify "succeeds for list match" $ do
+        let ctx = TR
+              { trCtx = ["xs" .: ("List" @@: "Unit")]
+              , trFree = mempty
+              , trKinds = ["List" |-> Star :->*: Star, "Unit" |-> Star]
+              , trDestrs = 
+                  [ destr "Nil" ("List" @@: "a") [("a", Star)] []
+                  , destr "Cons" ("List" @@: "a") [("a", Star)] ["a", "List" @@: "a"]
+                  ]
+              , trInstances = mempty
+              }
+        let clauses = [E.match "Nil" [], E.match "Cons" ["x", "xs'"]]
+        runTypingM0 @() ("xs" `Coverage.coveredBy` clauses) ctx `shouldYield` ()
 
   describe "kindOf" $ do
     let kinds = [ ("List"  |-> Star :->*: Star)

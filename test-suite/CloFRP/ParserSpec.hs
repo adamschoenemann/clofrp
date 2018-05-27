@@ -140,34 +140,34 @@ parserSpec = do
       Right e -> e `shouldBe` (("x" @-> ("x" @:: "Int")) @:: (E.free "Bool" @->: E.free "Int"))
   
   it "parses case statements" $ do
-    case E.unannE <$> parse P.expr "" "case x of | y -> y" of
+    case E.unannE <$> parse P.expr "" "case x of | y -> y end" of
       Right e -> e `shouldBe` E.caseof "x" [("y", "y")]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case x of | Tuple a b -> 10 | y -> y" of
+    case E.unannE <$> parse P.expr "" "case x of | Tuple a b -> 10 | y -> y end" of
       Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" ["a", "b"], E.int 10), ("y", "y")]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case x of | Tuple (Cons x y) b -> 10 | y -> y" of
+    case E.unannE <$> parse P.expr "" "case x of | Tuple (Cons x y) b -> 10 | y -> y end" of
       Right e -> e `shouldBe` E.caseof "x" [(E.match "Tuple" [E.match "Cons" ["x", "y"], "b"], E.int 10), ("y", "y")]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case n of | Z -> n | S n' -> n'" of
+    case E.unannE <$> parse P.expr "" "case n of | Z -> n | S n' -> n' end" of
       Right e -> e `shouldBe` E.caseof "n" [(E.match "Z" [], "n"), (E.match "S" ["n'"], "n'")]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case n of | (a,b) -> n" of
+    case E.unannE <$> parse P.expr "" "case n of | (a,b) -> n end" of
       Right e -> e `shouldBe` E.caseof "n" [ (E.pTup ["a", "b"], "n") ]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case n of | (Z,b) -> n" of
+    case E.unannE <$> parse P.expr "" "case n of | (Z,b) -> n end" of
       Right e -> e `shouldBe` E.caseof "n" [ (E.pTup [E.match "Z" [], "b"], "n") ]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case n of | (a,(b,c)) -> n" of
+    case E.unannE <$> parse P.expr "" "case n of | (a,(b,c)) -> n end" of
       Right e -> e `shouldBe` E.caseof "n" [ (E.pTup ["a", E.pTup ["b", "c"]], "n") ]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case n of | (S n',b) -> n" of
+    case E.unannE <$> parse P.expr "" "case n of | (S n',b) -> n end" of
       Right e -> e `shouldBe` E.caseof "n" [ (E.pTup [E.match "S" ["n'"], "b"], "n") ]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case n of | (S (a,b),c) -> n" of
+    case E.unannE <$> parse P.expr "" "case n of | (S (a,b),c) -> n end" of
       Right e -> e `shouldBe` E.caseof "n" [ (E.pTup [E.match "S" [E.pTup ["a", "b"]], "c"], "n") ]
       Left e -> failure $ show e
-    case E.unannE <$> parse P.expr "" "case n of | (a,(Z,b)) -> n | (S n', S (x,y)) -> n'" of
+    case E.unannE <$> parse P.expr "" "case n of | (a,(Z,b)) -> n | (S n', S (x,y)) -> n' end" of
       Right e -> e `shouldBe` 
         E.caseof "n" 
           [ (E.pTup ["a", E.pTup [E.match "Z" [], "b"]], "n")

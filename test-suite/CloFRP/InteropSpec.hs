@@ -111,8 +111,9 @@ clott_add = [clofrp|
   plus = \m n -> 
     let body = \x ->
       case x of
-        | Z -> n
-        | S (m', r) -> s r
+      | Z -> n
+      | S (m', r) -> s r
+      end
     in  primRec {NatF} body m.
 
   app : forall (k : Clock) a b. |>k (a -> b) -> |>k a -> |>k b.
@@ -125,9 +126,11 @@ clott_add = [clofrp|
   main = 
     fix (\g pairs -> 
       case unfold pairs of   
-        | Cons pair xs -> 
-          case pair of
-          | (x1, x2) -> fold (Cons (plus x1 x2) (app g xs))
+      | Cons pair xs -> 
+        case pair of
+        | (x1, x2) -> fold (Cons (plus x1 x2) (app g xs))
+        end
+      end
     ).
 |]
 
@@ -224,7 +227,8 @@ interopSpec = do
         main = \x -> 
           case x of
           | True -> False
-          | False -> True.
+          | False -> True
+          end.
       |]
       transform prog False `shouldBe` True
 
@@ -243,8 +247,9 @@ interopSpec = do
         plus = \m n -> 
           let body = \x ->
             case x of
-              | Z -> n
-              | S (m', r) -> s r
+            | Z -> n
+            | S (m', r) -> s r
+            end
           in  primRec {NatF} body m.
 
         main : Nat -> Nat.
@@ -260,7 +265,8 @@ interopSpec = do
         main : Foo Bool -> Bool.
         main = \x ->
           case x of
-          | Foo (Wrap b) -> b.
+          | Foo (Wrap b) -> b
+          end.
       |]
       transform prog (Foo (Wrap True)) `shouldBe` True
     
@@ -291,8 +297,9 @@ interopSpec = do
         negate = fix (\g xs ->
           case unfold xs of 
           | Cons x xs'-> 
-            let x' = (case x of | True -> False | False -> True) : Bool
+            let x' = (case x of | True -> False | False -> True end) : Bool
             in  fold (Cons x' (\\(af : k) -> (g [af]) (xs' [af])))
+          end
         ).
 
         -- fixid : forall (k : Clock) a. Stream k a -> Stream k a.

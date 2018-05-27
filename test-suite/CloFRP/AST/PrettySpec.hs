@@ -69,8 +69,8 @@ prettySpec = do
       pps ("Tuple" @@ ("a" @-> c) @@ b) `shouldBe` "Tuple (\\a -> c) b"
       pps (E.the "Nat" (E.int 10)) `shouldBe` "(10 : Nat)"
       pps (E.the ("Nat" @->: "Bool") (E.int 10)) `shouldBe` "(10 : Nat -> Bool)"
-      pps [unsafeExpr|case 10 of | x -> 0|] `shouldBe` "case 10 of | x -> 0"
-      ppsw 100 [unsafeExpr|case b of | True -> 0 | False -> 1|] `shouldBe` "case b of | True -> 0 | False -> 1"
+      pps [unsafeExpr|case 10 of | x -> 0 end|] `shouldBe` "case 10 of | x -> 0 end"
+      ppsw 100 [unsafeExpr|case b of | True -> 0 | False -> 1 end|] `shouldBe` "case b of | True -> 0 | False -> 1 end"
   
   describe "type synonyms" $ do
     it "works lol" $ do

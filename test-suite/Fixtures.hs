@@ -42,7 +42,8 @@ prog02 = [unsafeProg|
   plus = \m -> \n -> 
     case m of
       | Z    -> n
-      | S m' -> S (plus m' n).
+      | S m' -> S (plus m' n)
+    end.
 |]
 
 replaceMin :: Text
@@ -63,10 +64,10 @@ replaceMin =
       map = \f la -> app (pure f) la.
 
       fst : forall a b. (a, b) -> a.
-      fst = \x -> case x of | (y, z) -> y.
+      fst = \x -> case x of | (y, z) -> y end.
 
       snd : forall a b. (a, b) -> b.
-      snd = \x -> case x of | (y, z) -> z.
+      snd = \x -> case x of | (y, z) -> z end.
 
       feedback : forall (k : Clock) (b : Clock -> *) u. (|>k u -> (b k, u)) -> b k.
       feedback = \f -> fst (fix (\x -> f (map snd x))). -- x has type |>k (b k, u)
@@ -88,6 +89,7 @@ replaceMin =
         case m of 
         | Z -> fold Z
         | S (m', r) -> fold (S (r n))
+        end
       ).
 
       leaf : forall a. a -> Tree a.
@@ -107,6 +109,7 @@ replaceMin =
           let (Delay r', mr) = rrec m {- : (Delay (Tree Nat) k, Nat) -} in
           let m'       = min ml mr in
           (Delay (app (map br l') r'), m')
+        end
       ).
 
       replaceMinK : forall (k : Clock). Tree Nat -> Delay (Tree Nat) k.
@@ -126,11 +129,12 @@ replaceMin =
       ofHeight = \nat -> 
         fst (primRec {NatF} (\m n ->
           case m of  
-            | Z -> (leaf z, s n)
-            | S (m', r) -> 
-              let (t1, n1) = r n in
-              let (t2, n2) = r n1
-              in  (br t1 t2, n2)
+          | Z -> (leaf z, s n)
+          | S (m', r) -> 
+            let (t1, n1) = r n in
+            let (t2, n2) = r n1
+            in  (br t1 t2, n2)
+          end
         ) nat z).
       
       main : Tree Nat.
@@ -169,14 +173,14 @@ streamProcessing =
       let Cos s = x in
       let r = (case unfold s of
               | Cons x xs' -> xs' 
-              ) : forall (k : Clock). |>k (Stream k a)
+              end) : forall (k : Clock). |>k (Stream k a)
       in Cos (r [<>]).
 
     fst : forall a b. (a, b) -> a.
-    fst = \x -> case x of | (y, z) -> y.
+    fst = \x -> case x of | (y, z) -> y end.
 
     snd : forall a b. (a, b) -> b.
-    snd = \x -> case x of | (y, z) -> z.
+    snd = \x -> case x of | (y, z) -> z end.
 
     -- applicative structure        
     pure : forall (k : Clock) a. a -> |>k a.
@@ -201,6 +205,7 @@ streamProcessing =
     --     | Put b sp -> 
     --       let sp1 = dmap fst sp in
     --       cos b (app (app rec sp1) (pure s))
+    --     end
     --   ).
 
     uncosp : forall i o. CoSP i o -> forall (k : Clock). SP i o k.
@@ -216,6 +221,7 @@ streamProcessing =
         | Put b sp -> 
           let sp1 = dmap fst sp in
           fold (Cons b (app (app rec sp1) (pure s)))
+        end
       )).
 
     apply : forall i o. CoSP i o -> CoStream i -> CoStream o.
@@ -224,7 +230,7 @@ streamProcessing =
       in  Cos (applyk sp xs).
 
     uncos : forall (k : Clock) a. CoStream a -> Stream k a.
-    uncos = \xs -> case xs of | Cos xs' -> xs'.
+    uncos = \xs -> case xs of | Cos xs' -> xs' end.
 
     spid : forall i. CoSP i i.
     spid = CoSP (fix (\f -> fold (Get (\i -> fold (Put i f))))).

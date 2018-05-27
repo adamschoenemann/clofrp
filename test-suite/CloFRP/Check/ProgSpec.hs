@@ -124,8 +124,9 @@ progSpec = do
         foo : forall b. (forall a. NEList a) -> b.
         foo = \xs -> 
           case xs of
-            | One x -> the (b) x
-            | Cons x xs' -> the (b) x.
+          | One x -> the (b) x
+          | Cons x xs' -> the (b) x
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -135,8 +136,9 @@ progSpec = do
         foo : forall b. (forall a. NEList a) -> b.
         foo = \xs -> 
           case xs of
-            | One x -> x : b
-            | Cons x xs' -> x : b.
+          | One x -> x : b
+          | Cons x xs' -> x : b
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -157,13 +159,15 @@ progSpec = do
         maybeId = \m ->
           case m of
           | Nothing -> Nothing
-          | Just x -> Just ((x : a) : a) : Maybe a.
+          | Just x -> Just ((x : a) : a) : Maybe a
+          end.
 
         maybeMap : forall a b. (a -> b) -> Maybe a -> Maybe b.
         maybeMap = \f x ->
           case x of
           | Nothing -> Nothing : Maybe b
-          | Just x' -> Just ((f : a -> b) x') : Maybe b.
+          | Just x' -> Just ((f : a -> b) x') : Maybe b
+          end.
         
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -179,21 +183,25 @@ progSpec = do
         uncurry : forall a b c. (a -> b -> c) -> (a, b) -> c.
         uncurry = \fn t -> 
           case t of
-            | (x, y) -> fn x y.
+          | (x, y) -> fn x y
+          end.
         uncurry3 : forall a b c d. (a -> b -> c -> d) -> (a, b, c) -> d.
         uncurry3 = \fn t ->
           case t of
-            | (x, y, z) -> fn x y z.
+          | (x, y, z) -> fn x y z
+          end.
         
         pairAssocL : forall a b c. (a, (b, c)) -> ((a, b), c).
         pairAssocL = \p ->
           case p of
-            | (x, (y, z)) -> ((x, y), z).
+          | (x, (y, z)) -> ((x, y), z)
+          end.
 
         pairAssocR : forall a b c. ((a, b), c) -> (a, (b, c)).
         pairAssocR = \p ->
           case p of
-            | ((x, y), z) -> (x, (y, z)).
+          | ((x, y), z) -> (x, (y, z))
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -207,9 +215,11 @@ progSpec = do
 
         uncons : forall a. List a -> Maybe (a, List a).
         uncons = \xs -> 
-          let r = \ys -> case ys of 
+          let r = \ys -> 
+            case ys of 
             | Nil -> Nothing
             | Cons x xs' -> Just (x, xs')
+            end
           in r xs.
         
         trip : forall a. a -> (a, a, a).
@@ -239,7 +249,7 @@ progSpec = do
         data Arr a b = MkArr (a -> b).
 
         foo : forall a b s. (s -> a) -> Arr s b.
-        foo = \f -> MkArr (\s -> case f s of | x -> x).
+        foo = \f -> MkArr (\s -> case f s of | x -> x end).
       |]
       -- runCheckProg mempty prog `shouldYield` ()
       shouldFail $ runCheckProg mempty prog 
@@ -254,9 +264,12 @@ progSpec = do
         foo : Bool -> Either A B.
         foo = \b ->
           case the (forall a. a -> a) (\x -> x) of
-            | id -> case id b of
-              | True  -> Left (id MkA)
-              | False -> Right (id MkB).
+          | id -> 
+            case id b of
+            | True  -> Left (id MkA)
+            | False -> Right (id MkB)
+            end
+          end.
       |]
       runCheckProg mempty prog `shouldFailWith` (errs $ "A" `CannotSubtype` "Bool")
 
@@ -270,9 +283,11 @@ progSpec = do
         foo : Bool -> Either A B.
         foo = \b ->
           case the (Bool -> forall a. a -> a) (\b' x -> x) of
-            | id -> case id b b of
-              | True  -> Left (id b MkA)
-              | False -> Right (id b MkB).
+          | id -> case id b b of
+            | True  -> Left (id b MkA)
+            | False -> Right (id b MkB)
+            end
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
       -- runCheckProg mempty prog `shouldFailWith` (errs $ "A" `CannotSubtype` "Bool")
@@ -284,8 +299,9 @@ progSpec = do
         foo : FooBar -> Two.
         foo = \x ->
           case x of
-            | Foo -> One
-            | Bar -> Two.
+          | Foo -> One
+          | Bar -> Two
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -296,8 +312,9 @@ progSpec = do
         foo : FooBar -> Two.
         foo = \x ->
           case x of
-            | Foo -> One x
-            | Bar -> Two.
+          | Foo -> One x
+          | Bar -> Two
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -312,8 +329,9 @@ progSpec = do
         isFoo : FooBar -> Maybe Unit.
         isFoo = \x ->
           case x of
-            | Bar -> Nothing
-            | Foo i -> Just i.
+          | Bar -> Nothing
+          | Foo i -> Just i
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -323,7 +341,8 @@ progSpec = do
         unWrap : forall a. Wrap a -> a.
         unWrap = \x ->
           case x of
-            | MkWrap x' -> x'.
+          | MkWrap x' -> x'
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -333,7 +352,8 @@ progSpec = do
         unUnWrap : forall a. Wrap (Wrap a) -> a.
         unUnWrap = \x ->
           case x of
-            | MkWrap (MkWrap x') -> x'.
+          | MkWrap (MkWrap x') -> x'
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -347,17 +367,20 @@ progSpec = do
         mono1 : Poly -> forall a. a -> a.
         mono1 = \x ->
           case x of
-          | MkPoly id -> id.
+          | MkPoly id -> id
+          end.
         
         mono2 : MorePoly -> forall a. a -> a.
         mono2 = \x ->
           case x of
-          | MorePoly (MkPoly id) -> id.
+          | MorePoly (MkPoly id) -> id
+          end.
         
         mono3 : forall a. Forall (Wrap a) -> a.
         mono3 = \x ->
           case x of
-          | MkForall (MkWrap y) -> y.
+          | MkForall (MkWrap y) -> y
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -367,7 +390,8 @@ progSpec = do
         unUnWrap : forall a. Wrap (Wrap a) -> a.
         unUnWrap = \x ->
           case x of
-            | MkWrap x' -> x'.
+          | MkWrap x' -> x'
+          end.
       |]
       shouldFail $ runCheckProg mempty prog
 
@@ -378,8 +402,9 @@ progSpec = do
         head2 : forall a. List a -> Maybe a.
         head2 = \xs -> 
           case xs of
-            | xs' -> Nothing
-            | Cons x (Cons x' xs') -> Just x'.
+          | Cons x (Cons x' xs') -> Just x'
+          | xs' -> Nothing
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -393,8 +418,9 @@ progSpec = do
         head : forall a. List a -> Maybe a.
         head = \xs -> 
           case xs of
-            | Nil -> Nothing
-            | Cons x xs' -> Just x.
+          | Nil -> Nothing
+          | Cons x xs' -> Just x
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -476,12 +502,13 @@ progSpec = do
         foo : (forall a. List a) -> Unit.
         foo = \xs ->
           case xs of
-            | Nil -> MkUnit
-            | Cons x xs -> x.
+          | Nil -> MkUnit
+          | Cons x xs -> x
+          end.
         
         bar : forall a. (Unit, a).
         bar = let x = undefined : forall b. (Unit, b)
-              in  case x of | (x1,x2) -> (x1, x2).
+              in  case x of | (x1,x2) -> (x1, x2) end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -494,8 +521,9 @@ progSpec = do
         foo : (forall a. List a) -> Either Unit Bool.
         foo = \xs ->
           case xs of
-            | Cons x Nil -> Left x
-            | Cons x Nil -> Right x.
+          | Cons x Nil -> Left x
+          | Cons x Nil -> Right x
+          end.
       |]
       -- runCheckProg mempty prog `shouldYield` ()
       shouldFail $ runCheckProg mempty prog 
@@ -520,8 +548,9 @@ progSpec = do
         head : forall a b. List a -> Maybe b.
         head = \xs -> 
           case xs of
-            | Nil -> Nothing
-            | Cons x xs' -> Just x.
+          | Nil -> Nothing
+          | Cons x xs' -> Just x
+          end.
       |]
       shouldFail $ runCheckProg mempty prog 
 
@@ -531,8 +560,9 @@ progSpec = do
         getRight : forall a b. Either a b -> b.
         getRight = \e ->
           case e of
-            | Left x -> x
-            | Right x -> x.
+          | Left x -> x
+          | Right x -> x
+          end.
 
         id : forall a. a -> a.
         id = \x -> x.
@@ -550,8 +580,9 @@ progSpec = do
         toMaybe : forall a b. Either a b -> Maybe a.
         toMaybe = \e ->
           case e of
-            | Left x -> Nothing
-            | Right x -> Just x.
+          | Left x -> Nothing
+          | Right x -> Just x
+          end.
       |]
       shouldFail $ runCheckProg mempty prog 
 
@@ -562,12 +593,14 @@ progSpec = do
         unconst : forall a. Const a -> a.
         unconst = \x ->
           case x of
-          | Const c -> c.
+          | Const c -> c
+          end.
 
         unconst2 : forall a. Const (Const a) -> a.
         unconst2 = \x ->
           case x of
-          | Const (Const c) -> c.
+          | Const (Const c) -> c
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
       -- shouldFail $ runCheckProg mempty prog 
@@ -580,8 +613,9 @@ progSpec = do
         toMaybe : forall a b. Either a b -> Maybe a.
         toMaybe = \e ->
           case e of
-            | Left x -> Nothing
-            | Just x -> Just x.
+          | Left x -> Nothing
+          | Just x -> Just x
+          end.
       |]
       shouldFail $ runCheckProg mempty prog 
     
@@ -592,9 +626,10 @@ progSpec = do
 
         toMaybe : forall b. Either (forall a. a) b -> b.
         toMaybe = \e ->
-          case e of
-            | Left x -> x
-            | Just x -> x.
+        case e of
+        | Left x -> x
+        | Just x -> x
+        end.
       |]
       shouldFail $ runCheckProg mempty prog 
 
@@ -606,8 +641,9 @@ progSpec = do
         toMaybe : forall a b. Either a b -> Maybe b.
         toMaybe = \e ->
           case e of
-            | Left x -> Nothing
-            | Right x -> Just x.
+          | Left x -> Nothing
+          | Right x -> Just x
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -654,7 +690,8 @@ progSpec = do
         comap : forall a b. (b -> a) -> Predicate a -> Predicate b.
         comap = \fn -> \pred -> 
           case pred of
-            | Pred fn' -> Pred (\x -> fn' (fn x)).
+          | Pred fn' -> Pred (\x -> fn' (fn x))
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
     
@@ -672,6 +709,7 @@ progSpec = do
             | Nil -> fold Nil
             | Cons (Left x) (xs', r)  -> fold (Cons x r)
             | Cons (Right x) (xs', r) -> r
+            end
           in primRec {ListF (Either a b)} fn.
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -685,9 +723,10 @@ progSpec = do
         rights : forall a b. List (Either a b) -> List b.
         rights = \xs ->
           case xs of
-            | Nil -> Nil
-            | Cons (Left x) xs'  -> Cons x (rights xs')
-            | Cons (Right x) xs' -> rights xs'.
+          | Nil -> Nil
+          | Cons (Left x) xs'  -> Cons x (rights xs')
+          | Cons (Right x) xs' -> rights xs'
+          end.
       |]
       shouldFail $ runCheckProg mempty prog
     
@@ -700,9 +739,12 @@ progSpec = do
         app = \f x -> f x.
 
         foo : Bool -> A.
-        foo = app (\b -> case b of
+        foo = app (\b -> 
+          case b of
           | True -> A
-          | False -> A).
+          | False -> A
+          end
+        ).
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -715,9 +757,12 @@ progSpec = do
         app = \f x -> f x.
 
         foo : Bool -> A.
-        foo = app (\b -> case b of
+        foo = app (\b -> 
+          case b of
           | True -> A
-          | A -> A).
+          | A -> A
+          end
+        ).
       |]
       -- runCheckProg mempty prog `shouldFailWith` (errs $ Other $ show $ pretty (mname 2) <+> "is already assigned to Bool")
       runCheckProg mempty prog `shouldFailWith` (errs $ "A" `CannotSubtype` "Bool")
@@ -769,10 +814,11 @@ progSpec = do
         main : forall a b c d. Either (Either a b) (Either c d) -> Either (Either d c) (Either b a).
         main = \e1 ->
           case e1 of
-            | Left  (Left  a) -> Right (Left a)
-            | Left  (Right b) -> Right (Right b)
-            | Right (Left  c) -> Left  (Right c)
-            | Right (Right d) -> Left  (Left d).
+          | Left  (Left  a) -> Right (Left a)
+          | Left  (Right b) -> Right (Right b)
+          | Right (Left  c) -> Left  (Right c)
+          | Right (Right d) -> Left  (Left d)
+          end.
       |]
       shouldFail $ runCheckProg mempty prog
 
@@ -814,8 +860,7 @@ progSpec = do
         
         runList : forall a. ChurchList a -> forall r. (a -> r -> r) -> r -> r.
         runList = \cl ->
-          case cl of
-            | ChurchList fn -> fn.
+          case cl of | ChurchList fn -> fn end.
         
         -- | Make a 'ChurchList' out of a regular list.
         -- fromList : forall a. List a -> ChurchList a.
@@ -884,8 +929,9 @@ progSpec = do
         either : forall a b c. (a -> c) -> (b -> c) -> Either a b -> c.
         either = \lf rf e ->
           case e of
-            | Left l -> lf l
-            | Right r -> rf r.
+          | Left l -> lf l
+          | Right r -> rf r
+          end.
         
         lefts : forall a b. List (Either a b) -> List a.
         lefts = 
@@ -894,6 +940,7 @@ progSpec = do
             | Nil -> fold Nil
             | Cons (Left x) (xs', r)  -> fold (Cons x r)
             | Cons (Right x) (xs', r) -> r
+            end
           in primRec {ListF (Either a b)} fn.
 
         rights : forall a b. List (Either a b) -> List b.
@@ -903,40 +950,46 @@ progSpec = do
             | Nil -> fold Nil
             | Cons (Left x) (xs', r)  -> r 
             | Cons (Right x) (xs', r) -> fold (Cons x r)
+            end
           in primRec {ListF (Either a b)} fn.
 
         partitionEithers : forall a b. List (Either a b) -> (List a, List b).
         partitionEithers = 
           let fn = \xs ->
             case xs of
-              | Nil -> (fold Nil, fold Nil)
-              | Cons (Left x')  (xs', (l, r)) -> (fold (Cons x' l), r)
-              | Cons (Right x') (xs', (l, r)) -> (l, fold (Cons x' r))
+            | Nil -> (fold Nil, fold Nil)
+            | Cons (Left x')  (xs', (l, r)) -> (fold (Cons x' l), r)
+            | Cons (Right x') (xs', (l, r)) -> (l, fold (Cons x' r))
+            end
           in primRec {ListF (Either a b)} fn.
         
         isLeft : forall a b. Either a b -> Bool.
         isLeft = \e ->
           case e of
-            | Left x -> True
-            | Right x -> False.
+          | Left x -> True
+          | Right x -> False
+          end.
 
         isRight : forall a b. Either a b -> Bool.
         isRight = \e ->
           case e of
-            | Left x -> False
-            | Right x -> True.
+          | Left x -> False
+          | Right x -> True
+          end.
         
         fromLeft : forall a b. a -> Either a b -> a.
         fromLeft = \d e ->
           case e of
-            | Left x -> x
-            | Right x -> d.
+          | Left x -> x
+          | Right x -> d
+          end.
 
         fromRight : forall a b. b -> Either a b -> b.
         fromRight = \d e ->
           case e of
-            | Left x -> d
-            | Right x -> x.
+          | Left x -> d
+          | Right x -> x
+          end.
         
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -1072,8 +1125,9 @@ progSpec = do
         flip : forall a b. Either a b -> FlipSum a b.
         flip = \e ->
           case e of
-            | Left x -> Right x
-            | Right x -> Left x.
+          | Left x -> Right x
+          | Right x -> Left x
+          end.
       |]
       runCheckProg mempty prog `shouldYield` ()
 
@@ -1090,6 +1144,7 @@ progSpec = do
             case xs of
             | Nil -> ys
             | Cons x (xs', r) -> fold (Cons x (r ys))
+            end
           in  primRec {ListF a} fn.
 
         flatten : forall a. Array2D a -> Array a.
@@ -1098,6 +1153,7 @@ progSpec = do
             case xss of
             | Nil -> fold Nil
             | Cons xs (xss', r) -> app xs r
+            end
           in  primRec {ListF (List a)} fn.
       |]
       runCheckProg mempty prog `shouldYield` ()
@@ -1136,7 +1192,8 @@ progSpec = do
         units2lst : Units -> List Unit.
         units2lst = \x ->
           case x of
-            | MkPair u us -> Cons u (units2lst us).
+          | MkPair u us -> Cons u (units2lst us)
+          end.
 
       |]
       runCheckProg mempty prog `shouldFailWith` (\(e,_) -> e `shouldBe` Other "Units is recursive")
@@ -1244,7 +1301,8 @@ progSpec = do
         default = \def m ->
           case m of
           | Nothing -> def
-          | Just x -> x.
+          | Just x -> x
+          end.
         
         imp4 : Maybe (forall a. a -> a) -> forall a. a -> a.
         imp4 = \x -> default id x.
@@ -1262,7 +1320,8 @@ progSpec = do
         foo : Wrap (forall a. a -> a) -> A.
         foo = \w ->
           case w of
-          | MkWrap id -> A.
+          | MkWrap id -> A
+          end.
       |]
       shouldFail $ runCheckProg mempty prog 
       -- runCheckProg mempty prog `shouldYield` ()

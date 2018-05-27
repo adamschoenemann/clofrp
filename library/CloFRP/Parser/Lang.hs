@@ -56,6 +56,7 @@ reservedNames = [ "if"
                 , "deriving"
                 , "fmap"
                 , "extern"
+                , "end"
                 ]
 
 languageDef :: Tok.LanguageDef ()

@@ -31,6 +31,7 @@ import CloFRP.QuasiQuoter
     let mapfix = \g xs ->
           case unfold xs of
           | Cons x xs' -> cons (f x) (\\(af : k) -> g [af] (xs' [af]))
+          end
     in fix mapfix.
 
   nats : forall (k : Clock). Int -> Stream k Int.

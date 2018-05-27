@@ -5,7 +5,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module CloFRP.Check.Coverage ( coveredBy, unifyStrict, unifyNonStrict
-                             , normalizePattern, retainInvariant, checkCoverage
+                             , checkCoverage
                              ) where
 
 import GHC.Exts (toList, IsList(..), coerce)
@@ -162,7 +162,7 @@ coveredBy idealPat coveringPats = do
       withCtx (const delta) $ branch $ check refined clauses
 
 
--- deprecated
+-- | deprecated
 retainInvariant :: Foldable t => Pat a -> t (Pat a) -> [Pat a]
 retainInvariant uniWith toUni =
   reverse $ foldl' folder [] toUni where
