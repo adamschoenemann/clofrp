@@ -70,10 +70,10 @@ type DerivationTree = [(Integer, Doc ())]
 type TypingWrite a = DerivationTree 
 
 -- Typing state
-data TypingState   = 
-  TS { names :: Integer -- |Just an integer for generating names
-     , level :: Integer -- |For debugging
-     , debugDerivationTree :: DerivationTree -- |For debugging
+data TypingState = 
+  TS { names :: Integer -- ^Just an integer for generating names
+     , level :: Integer -- ^For debugging
+     , debugDerivationTree :: DerivationTree -- ^For debugging
      }
 
 -- Typing reader

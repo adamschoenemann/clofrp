@@ -3,7 +3,7 @@
 
 module CloFRP.Check.Subtyping where
 
-import Control.Monad.Error (catchError)
+import Control.Monad.Except (catchError)
 import Data.Foldable (foldrM)
 
 import CloFRP.AST.Type (PolyType, Type'(..), subst, inFreeVars)

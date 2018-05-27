@@ -1,3 +1,13 @@
+{-|
+Module      : CloFRP.Check.Coverage
+Description : Coverage checking of pattern matches
+
+Based loosely on Conor McBride's StackOverflow answer at 
+<https://stackoverflow.com/questions/7883023/algorithm-for-type-checking-ml-like-pattern-matching>
+which in turn is based on Lennart Augustsson's "Compiling Pattern Matching".
+My implementation however does not flag overlapping patterns but only fully
+redundant patterns, which is what you'd want most of the time.
+-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -9,7 +19,7 @@ module CloFRP.Check.Coverage (coveredBy, unify, checkCoverage) where
 import GHC.Exts (toList, IsList(..), coerce)
 import Data.Maybe (catMaybes, isJust)
 import Control.Monad (filterM, when, replicateM)
-import Debug.Trace (trace)
+import Data.Foldable (foldlM)
 import Data.List (foldl')
 
 import CloFRP.AST.Pat (Pat, Pat'(..))
@@ -29,6 +39,7 @@ import CloFRP.Check.Utils (existentialize)
 import CloFRP.Check.Subtyping (isSubtypeOf)
 import CloFRP.Check.Pat (checkPat)
 
+-- | A 'Unifier' is just a list of mappings from names to patterns
 newtype Unifier a = Unifier [(Name, Pat a)]
   deriving (Show, Eq, Monoid)
 
@@ -42,7 +53,17 @@ instance Pretty (Unifier a) where
     enclose "[" "]" $ cat $ punctuate "," 
       $ map (\(n,p) -> pretty n <+> "↦" <+> pretty p) pairs
 
-
+-- | @unify pat1 pat2@ will return a unifier @u@ such that @refine u pat1 = pat2@
+-- given that @pat1@ and @pat2@ are unifiable. If @pat1@ is more specific than
+-- @pat2@, the empty unifier is returned.
+-- >>> unify (Just x) (Just ())
+-- Just [x ↦ ()]
+-- 
+-- >>> unify (Just ()) (Just x)
+-- Just []
+--
+-- >>> unify (Just ()) (Cons x xs)
+-- Nothing
 unify :: Pat a -> Pat a -> Maybe (Unifier a)
 unify (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
   unify' (Bind nm1) _ = Just [(nm1, p2)]
@@ -65,6 +86,9 @@ unify (A _ pat1') p2@(A _ pat2') = unify' pat1' pat2' where
         mconcat <$> (sequence $ (zipWith unify subpats1 subpats2))
   unify' _ _ = Nothing
 
+-- | @refine uni pat@ will apply the substitutions in @uni@ to pat
+-- >>> refine [x ↦ Nothing] (Just x)
+-- Just Nothing
 refine :: Unifier a -> Pat a -> Pat a
 refine uni pat@(A ann pat') = refine' pat' where
   refine' (Bind nm)
@@ -75,10 +99,18 @@ refine uni pat@(A ann pat') = refine' pat' where
   refine' (PTuple subpats) =
     A ann (PTuple (map (refine uni) subpats))
 
+-- | A unifier is either
+-- * an injective renaming of variables or
+-- * not an injective renaming of variables because of a specific mapping
 data IsInjectiveResult a
   = Injective 
   | NotInjective Name
 
+-- | @isInjective uni@ determines if @uni@ is and injective renaming
+-- >>> isInjective [x ↦ y, z ↦ a]
+-- Injective
+-- >>> isInjective [x ↦ y, z ↦ Nil]
+-- NotInjective z
 isInjective :: Unifier a -> IsInjectiveResult a
 isInjective (Unifier xs) = foldr folder Injective xs where
   folder (_, A _ (Bind _)) acc = acc
@@ -86,8 +118,10 @@ isInjective (Unifier xs) = foldr folder Injective xs where
     NotInjective nm 
   folder (nm, A _ (PTuple _pats)) _acc = 
     NotInjective nm 
-  folder _ acc  = acc
 
+-- | A pattern matching clause that keeps track of the number of "usages".
+-- in this context, a usage is when the clause is used to discharge
+-- a constructor of a data-type
 data Clause a = Clause { usages :: Int, pattern :: Pat a }
   deriving (Show, Eq)
 
@@ -100,98 +134,102 @@ newClause pat = Clause { usages = 0, pattern = pat }
 useClause :: Clause a -> Clause a
 useClause cl = cl { usages = usages cl + 1 }
 
+-- | Check if a type is fully covered by a list of patterns
 checkCoverage :: a -> PolyType a -> [Pat a] -> TypingM a ()
 checkCoverage ann ty covering = do
   nm <- freshName
   withCtx (\c -> c <+ (nm .: ty)) $ coveredBy (A ann (Bind nm)) covering
 
--- attempt at "stateful solution". keep track of number of usages of each
+-- | A \"stateful\" solution to coverage checking. We keep track of number of usages of each
 -- clause. Every clause must be used at least once. Sequential tests should
--- make sure that redundant clauses are not reached and thus not used
-{-
-  here is a badly written example
-  xs coveredBy [{0, Nil}, {0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
-  | split xs
-  Nil coveredBy [{0, Nil}] <- increases to {1, Nil}
-  Cons `a `b coveredBy [{0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}] 
-  | split `a
-  Cons MkUnit `b coveredBy [{0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
-  | split `b
-  Cons MkUnit Nil coveredBy [{0, Cons MkUnit xs}] <- increases to {1, Cons MkUnit xs}
-  Cons MkUnit (Cons `c `d) coveredBy [{0, Cons MkUnit (Cons y xs)}, {1, Cons MkUnit xs}]
--}
+-- make sure that redundant clauses are not reached and thus not used.
+-- Here is a badly written example of
+-- 
+-- > case xs of
+-- >   Nil -> ... 
+-- >   Cons MkUnit (Cons y xs) -> ... 
+-- >   Cons MkUnit xs -> ...
+--
+-- @
+-- xs coveredBy [{0, Nil}, {0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
+-- | split xs into [Nil, Cons `a `b]
+-- \ Nil coveredBy [{0, Nil}, {0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
+-- | \ Nil covers Nil so increase first covering to {1, Nil} 
+-- \ Cons `a `b coveredBy [{1, Nil}, {0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}] 
+--   \ Nil does not unify with Cons `a `b so try next
+--   \ the unifier [`a ↦ MkUnit, `b ↦ Cons y xs] works, but not injective, so
+--     we have to split on the first mapping
+--     \ Cons MkUnit `b coveredBy [{0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
+--       unifies with [`b ↦ (Cons y xs)] which is not injective so split on `b
+--       \ Cons MkUnit Nil coveredBy [{0, Cons MkUnit (Cons y xs)}, {0, Cons MkUnit xs}]
+--         \ first doesn't match, but second does with an injective renaming, so 
+--           increase to {1, Cons MkUnit xs}
+--       \ Cons MkUnit (Cons `c `d) coveredBy [{0, Cons MkUnit (Cons y xs)}, {1, Cons MkUnit xs}]
+--         \ First unifies with the empty injective renaming, so increase to {1, Cons MkUnit (Cons y xs)}
+-- @
+-- 
+-- Every clause is used once, so we're good!
 coveredBy :: forall a. Pat a -> [Pat a] -> TypingM a ()
 coveredBy idealPat coveringPats = do
   clauses <- check idealPat (map newClause coveringPats)
-  let unreached = catMaybes $ map (\(Clause uses pat) -> if uses < 1 then Just pat else Nothing) clauses
+  let unreached = unusedPatterns clauses
   if length unreached > 0
     then unreachableCases unreached
     else pure ()
   where 
-    check :: Pat a -> [Clause a] -> TypingM a [Clause a]
-    check ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
-    check ideal clauses@(cov : covs) = do
-      rule "CoveredBy" (pretty (ideal, clauses)) 
-      case unify ideal (pattern cov) of
-        Nothing -> (cov :) <$> check ideal covs
-        Just uni -> 
-          case isInjective uni of
-            Injective -> branch $ do
-              rule "CoveredBy.Injective" (pretty uni)
-              pure (useClause cov : covs)
+    unusedPatterns clauses = 
+      let onlyUnused = \(Clause uses pat) -> if uses < 1 then Just pat else Nothing
+      in  catMaybes (map onlyUnused clauses)
 
-            NotInjective binding -> branch $ do
-              rule "CoveredBy.NotInjective" (pretty uni)
-              patTy <- lookupTyTM binding
-              constructors <- reverse <$> (silentBranch $ getPatternsOfType patTy)
-              if null constructors
-                then error $ show $ "Cant match on a value of type" <+> pretty patTy
-                  <+> "because it has no constructors"
-                else branch $ do
-                  rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
-                  splitProblems ideal patTy binding clauses constructors
+-- | Check that a pattern is covered by a list of clauses, returning the same
+-- clauses but updated with their number of usages
+check :: Pat a -> [Clause a] -> TypingM a [Clause a]
+check ideal [] = rule "CoveredBy.Uncovered" (pretty ideal) >> uncoveredCases ideal
+check ideal coverings@(cov : covs) = do
+  rule "CoveredBy" (pretty (ideal, coverings)) 
+  case unify ideal (pattern cov) of -- check if ideal unifies with cov
+    -- if not, we move on to the next covering pattern without updating nothin'
+    Nothing -> (cov :) <$> check ideal covs
+    Just uni -> 
+      case isInjective uni of
+        -- if the unifier is injective we're done!
+        Injective -> branch $ do 
+          rule "CoveredBy.Injective" (pretty uni)
+          -- return the clauses, we we'll update the current clause to mark its usage
+          pure (useClause cov : covs)
 
-    splitProblems ideal _patTy _nm clauses [] = pure clauses
-    splitProblems ideal patTy nm clauses (c:cs) = do
-        clauses' <- splitProblem ideal patTy nm clauses c
-        splitProblems ideal patTy nm clauses' cs
+        -- it is not injective because of 'binding'
+        NotInjective binding -> branch $ do
+          rule "CoveredBy.NotInjective" (pretty uni)
+          patTy <- lookupTyTM binding -- get type of the binding
+          constructors <- silentBranch $ getPatternsOfType patTy -- get constructors of type
+          if null constructors 
+            -- if the type has no constructors, then there is probably an error.
+            -- we can't pattern match on types with no constructors at this point
+            then error $ show $ "Cant match on a value of type" <+> pretty patTy
+              <+> "because it has no constructors"
+            -- else we make a new covering problem for each constructor of the type
+            else branch $ do
+              rule "CoveredBy.Split" (pretty binding <+> "into" <+> pretty constructors)
+              splitProblems patTy binding coverings constructors
+  where
+    splitProblems patTy nm clauses cs =
+      foldlM (\clauses' c -> splitProblem patTy nm clauses' c) clauses cs
 
-    splitProblem ideal patTy nm clauses constructor = do
+    splitProblem patTy nm clauses constructor = do
+      -- refine the ideal pattern, substituting 'constructor' for 'nm' in ideal
       let refined = refine [(nm, constructor)] ideal
+      -- get a context with the subpatterns of constructor assigned to their
+      -- appropriate type
       delta <- silentBranch $ checkPat constructor patTy
+      -- check the refined pattern against clauses
       withCtx (const delta) $ branch $ check refined clauses
 
-
--- | deprecated
-retainInvariant :: Foldable t => Pat a -> t (Pat a) -> [Pat a]
-retainInvariant uniWith toUni =
-  reverse $ foldl' folder [] toUni where
-    folder acc p = 
-      case normalizePattern uniWith p of
-        Nothing -> acc
-        Just p'
-          | (null acc) -> trace "acc is not null" $ p' : acc
-          | p' =%= p -> trace "not refinement happened" $ p' : acc
-          | otherwise -> acc
-
--- | Normalizes the second pattern to the first patterns form if they match
--- | deprecated
-normalizePattern :: Pat a -> Pat a -> Maybe (Pat a)
-normalizePattern pat1@(A _ pat1') pat2@(A ann pat2') = go pat1' pat2' where
-  go (Bind _) _ = pure pat2
-  go (Match nm1 subps1) (Match nm2 subps2) 
-    | nm1 == nm2 && length subps1 == length subps2 =
-      A ann . Match nm2 <$> sequence (zipWith normalizePattern subps1 subps2)
-    | otherwise = Nothing
-  go (Match _ _) (Bind _) = pure pat1
-
-
-lookupTyTM :: Name -> TypingM a (PolyType a)
-lookupTyTM nm = do
-  mty <- lookupTy nm <$> getCtx
-  case mty of 
-    Nothing -> nameNotFound nm
-    Just ty -> pure ty
+    lookupTyTM nm = do
+      mty <- lookupTy nm <$> getCtx
+      case mty of 
+        Nothing -> nameNotFound nm
+        Just ty -> pure ty
 
 getPatternsOfType :: PolyType a -> TypingM a [Pat a]
 getPatternsOfType qtype@(A ann qtype') = do
